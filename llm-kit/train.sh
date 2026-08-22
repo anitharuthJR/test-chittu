@@ -12,7 +12,7 @@ mlx_lm.lora \
   --data data \
   --batch-size 1 \
   --num-layers 8 \
-  --iters 600 \
+  --iters 800 \
   --max-seq-length 1024 \
   --learning-rate 1e-5 \
   --adapter-path adapters \
