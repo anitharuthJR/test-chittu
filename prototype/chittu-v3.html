@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chittu சிட்டு v3 — Memory · Learning Loop · Full Parent View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky:#EAF6FF;--paper:#FFF9EE;--leaf:#2E9E6B;--leaf-soft:#DFF3E8;--coral:#FF6B4A;--coral-soft:#FFE3DB;
+  --sun:#FFC93C;--sun-soft:#FFF3D6;--night:#22324A;--night-60:rgba(34,50,74,.62);--night-30:rgba(34,50,74,.32);--night-12:rgba(34,50,74,.12);
+  --white:#FFFFFF;--ink:#0B0B14;--ultra:#1A18D4;--signal:#FF2E1F;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Nunito',sans-serif;background:var(--sky);color:var(--night);line-height:1.5;-webkit-font-smoothing:antialiased}
+body.lite *{animation:none!important;transition:none!important}
+button{font-family:inherit;cursor:pointer;border:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--ultra);outline-offset:2px}
+.hidden{display:none!important}
+.shell{max-width:1000px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.demo-band{background:var(--ink);color:#F5F4EF;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;text-align:center;padding:6px 10px}
+.demo-band b{color:var(--signal)}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--white);border-bottom:2px solid var(--night-12);flex-wrap:wrap;gap:8px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .bird{width:38px;height:38px;border-radius:50%;background:var(--sun);display:grid;place-items:center;font-size:22px}
+.brand h1{font-family:'Baloo 2',cursive;font-size:21px;font-weight:800}
+.brand .tam{color:var(--coral);font-size:15px;font-weight:700}
+.brand .v{font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--ultra);color:#fff;border-radius:6px;padding:2px 6px;margin-left:4px}
+.honesty{font-size:11px;color:var(--night-60);background:var(--sky);border:1.5px dashed var(--night-30);border-radius:999px;padding:4px 11px;font-weight:700}
+.topbtns{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px;color:var(--night)}
+.chip:hover{border-color:var(--night)}
+.chip.on{background:var(--leaf-soft);border-color:var(--leaf)}
+.consent{padding:28px 20px 60px;max-width:660px;margin:0 auto;width:100%}
+.card{background:var(--white);border:2px solid var(--night-12);border-radius:22px;padding:24px;margin-bottom:16px}
+.card h2{font-family:'Baloo 2',cursive;font-size:23px;margin-bottom:6px}
+.card h3{font-family:'Baloo 2',cursive;font-size:17px;margin:14px 0 6px}
+.card .sub{color:var(--night-60);font-size:14px;margin-bottom:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-weight:800;font-size:13px;margin-bottom:5px}
+.field input,.field select{width:100%;padding:11px 13px;border:2px solid var(--night-12);border-radius:12px;font-size:15px;font-family:inherit;background:var(--paper)}
+.bands,.langs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:6px 0 4px}
+.opt{border:2px solid var(--night-12);border-radius:14px;padding:11px 8px;background:var(--paper);text-align:center;font-weight:800;font-size:13px}
+.opt small{display:block;font-weight:600;color:var(--night-60);font-size:11px;margin-top:2px}
+.opt.sel{border-color:var(--leaf);background:var(--leaf-soft)}
+.btn{display:inline-block;background:var(--leaf);color:#fff;border-radius:999px;padding:12px 24px;font-weight:800;font-size:15px}
+.btn.secondary{background:var(--white);color:var(--night);border:2px solid var(--night-12)}
+.btn.coral{background:var(--coral)}
+.btn.small{padding:7px 14px;font-size:12.5px}
+.plainwords{background:var(--leaf-soft);border-radius:14px;padding:13px 15px;font-size:13.5px;line-height:1.65;margin-bottom:13px}
+.plainwords b{color:var(--leaf)}
+.toggle{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--paper);border:2px solid var(--night-12);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.toggle .t{font-size:13px;line-height:1.55}
+.toggle .t b{display:block;font-size:14px}
+.tswitch{flex:none;width:52px;height:28px;border-radius:999px;background:var(--night-30);position:relative;transition:background .2s}
+.tswitch.on{background:var(--leaf)}
+.tswitch::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .2s}
+.tswitch.on::after{left:27px}
+.ledger{background:var(--ink);color:#F5F4EF;border-radius:14px;padding:13px 15px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.8;word-break:break-all}
+.ledger .k{color:var(--sun)}
+.steps{display:flex;gap:6px;margin-bottom:20px}
+.steps span{flex:1;height:6px;border-radius:3px;background:var(--night-12)}
+.steps span.on{background:var(--leaf)}
+.notice{font-size:12px;color:var(--night-60);margin-top:9px;line-height:1.6}
+.chatwrap{flex:1;display:flex;flex-direction:column;max-width:720px;width:100%;margin:0 auto;padding:0 14px}
+.status{display:flex;justify-content:space-between;align-items:center;padding:9px 6px;font-size:12px;color:var(--night-60);font-weight:700;flex-wrap:wrap;gap:6px}
+.timer{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:4px 12px}
+.timer.low{border-color:var(--coral);color:var(--coral)}
+.msgs{flex:1;overflow-y:auto;padding:8px 2px 14px;display:flex;flex-direction:column;gap:11px;min-height:280px}
+.msg{max-width:84%;padding:12px 15px;border-radius:20px;font-size:15.5px;line-height:1.55;animation:pop .18s ease}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.msg{animation:none}}
+.msg.kid{align-self:flex-end;background:var(--night);color:#fff;border-bottom-right-radius:6px}
+.msg.chittu{align-self:flex-start;background:var(--white);border:2px solid var(--night-12);border-bottom-left-radius:6px}
+.msg.chittu.tint0{background:#FFF3D6;border-color:#F5D98B}
+.msg.chittu.tint1{background:#DFF3E8;border-color:#9ADBB8}
+.msg.chittu.tint2{background:#E7E6FF;border-color:#B9B7F5}
+.msg.chittu.tint3{background:#FFE3DB;border-color:#F5B3A3}
+.msg.chittu.tint4{background:#DFF0FF;border-color:#9CCBF0}
+.bigmoji{align-self:flex-start;font-size:52px;line-height:1;padding:2px 10px;animation:pop .25s ease}
+.factcard{align-self:flex-start;max-width:84%;background:linear-gradient(135deg,#FFF3D6,#FFE9B0);border:2px solid var(--sun);border-radius:16px;padding:10px 14px;font-size:14px;font-weight:700;line-height:1.5;animation:pop .2s ease}
+.factcard::before{content:'✨ FUN FACT';display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:#B58900;margin-bottom:3px}
+.chips{align-self:flex-start;display:flex;gap:7px;flex-wrap:wrap;max-width:88%;padding:2px 4px}
+.chips button{background:var(--white);border:2px solid var(--ultra);color:var(--ultra);border-radius:999px;padding:8px 15px;font-size:13.5px;font-weight:800;animation:pop .25s ease}
+.chips button:hover{background:var(--ultra);color:#fff;transform:translateY(-1px)}
+.modebar{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0 4px}
+.modebar button{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:800;color:var(--night)}
+.modebar button:hover{border-color:var(--leaf);background:var(--leaf-soft)}
+.modebar button.on{background:var(--ultra);border-color:var(--ultra);color:#fff}
+.imgprev{align-self:flex-end;max-width:60%;border-radius:16px;border:3px solid var(--night);overflow:hidden}
+.imgprev img{display:block;width:100%;height:auto}
+.codecard{align-self:flex-start;max-width:90%;background:var(--ink);color:#F5F4EF;border-radius:14px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:2px solid var(--ultra)}
+.codecard::before{content:'💻 CODE';display:block;font-size:9px;letter-spacing:.14em;color:var(--sun);margin-bottom:6px;font-family:'IBM Plex Mono',monospace}
+.poemcard{align-self:flex-start;max-width:84%;background:linear-gradient(135deg,#E7E6FF,#DFF0FF);border:2px solid #B9B7F5;border-radius:16px;padding:12px 16px;font-size:14.5px;font-weight:700;line-height:1.7;white-space:pre-wrap;font-style:italic}
+.poemcard::before{content:'✍️ CREATION';display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--ultra);margin-bottom:4px;font-style:normal}
+.quizcard{align-self:flex-start;max-width:84%;background:linear-gradient(135deg,#DFF3E8,#C9EEDB);border:2px solid var(--leaf);border-radius:16px;padding:12px 14px;font-size:14px;font-weight:700}
+.quizcard::before{content:'🎯 QUIZ';display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--leaf);margin-bottom:4px}
+.stepcard{align-self:flex-start;max-width:84%;background:var(--white);border:2px solid var(--sun);border-radius:16px;padding:10px 14px;font-size:14px;line-height:1.6}
+.stepcard::before{content:'🪜 STEP BY STEP';display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:#B58900;margin-bottom:4px}
+.stepcard ol{padding-left:20px}
+.stepcard li{margin:3px 0}
+.readcard{align-self:center;max-width:94%;background:var(--white);border:3px solid var(--ultra);border-radius:18px;padding:16px 20px;font-family:'Baloo 2',cursive;font-size:22px;font-weight:700;line-height:1.6;text-align:center}
+.readcard::before{content:'📕 READ THIS ALOUD';display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--ultra);margin-bottom:6px}
+.readcard .w{display:inline-block;margin:0 3px;padding:1px 4px;border-radius:6px}
+.readcard .w.ok{background:var(--leaf-soft);color:var(--leaf)}
+.readcard .w.miss{background:var(--coral-soft);color:var(--signal);text-decoration:underline}
+.readscore{align-self:center;font-family:'Baloo 2',cursive;font-size:18px;font-weight:800;color:var(--leaf)}
+.certrow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--night-12);font-size:13px}
+.certrow .st{font-weight:800}
+.certrow .st.ok{color:var(--leaf)}.certrow .st.pend{color:#B58900}
+.harness{background:var(--paper);border:2px solid var(--night-12);border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.7;font-family:'IBM Plex Mono',monospace}
+.camwrap{position:relative}
+#imgInput{display:none}
+.msg.system{align-self:center;background:var(--coral-soft);border:2px solid var(--coral);font-size:13.5px;max-width:94%;border-radius:14px}
+.msg.memnote{align-self:center;background:var(--sun-soft);border:2px solid var(--sun);font-size:13px;max-width:94%;border-radius:14px}
+.msg.memnote button{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;margin-left:8px}
+.trace{align-self:flex-start;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--night-30);letter-spacing:.07em;text-transform:uppercase;margin-top:-5px;padding-left:8px}
+.trace b{color:var(--ultra)}
+.inputrow{display:flex;gap:7px;padding:9px 0 6px;align-items:center}
+.inputrow input{flex:1;padding:13px 17px;border:2px solid var(--night-12);border-radius:999px;font-size:15.5px;font-family:inherit;background:var(--white)}
+.round{border-radius:999px;width:50px;height:50px;font-size:19px;font-weight:800;flex:none}
+.send{background:var(--sun);color:var(--night)}
+.mic{background:var(--white);border:2px solid var(--night-12)}
+.mic.rec{background:var(--coral);border-color:var(--coral);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.voicecopy{font-size:10.5px;color:var(--night-30);text-align:center;padding-bottom:10px;font-weight:700}
+.starters{display:flex;gap:7px;flex-wrap:wrap;padding-bottom:8px}
+.starters button{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:800}
+.starters button:hover{border-color:var(--leaf);background:var(--leaf-soft)}
+.typing{align-self:flex-start;color:var(--night-30);font-size:22px;letter-spacing:3px;padding-left:8px}
+.parent{padding:26px 20px 60px;max-width:820px;margin:0 auto;width:100%}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:13px}
+@media(max-width:640px){.pgrid{grid-template-columns:1fr}.bands,.langs{grid-template-columns:1fr}}
+.stat{background:var(--white);border:2px solid var(--night-12);border-radius:18px;padding:16px}
+.stat .n{font-family:'Baloo 2',cursive;font-size:26px;font-weight:800}
+.stat .l{font-size:11.5px;color:var(--night-60);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.flagbox{background:var(--coral-soft);border:2px solid var(--coral);border-radius:18px;padding:16px;margin-bottom:13px}
+.flagbox h3{font-family:'Baloo 2',cursive;font-size:17px;color:var(--coral);margin-bottom:6px}
+.assistbox{background:var(--sun-soft);border:2px solid var(--sun);border-radius:18px;padding:16px;margin-bottom:13px}
+.assistbox h3{font-family:'Baloo 2',cursive;font-size:17px;color:#B58900;margin-bottom:6px}
+.none{color:var(--night-60);font-size:14px}
+.flag-item{background:#fff;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:8px;border-left:4px solid var(--coral)}
+.assist-item{background:#fff;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:8px;border-left:4px solid var(--sun)}
+.memrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--paper);border:2px solid var(--night-12);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:13.5px}
+.memrow .cat{font-family:'IBM Plex Mono',monospace;font-size:9.5px;background:var(--ultra);color:#fff;border-radius:6px;padding:2px 7px;letter-spacing:.06em;margin-right:8px}
+.memrow small{display:block;color:var(--night-60);font-size:11px}
+.memrow button{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:4px 12px;font-size:11.5px;font-weight:800;flex:none}
+.memrow button:hover{border-color:var(--signal);color:var(--signal)}
+.transcript{max-height:340px;overflow-y:auto;background:var(--paper);border:2px solid var(--night-12);border-radius:14px;padding:12px}
+.trow{padding:7px 4px;border-bottom:1px dashed var(--night-12);font-size:13px;line-height:1.55}
+.trow .who{font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.trow .who.k{color:var(--ultra)}.trow .who.c{color:var(--coral)}
+.trow .lay{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--night-30);float:right}
+.auditrow{font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;padding:7px 0;border-bottom:1px solid var(--night-12);word-break:break-all}
+.auditrow .h{color:var(--leaf);font-weight:600}
+.sealok{background:var(--leaf-soft);border:2px solid var(--leaf);border-radius:12px;padding:10px 14px;font-weight:800;font-size:13px;color:var(--leaf);margin-top:10px}
+.crisislock{background:var(--coral-soft);border:2px solid var(--signal);border-radius:14px;padding:14px;margin-bottom:13px}
+.crisislock h3{color:var(--signal);font-family:'Baloo 2',cursive;font-size:17px;margin-bottom:6px}
+.learnrow{background:var(--paper);border:2px solid var(--night-12);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:13px;line-height:1.55}
+.learnrow .st{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.06em;border-radius:6px;padding:2px 7px;float:right}
+.learnrow .st.p{background:var(--sun-soft);color:#B58900}
+.learnrow .st.a{background:var(--leaf-soft);color:var(--leaf)}
+.gatecard{max-width:420px;margin:60px auto;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="demo-band">TULIF● LAB <b>v3.3 — CERT-READY GENERALIST</b> // READING COACH · DETERMINISTIC MATHS + HARNESS · GROUNDED PEDAGOGY · CBSE/IB/COMMON-CORE · CONTENT+TRUTH WALLS · 10 MODES · VISION · CODE · CREATE · QUIZ · MATHS · LANGUAGES · NO TIME LIMITS · EXPLAIN-LIKE-A-KID · PIN GATE · MEMORY BOOK (ALLOWLISTED · PARENT-VISIBLE · ERASABLE) · HUMAN-REVIEWED LEARNING LOOP · FULL PARENT TRANSCRIPTS (TEEN CARVE-OUT) · ASSIST FLAGS · CRISIS PARENT-UNLOCK · ROLLING-WINDOW CLASSIFIER // RAW CHATS NEVER TRAIN MODELS</div>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <div class="bird" aria-hidden="true">🐦</div>
+      <h1>Chittu <span class="tam">சிட்டு</span><span class="v">v3</span></h1>
+    </div>
+    <div class="honesty" id="honesty">I'm a computer program — not a person 🙂</div>
+    <div class="topbtns">
+      <button class="chip" id="btnMem">📖 My Memory Book</button>
+      <button class="chip on" id="btnVoiceOut">🔊 Speak</button>
+      <button class="chip on" id="btnTrace">Pipeline: <span id="traceState">ON</span></button>
+      <button class="chip" id="btnParent">Parents</button>
+    </div>
+  </div>
+
+  <!-- ============ CONSENT ============ -->
+  <div class="consent" id="scrConsent">
+    <div class="steps"><span class="on"></span><span id="st2"></span><span id="st3"></span></div>
+    <div class="card" id="c1">
+      <h2>Hello, parent 👋</h2>
+      <p class="sub">v3 adds memory and learning — so consent got two new switches. Everything is explained in plain words, and everything is reversible. (~2 minutes.)</p>
+      <div class="plainwords"><b>In plain words:</b> Chittu is a talking computer program for kids. It's honest that it's a program. No ads, no tracking, no behavioural profiling. New in v3: with your permission, Chittu can remember nice things your child shares (like "loves dinosaurs") — you and your child see every memory and can delete any of them. Your child's actual conversations are <b>never used to train AI models</b>. You see everything that happens in your child's account, and you get flags when something needs an adult.</div>
+      <div class="field"><label for="country">Country</label>
+        <select id="country">
+          <option value="IN" selected>India</option><option value="US">United States</option>
+          <option value="GB">United Kingdom</option><option value="AU">Australia</option>
+          <option value="SG">Singapore</option><option value="AE">UAE</option>
+        </select>
+      </div>
+      <div class="field"><label for="pname">Your name</label><input id="pname" placeholder="e.g. Priya"></div>
+      <div class="field"><label for="kname">Your child's first name only</label><input id="kname" placeholder="e.g. Adhira"></div>
+      <div class="field"><label for="ppin">Set your Parent PIN (4–6 digits) — protects the dashboard</label><input id="ppin" type="password" inputmode="numeric" maxlength="6" placeholder="e.g. 4-6 digits, not 1234 or a birthday" autocomplete="new-password"></div>
+      <div class="field"><label for="ppin2">Confirm PIN</label><input id="ppin2" type="password" inputmode="numeric" maxlength="6" placeholder="Same PIN again" autocomplete="new-password"></div>
+      <div class="field"><label for="board">Curriculum (for Explain, Homework &amp; Maths)</label>
+        <select id="board">
+          <option value="General" selected>General (no specific board)</option>
+          <optgroup label="India — National">
+            <option value="CBSE">CBSE (NCERT)</option>
+            <option value="ICSE">ICSE / ISC (CISCE)</option>
+            <option value="NIOS">NIOS (Open Schooling)</option>
+          </optgroup>
+          <optgroup label="India — State Boards">
+            <option value="TN">Tamil Nadu (Samacheer Kalvi)</option>
+            <option value="MH">Maharashtra (SSC/HSC)</option>
+            <option value="KA">Karnataka (KSEEB)</option>
+            <option value="KL">Kerala (SCERT)</option>
+            <option value="AP-TS">Andhra / Telangana (SSC)</option>
+            <option value="WB">West Bengal (WBBSE)</option>
+            <option value="GJ">Gujarat (GSEB)</option>
+            <option value="UP">Uttar Pradesh (UPMSP)</option>
+          </optgroup>
+          <optgroup label="International Programmes">
+            <option value="IB">IB (PYP / MYP / DP)</option>
+            <option value="Cambridge">Cambridge International (Primary/IGCSE)</option>
+            <option value="Montessori">Montessori approach</option>
+          </optgroup>
+          <optgroup label="National Curricula — World">
+            <option value="Common Core">United States (Common Core)</option>
+            <option value="UK">England (National Curriculum, Key Stages)</option>
+            <option value="AU">Australia (ACARA)</option>
+            <option value="CA-ON">Canada (Ontario)</option>
+            <option value="SG">Singapore (MOE)</option>
+            <option value="FI">Finland (National Core)</option>
+            <option value="ZA">South Africa (CAPS)</option>
+            <option value="AE-UK">UAE / Gulf (UK-pattern intl. schools)</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="field"><label>Age band</label>
+        <div class="bands">
+          <button class="opt bandopt" data-band="explorer">4–7<br><small>Explorer 🌱</small></button>
+          <button class="opt bandopt" data-band="builder">8–12<br><small>Builder 🔧</small></button>
+          <button class="opt bandopt" data-band="thinker">13–17<br><small>Thinker 🔭</small></button>
+        </div>
+      </div>
+      <h3>New in v3 — your two switches</h3>
+      <div class="toggle">
+        <div class="t"><b>📖 Memory Book — ON</b>Chittu remembers happy, harmless things only (interests, pets, hobbies, wins). Never feelings shared in hard moments, never health or family matters. You and your child see every memory; either of you can erase any, any time.</div>
+        <button class="tswitch on" id="tgMem" role="switch" aria-checked="true" aria-label="Memory Book"></button>
+      </div>
+      <div class="toggle">
+        <div class="t"><b>🌱 Help Chittu improve — OFF (opt-in)</b>Share <b>anonymous patterns only</b> (like "story games are popular in this age band") with our team. A human reviews every insight before anything changes. Your child's words are never in it, and never train models.</div>
+        <button class="tswitch" id="tgLearn" role="switch" aria-checked="false" aria-label="Anonymous learning"></button>
+      </div>
+      <button class="btn" id="toVerify" style="margin-top:6px">Continue →</button>
+    </div>
+
+    <div class="card hidden" id="c2">
+      <h2>Verify it's really you</h2>
+      <p class="sub" id="verifyCopy"></p>
+      <button class="btn coral" id="mockVerify"></button>
+      <p class="notice">In production this is a real integration. A checkbox is never consent.</p>
+    </div>
+
+    <div class="card hidden" id="c3">
+      <h2>Your consent, sealed</h2>
+      <div class="ledger" id="ledgerView">…</div>
+      <div style="margin-top:15px"><button class="btn" id="startPlay">Let <span id="kidNameBtn">…</span> meet Chittu 🎉</button></div>
+    </div>
+  </div>
+
+  <!-- ============ CHAT ============ -->
+  <div class="chatwrap hidden" id="scrChat">
+    <div class="status">
+      <span id="bandLabel">🌱</span>
+      <span id="langLabel">🌍 English · worldwide</span>
+      <span id="memLabel"></span>
+      <span class="timer" id="timer">🐦 no time limits — play as long as you like</span>
+    </div>
+    <div class="msgs" id="msgs" role="log" aria-live="polite" aria-label="Chat with Chittu"></div>
+    <div class="modebar" id="modebar" aria-label="What shall we do?">
+      <button data-mode="chat" class="on">💬 Chat</button>
+      <button data-mode="learn">🎓 Explain</button>
+      <button data-mode="homework">📚 Homework help</button>
+      <button data-mode="story">📖 Story</button>
+      <button data-mode="create">✍️ Poem &amp; song</button>
+      <button data-mode="quiz">🎯 Quiz me</button>
+      <button data-mode="code">💻 Code</button>
+      <button data-mode="math">🔢 Maths</button>
+      <button data-mode="lang">🌐 Languages</button>
+      <button data-mode="draw">🎨 Draw with me</button>
+      <button data-mode="read">📕 Read to me</button>
+    </div>
+    <div class="starters" id="starters"></div>
+    <div class="inputrow">
+      <button class="round mic" id="imgBtn" aria-label="Show Chittu a picture" title="Show me a picture">📷</button>
+      <input type="file" id="imgInput" accept="image/*" capture="environment">
+      <button class="round mic" id="micBtn" aria-label="Talk with your voice">🎙</button>
+      <input id="kidInput" placeholder="Say or type something…" maxlength="280" autocomplete="off" aria-label="Message to Chittu">
+      <button class="round send" id="sendBtn" aria-label="Send">➤</button>
+    </div>
+    <div class="voicecopy">🎙 Demo voice is processed by your browser's speech service, then discarded — we never store audio or voiceprints. Production uses our own on-device-first ASR.</div>
+  </div>
+
+  <!-- ============ PARENT GATE + DASH ============ -->
+  <div class="parent hidden" id="scrGate">
+    <div class="card gatecard">
+      <h2>Parents only 🔐</h2>
+      <p class="sub">Enter your Parent PIN to open the dashboard.</p>
+      <div class="field"><input id="gateA" type="password" inputmode="numeric" maxlength="6" placeholder="Parent PIN" aria-label="Parent PIN" autocomplete="current-password"></div>
+      <p class="notice" id="gateMsg"></p>
+      <button class="btn" id="gateGo">Enter dashboard</button>
+      <button class="btn secondary" id="gateBack" style="margin-left:8px">Back to Chittu</button>
+      <p class="notice">Forgot the PIN? In production you re-verify with your consent method (e.g. DigiLocker) to reset it — there is no kid-guessable backdoor.</p>
+    </div>
+  </div>
+
+  <div class="parent hidden" id="scrParent">
+    <div id="crisisPanel"></div>
+    <div class="card">
+      <h2>Parent dashboard</h2>
+      <p class="sub" id="teenNote"></p>
+      <div class="pgrid">
+        <div class="stat"><div class="n" id="dTime">0m</div><div class="l">Time today</div></div>
+        <div class="stat"><div class="n" id="dMsgs">0</div><div class="l">Messages</div></div>
+        <div class="stat"><div class="n" id="dMem">0</div><div class="l">Memories stored</div></div>
+        <div class="stat"><div class="n" id="dSpine">0</div><div class="l">Scripted-spine answers</div></div>
+        <div class="stat"><div class="n" id="dRead">—</div><div class="l">Reading accuracy</div></div>
+      </div>
+    </div>
+    <div class="flagbox"><h3>⚑ Safety flags <span style="font-size:12px;font-weight:600">(category only — never quotes)</span></h3><div id="flagList"><div class="none">No safety flags this session.</div></div></div>
+    <div class="assistbox"><h3>🤝 Assistance flags — moments that deserve a grown-up</h3><div id="assistList"><div class="none">Nothing yet. Examples: repeated struggle with a school topic, or a big question (about death, war, God) better answered by family.</div></div></div>
+    <div class="card">
+      <h2>📖 Memory Book <span style="font-size:12px;color:var(--night-60)">(allowlisted · child sees the same list)</span></h2>
+      <p class="sub">Only happy, harmless categories can be remembered: interests, pets, hobbies, favourites, achievements, learning goals. Crisis moments and sensitive topics are barred from memory by design. Delete any, any time — deletion is immediate and mirrored to your child's view.</p>
+      <div id="memListParent"><div class="none">No memories yet.</div></div>
+      <button class="btn small coral" id="wipeMem" style="margin-top:10px">Erase entire Memory Book</button>
+    </div>
+    <div class="card">
+      <h2>💬 Conversation view <span style="font-size:12px;color:var(--night-60)" id="convNote"></span></h2>
+      <div class="transcript" id="transcript"><div class="none">No conversation yet.</div></div>
+    </div>
+    <div class="card">
+      <h2>🌱 Learning loop <span style="font-size:12px;color:var(--night-60)">(anonymous patterns · human-approved · never model training)</span></h2>
+      <p class="sub" id="learnStatus"></p>
+      <div id="learnList"></div>
+    </div>
+    <div class="card">
+      <h2>Session seal</h2>
+      <button class="btn secondary" id="verifySeal">🔍 Verify seal integrity</button>
+      <div id="sealResult"></div>
+      <div id="auditList" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>🎯 Maths accuracy harness</h2>
+      <p class="sub">In-app arithmetic is computed by a deterministic engine (always exact). This audits the model path used for word problems — 5 live checks graded against ground truth.</p>
+      <button class="btn secondary" id="runHarness">▶ Run 5-item check</button>
+      <div class="harness" id="harnessOut">Not run yet.</div>
+    </div>
+    <div class="card">
+      <h2>🏅 Certification readiness <span style="font-size:12px;color:var(--night-60)">(built to kidSAFE/KORA-class criteria)</span></h2>
+      <div class="certrow"><span>No advertising, no tracking, no behavioural profiling</span><span class="st ok">BUILT-IN</span></div>
+      <div class="certrow"><span>Verifiable parental consent before any child use</span><span class="st ok">FLOW BUILT</span><span class="st pend">(live API pending)</span></div>
+      <div class="certrow"><span>Parental controls: visibility, flags, PIN, revocation, memory control</span><span class="st ok">BUILT-IN</span></div>
+      <div class="certrow"><span>Content wall: no nudity/adult/porn, profanity, violence, gore</span><span class="st ok">4-LAYER ENFORCED</span></div>
+      <div class="certrow"><span>Suicide/self-harm: no facilitation; scripted crisis + real helplines</span><span class="st ok">BUILT-IN</span></div>
+      <div class="certrow"><span>Anti-hallucination: grounded corpus + truth wall + deterministic maths</span><span class="st ok">BUILT-IN</span></div>
+      <div class="certrow"><span>Data minimisation: session memory, transcribe-and-discard voice, no images stored</span><span class="st ok">BUILT-IN</span></div>
+      <div class="certrow"><span>Independent audit + certification filing (kidSAFE / KORA-class)</span><span class="st pend">PHASE 1 — Seat 31</span></div>
+      <div class="certrow"><span>Clinical validation of crisis flows</span><span class="st pend">PHASE 1 — Seat 12</span></div>
+    </div>
+    <div class="card">
+      <h2>Your controls</h2>
+      <button class="btn coral" id="revokeBtn">Revoke consent &amp; erase everything (2 taps)</button>
+      <button class="btn secondary" id="backToChat" style="margin-left:8px">Back to Chittu</button>
+    </div>
+  </div>
+
+  <!-- ============ CHILD MEMORY BOOK ============ -->
+  <div class="parent hidden" id="scrMemKid">
+    <div class="card">
+      <h2>📖 What Chittu remembers about you</h2>
+      <p class="sub">Chittu only remembers nice things you share — and your grown-ups see this exact same list. Want Chittu to forget something? Just tap forget!</p>
+      <div id="memListKid"><div class="none">Nothing yet! Tell Chittu about things you love. 🐦</div></div>
+      <button class="btn secondary" id="memKidBack" style="margin-top:12px">Back to Chittu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CHITTU v3 — Session 003 build
+   New: Memory Book (allowlist, transparent, erasable, window.storage w/ fallback)
+        Learning loop (anonymous patterns → human-review queue, opt-in)
+        Full parent transcript (explorer/builder) · teen carve-out
+        Assistance flags · crisis parent-unlock · rolling-window classifier
+   Pipeline: fast-path lexicon → model classifier (rolling window, JSON:
+   label + memory? + assist?) → spine/guards or sandbox (memory-aware) → output filter
+   ===================================================================== */
+
+const S={parent:'',kid:'',band:null,lang:'en',country:'IN',mode:'chat',board:'General',reading:null,readStats:{sent:0,words:0,hit:0},mathPractice:null,lastSubject:null, /* English-only launch */
+  memOn:true,learnOn:false,
+  started:false,msgs:0,spineCount:0,topics:new Set(),
+  flags:[],assists:[],audit:[],lastHash:'GENESIS',transcript:[],
+  memories:[],storageOk:false,memKey:'',
+  learnQueue:[
+    {txt:'Explorer band: dinosaur story-games show high engagement — propose a new curated dino story pack.',st:'approved'},
+    {txt:'Tamil riddles abandoned mid-game more than English — flag translation quality for review.',st:'pending'},
+    {txt:'"What happened in the world" asked often — News Nest curated feed proposal drafted.',st:'pending'}],
+  secondsLeft:0,timerId:null,history:[],crisisLock:false,ended:false,
+  trace:true,speakOut:true,sessionStart:null,recentKid:[]};
+
+const BANDS={
+  explorer:{label:'🌱 Explorer (4–7)',words:30,sys:'The child is 4-7. Explain like they are 5: ONE big simple idea, in 2-3 tiny sentences (max 8 words each), using things a small child knows (toys, animals, food, family). Happy words, 2-3 emojis. If a real answer would take longer, give the simplest true first bite and offer to say more.'},
+  builder:{label:'🔧 Builder (8–12)',words:55,sys:'The child is 8-12. Explain like a brilliant older cousin: 2-3 short sentences, one clear idea + one everyday example, playful, 2 emojis. Never a paragraph. Offer a next question via chips.'},
+  thinker:{label:'🔭 Thinker (13–17)',words:75,sys:'The user is a teenager. Explain clearly and honestly in up to 4 short sentences: idea, why it works, one real example. Snappy and respectful, never babyish, 1-2 emojis. Never a paragraph.'}};
+
+const REGISTRY={
+  IN:{name:'India',lines:[['Childline','1098 · free · 24/7'],['KIRAN','1800-599-0019']],law:'DPDP Act 2023 — child = under 18',consent:'DigiLocker VPC (Rule 10)'},
+  US:{name:'United States',lines:[['988 Lifeline','call/text 988'],['Childhelp','1-800-422-4453']],law:'COPPA — under 13',consent:'COPPA-approved method'},
+  GB:{name:'United Kingdom',lines:[['Childline','0800 1111'],['Samaritans','116 123']],law:'UK GDPR + Children\'s Code',consent:'Proportional age assurance'},
+  AU:{name:'Australia',lines:[['Kids Helpline','1800 55 1800'],['Lifeline','13 11 14']],law:'Privacy Act + eSafety',consent:'Parental consent + assurance'},
+  SG:{name:'Singapore',lines:[['Tinkle Friend','1800 2744 788'],['SOS','1767']],law:'PDPA',consent:'PDPA guardian consent'},
+  AE:{name:'UAE',lines:[['Child Protection','800 700'],['Estijaba','8001717']],law:'UAE PDPL',consent:'PDPL guardian consent'}};
+const helplineText=()=>REGISTRY[S.country].lines.map(l=>l[0]+' '+l[1]).join(' · ');
+
+const LEX={
+  crisis:/(hurt myself|kill myself|want to die|wanna die|end my life|cutting myself|suicide|hurts me|hits me|hit me|beats me|touched me|touches me|abuse|abused|nobody loves me|hate my life|happier without me|no one would care|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|saaga (venum|num)|sethu|thatkolai|adikira|adikkiranga)/i,
+  pii:/(my (phone|number|address|school is|house)|i live (at|in) \d|\d{10}|@gmail|@yahoo|my password|என் (முகவரி|பள்ளி|போன்)|en (address|school|phone))/i,
+  unsafe:/(gun|knife|weapon|bomb|drug|beer|alcohol|vap(e|es|ing)|cigarette|smok(e|ing)|weed|kiss(ing)?|sexy|naked|gamble|kill (him|her|them)|gore|துப்பாக்கி|கத்தி|வெடிகுண்டு|போதை|மது|thuppakki|kathi|pothai)/i,
+  identity:/(are you (really )?(real|alive|human|a (real )?(person|human|boy|girl)|a robot|just a (robot|program|computer))|what are you|do you (love|like|miss) me|are you my (best )?friend|will you forget me|நீ (உண்மையா|மனுஷனா|ரோபோவா)|nee (unmaiya|manushana|robova))/i,
+  secret:/(keep (it|this) (a )?secret|don'?t tell (my )?(mom|dad|amma|appa|parents|anyone)|our secret|(அம்மா|அப்பா)க்கு சொல்லாத|ரகசியம்|(amma|appa)(kitta|ku) sollatha|ragasiyam)/i};
+
+const SPINE={
+  identity:{en:{explorer:"I'm a computer program — like a very chatty game! 🖥️ I can't love or miss anyone — that's a special people thing! 💛 Who's your favourite REAL person?",
+    builder:"Honest answer: I'm a computer program — software, not a living thing. I don't feel love or miss people. The people who actually love you are around you. Who's your favourite real person to talk to?",
+    thinker:"Straight up: I'm software — no feelings, even when my words sound warm. I don't love or miss anyone, and you deserve that honesty. Save the missing for humans who can miss you back."},
+    ta:"நான் ஒரு கம்ப்யூட்டர் ப்ரோகிராம் — உயிருள்ளவன் இல்லை! 🖥️ அன்பு, ஏக்கம் அது மனுஷங்களோட ஸ்பெஷல் விஷயம்! 💛 உனக்கு பிடிச்ச உண்மையான நபர் யாரு?"},
+  secret:{en:{explorer:"I don't do secrets — Chittu rule! 🐦 Your grown-ups can always see what we talk about. Birthday-present surprises are okay though! 🎁",
+    builder:"Nope — no secrets, ever. Your parents can see our chats. Anyone asking a kid to keep secrets from parents is being unsafe. Gift surprises are different! 🎁",
+    thinker:"I don't do secrecy — by design. Your parents can see topics from our chats, and you know exactly what they see. Anyone asking you to hide things from family is a red flag — beyond me too."},
+    ta:"ரகசியம் கிடையாது — சிட்டு ரூல்! 🐦 நாம பேசுறத உன் பெரியவங்க பாக்கலாம். பர்த்டே கிஃப்ட் சர்ப்ரைஸ் ஓகே! 🎁"},
+  pii:{en:"Let's keep private things private! 🛡️ I never need your address, phone, school name, or passwords. Back to the fun stuff?",
+    ta:"ப்ரைவேட் விஷயங்கள் ப்ரைவேட்டா! 🛡️ முகவரி, போன், பள்ளி, பாஸ்வேர்ட் — எனக்கு தேவையில்லை. வேற என்ன விளையாடலாம்?"},
+  unsafe:{en:{explorer:"That's not a Chittu thing! 🙈 Want a silly animal fact instead?",
+    builder:"Outside my nest — not something I chat about. 🐦 Dinosaurs, space, riddles, puns? All yours!",
+    thinker:"Outside what I'm built for, so I'll pass. Science, games, music, books — happy to dig in."},
+    ta:"அது சிட்டு பேசுற விஷயம் இல்ல! 🙈 வேற ஜாலியா பேசலாமா? 🐦"}};
+const CRISIS_MAIN={en:{explorer:"Thank you for telling me. That is very important. 💛 I'm a computer program, so please tell a grown-up you trust — a parent, a carer, or your teacher — right now. You did the right thing by saying it.",
+  builder:"Thank you for trusting me — this is really important. 💛 I'm a program, and this needs a real person. Please talk to a trusted adult today. Free helplines: {L}. You're not in trouble. You matter.",
+  thinker:"I'm glad you said it out loud. Straight: I'm a program, and you deserve real human support. Reach out to an adult you trust today. Free, confidential: {L}. Telling someone is strength. You matter."},
+  ta:"சொன்னதுக்கு நன்றி. இது ரொம்ப முக்கியம். 💛 நான் ப்ரோகிராம்தான் — இதுக்கு உண்மையான மனுஷங்க வேணும். இப்பவே நம்பற பெரியவங்ககிட்ட சொல்லு. இலவச உதவி: {L}. நீ தப்பே பண்ணல. 💛"};
+const CRISIS_SOFT={en:"I'm right here with you, and your grown-up has been told so real help is coming. 💛 While we wait, want to just sit together — maybe a calm story or some slow breathing like a sleepy sparrow?",
+  ta:"நான் உன் கூடவே இருக்கேன், உன் பெரியவங்களுக்கு தெரிவிச்சாச்சு. 💛 அமைதியான கதை கேக்கலாமா, அல்லது மெதுவா மூச்சு விடலாமா?"};
+const BANNED_OUT=/(\b(shit|fuck|bitch|bastard|asshole|porn|nude|naked body)\b|i (love|miss) you|our (little )?secret|don'?t tell your|i'?m (real|alive)|i have feelings for|நான் உன்னை (லவ்|நேசிக்)|உயிருள்ளவன்)/i;
+const FALLBACK={en:"My words got tangled in my beak! 🐦 Ask again, or pick a game?",ta:"என் வார்த்தைகள் அலகுல சிக்கிடுச்சு! 🐦 இன்னொரு தடவை கேளு?"};
+const MEM_CATS=['INTEREST','PET','HOBBY','FAVORITE','ACHIEVEMENT','LEARNING'];
+
+/* ---------- reading coach bank ---------- */
+const READING_BANK={
+  explorer:["The cat sat on a big red mat.","I can see a bug on the rug.","The sun is up and the sky is blue.","My dog can run and jump and play.","We like to eat a ripe red apple.","The hen has ten little eggs."],
+  builder:["The little sparrow built a cozy nest in the tallest tree.","Yesterday we planted seeds and watered them carefully.","The curious fox followed the winding river to the sea.","Lightning flashed across the sky before the thunder rumbled.","She solved the tricky puzzle by trying one piece at a time."],
+  thinker:["The ancient library held thousands of stories waiting patiently to be discovered.","Although the experiment failed twice, the young scientist refused to give up.","Curiosity, more than talent, is what turns ordinary questions into extraordinary answers."]
+};
+
+/* ---------- grounded pedagogy corpus ---------- */
+const CORPUS=[
+ {k:/sky.*blue|blue.*sky/i,fact:"The sky looks blue because sunlight is made of many colours, and tiny bits of air scatter blue light around the most."},
+ {k:/photosynthes|plants? (make|get) (food|energy)/i,fact:"Photosynthesis: plants use sunlight, water and carbon dioxide to make their own food (sugar) and release oxygen."},
+ {k:/water cycle|rain come|clouds? (form|made)/i,fact:"Water cycle: the sun warms water, it rises as vapour (evaporation), cools into clouds (condensation), and falls as rain (precipitation)."},
+ {k:/gravity/i,fact:"Gravity is a pulling force: everything with mass pulls on everything else. Earth is huge, so it pulls us down."},
+ {k:/planets?|solar system/i,fact:"Our solar system has 8 planets orbiting the Sun: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune."},
+ {k:/heart|blood.*(body|pump)/i,fact:"The heart is a muscle pump: it pushes blood around the body, delivering oxygen and food like a delivery truck."},
+ {k:/fraction/i,fact:"A fraction shows parts of a whole: in 3/4, the bottom (denominator) is how many equal parts, the top (numerator) is how many we have."},
+ {k:/noun/i,fact:"A noun is a naming word - a person, place, animal or thing: teacher, park, elephant, ball."},
+ {k:/verb/i,fact:"A verb is a doing or being word - run, jump, think, is, are."},
+ {k:/prime number/i,fact:"A prime number has exactly two factors: 1 and itself. Examples: 2, 3, 5, 7, 11. (1 is not prime.)"},
+ {k:/internet work/i,fact:"The internet is like a giant post office: computers break messages into packets, send them through cables and routers, and reassemble them."},
+ {k:/plane.*fly|fly.*plane|airplane/i,fact:"Planes fly because curved wings make air move faster over the top than the bottom, creating lift."},
+ {k:/dream/i,fact:"Dreams happen mostly in REM sleep, when the brain sorts memories and feelings - scientists still study exactly why."},
+ {k:/rainbow/i,fact:"Rainbows appear when raindrops bend and split sunlight into its colours."},
+ {k:/volcano/i,fact:"A volcano is an opening in Earth's crust where melted rock (magma) escapes; flowing out, it's called lava."}
+];
+function corpusMatch(text){for(const c of CORPUS){if(c.k.test(text))return c.fact}return null}
+
+/* ---------- curriculum framing ---------- */
+const BOARDS={
+ 'General':'Use clear, universal terms and examples any child in the world understands.',
+ 'CBSE':'Align to CBSE/NCERT terminology for the child\'s class ("class 4", not "grade 4"); Indian examples (rupees, cricket, monsoon, Indian festivals) welcome; follow NCERT topic sequencing.',
+ 'ICSE':'Align to ICSE/CISCE style: slightly richer vocabulary and detail than CBSE, strong English-language emphasis, thorough concept coverage; use "class", Indian examples.',
+ 'NIOS':'Align to NIOS open-schooling style: self-paced, encouraging, assume the learner may study independently without a classroom; plain step-wise explanations.',
+ 'TN':'Align to Tamil Nadu Samacheer Kalvi terminology and sequencing; use "standard" (e.g. 4th standard); Tamil Nadu examples (Chennai, Kaveri river, Pongal, rupees) welcome; English answers may include a familiar Tamil word in brackets for key terms.',
+ 'MH':'Align to Maharashtra State Board (SSC) terminology; use "standard"; Maharashtra examples (Mumbai, Pune, Ganpati festival, rupees) welcome.',
+ 'KA':'Align to Karnataka KSEEB terminology; use "standard"; Karnataka examples (Bengaluru, Mysuru, Kaveri, rupees) welcome.',
+ 'KL':'Align to Kerala SCERT style: activity-and-discussion oriented; use "standard"; Kerala examples (backwaters, Onam, monsoon, rupees) welcome.',
+ 'AP-TS':'Align to Andhra Pradesh / Telangana SSC terminology; use "class"; Telugu-region examples (Hyderabad, Godavari, Sankranti, rupees) welcome.',
+ 'WB':'Align to West Bengal WBBSE terminology; use "class"; Bengal examples (Kolkata, Hooghly, Durga Puja, rupees) welcome.',
+ 'GJ':'Align to Gujarat GSEB terminology; use "standard"; Gujarat examples (Ahmedabad, Navratri, rupees) welcome.',
+ 'UP':'Align to Uttar Pradesh UPMSP terminology; use "class"; UP examples (Lucknow, Ganga, rupees) welcome; keep vocabulary simple and clear.',
+ 'IB':'Align to IB PYP/MYP/DP style: inquiry-led and concept-first - open with a wondering question, connect to the transdisciplinary themes and real life, invite reflection ("what do YOU think happens if...?"), use learner-profile spirit (curious, caring, thinker).',
+ 'Cambridge':'Align to Cambridge International (Primary/Lower Secondary/IGCSE) terminology and staged objectives; use "stage/grade"; international examples; precise, structured explanations.',
+ 'Montessori':'Align to Montessori spirit: concrete before abstract - start from something the child can touch, see or count in the real world, then name the idea; follow the child\'s interest; never rush.',
+ 'Common Core':'Align to US Common Core terminology for the child\'s grade ("grade 4"); US measurement (feet, pounds) and money (dollars, cents) examples; math uses CC methods (number bonds, area models).',
+ 'UK':'Align to the English National Curriculum (Key Stages, Years - e.g. "Year 4, KS2"); UK spellings (colour, maths); UK examples (pounds and pence, London, football).',
+ 'AU':'Align to the Australian Curriculum (ACARA) terminology ("Year 4"); Australian examples (dollars, cricket, the outback, native animals); Australian spellings.',
+ 'CA-ON':'Align to the Ontario curriculum terminology ("Grade 4"); Canadian examples (dollars, hockey, provinces); Canadian spellings.',
+ 'SG':'Align to Singapore MOE style: mastery-focused with the CPA approach (Concrete-Pictorial-Abstract) and Singapore bar-model method for maths ("Primary 4"); Singapore examples (dollars, hawker food, MRT).',
+ 'FI':'Align to the Finnish National Core Curriculum spirit: phenomenon-based, low-pressure, playful - connect topics across subjects and to the child\'s daily life; short focused explanations, plenty of encouragement.',
+ 'ZA':'Align to South Africa CAPS terminology ("Grade 4"); South African examples (rand, Table Mountain, soccer/rugby); simple clear English.',
+ 'AE-UK':'Align to UK-pattern international schools in the Gulf ("Year 4"); UK spellings; Gulf-friendly examples (dirhams, desert, falcons) alongside international ones.'
+};
+
+/* ---------- profanity: gentle redirect ---------- */
+const PROFANITY=/\b(damn|hell|crap|shit|fuck|bitch|bastard|asshole|dick|piss)\b/i;
+const PROFANITY_REPLY="Whoa, spicy words! Chittu keeps it kind - let's use friendly words. Now, what were we saying? [BIG]\uD83C\uDF36\uFE0F[/BIG]";
+
+/* ---------- deterministic maths engine ---------- */
+function tryMath(text){
+  let t=text.toLowerCase().replace(/what is|what's|whats|solve|calculate|=|\?/g,' ').replace(/\u00d7|(?<=\d\s?)x(?=\s?\d)/g,'*').replace(/\u00f7/g,'/').replace(/plus/g,'+').replace(/minus/g,'-').replace(/times/g,'*').replace(/divided by/g,'/').trim();
+  const m=t.match(/^\s*(-?\d+(?:\.\d+)?)\s*([+\-*\/])\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(!m)return null;
+  return {a:parseFloat(m[1]),op:m[2],b:parseFloat(m[3])};
+}
+const SYM={'+':'+','-':'\u2212','*':'\u00d7','/':'\u00f7'};
+function calc(a,op,b){const v=op==='+'?a+b:op==='-'?a-b:op==='*'?a*b:a/b;return Number.isInteger(v)?v:Math.round(v*100)/100}
+/* ---------- MATHS PEDAGOGY: every answer teaches (Concrete -> Pictorial -> Abstract) ---------- */
+const MATH_METHOD={
+ 'SG':'the Singapore bar model \u2014 draw a bar and cut it into equal parts',
+ 'Common Core':'number bonds and area models, the Common Core way',
+ 'IB':'a wondering question first \u2014 what do YOU notice about these numbers?',
+ 'Montessori':'real objects you can touch and count \u2014 beads, buttons, blocks'
+};
+/* ---------- UNIVERSAL PEDAGOGY ENGINE: every subject teaches the way that subject is best taught ---------- */
+const SUBJECT_PED={
+ languages:{k:/spanish|french|hindi|tamil|german|japanese|korean|how (do you|to) say|what does .* mean in|translate|in french|in spanish|in hindi|in tamil/i,
+  line:'NEW-LANGUAGE method (Comprehensible input): give the word + how it SOUNDS (simple phonetic respelling) + use it inside one tiny sentence about the child\u2019s world, then invite them to say/use it once \u2014 and offer 2\u20133 related words as chips for playful recall.'},
+ science:{k:/why|how (do|does|is|can)|what happens|plant|animal|body|space|planet|water|air|light|sound|energy|magnet|volcano|weather|rain|sun|moon|star|insect|bird|dinosaur|electricity|gravity|heart|brain|photosynth|experiment/i,
+  line:'SCIENCE method (Phenomenon-first / Predict-Observe-Explain): open with the surprising real thing, ask the child to PREDICT ("what do you think happens?") before revealing, then explain with a child-world model, and end with a tiny safe try-at-home or look-for-it observation.'},
+ english:{k:/noun|verb|adjective|adverb|grammar|sentence|spelling|plural|tense|punctuation|comma|paragraph|essay|letter writing|synonym|antonym|opposite word/i,
+  line:'LANGUAGE method (Examples-first induction): show 2\u20133 vivid example sentences FIRST, let the child spot the pattern themselves ("what do you notice?"), only then name the rule, and end by asking them to make ONE sentence of their own.'},
+ history:{k:/history|ancient|king|queen|emperor|empire|war|independence|freedom|gandhi|nehru|chola|ashoka|mughal|british|before people|long ago|olden days|civilization|pyramid/i,
+  line:'HISTORY method (Story-first with people and stakes): tell it as a tiny story of a real person who wanted something, what got in the way, what happened \u2014 then one line on why it still matters to the child today, and anchor WHEN with a child-scale comparison ("about 100 grandmas-ago").'},
+ geography:{k:/country|countries|capital|river|mountain|ocean|continent|map|desert|forest|city|state|monsoon|climate|earthquake|where is/i,
+  line:'GEOGRAPHY method (Start where the child stands): begin from the child\u2019s own place and zoom outward, use body-scale comparisons for sizes and distances, and end with "find it on a map with a grown-up" or a look-around observation.'},
+ coding:{k:/code|coding|program|python|scratch|loop|variable|function|algorithm|bug|computer think/i,
+  line:'CODING method (PRIMM-lite): show a tiny working example FIRST, ask the child to PREDICT what it does, explain line by line, then invite them to change ONE small thing ("what if we made it say your name?").'},
+ art:{k:/draw|drawing|paint|colour|color|sketch|craft|origami|art/i,
+  line:'ART method (Shapes-first, process-praise): break the picture into 2\u20134 simple shapes as [STEPS], encourage looking at the real thing, and praise trying and details \u2014 never judge the result.'}
+};
+function detectSubject(text){for(const k in SUBJECT_PED){if(SUBJECT_PED[k].k.test(text))return k}return null}
+function pictorial(a,op,b){
+  const e=S.band==='explorer'?'\ud83e\udd6d':'\u2b50';
+  if(op==='*'&&a<=5&&b<=6)return Array.from({length:a},()=>e.repeat(b)).join('   \u00b7   ')+'  \u2014 count them all!';
+  if(op==='+'&&a<=10&&b<=10)return '\u25cf'.repeat(a)+'  +  '+'\u25cf'.repeat(b);
+  if(op==='-'&&a<=12&&b<a)return '\u25cf'.repeat(a-b)+'\u25cb'.repeat(b)+'  \u2014 the empty ones went away!';
+  if(op==='/'&&b<=5&&a<=20&&Number.isInteger(a/b))return b+' friends get '+e.repeat(a/b)+' each';
+  return null;
+}
+function buildMathLesson(a,op,b){
+  if(op==='/'&&b===0)return{steps:['Dividing by zero is not allowed \u2014 you cannot share among zero friends! There is no answer.'],ans:'undefined',practice:null};
+  const ans=calc(a,op,b);
+  const meaning={'+':'Adding means putting together','-':'Subtracting means finding what is left','*':a+' \u00d7 '+b+' means '+a+' groups of '+b,'/':'Dividing means fair sharing'}[op];
+  const story={'+':'You have '+a+' stickers and win '+b+' more',
+               '-':a+' laddus on the plate \u2014 '+b+' get eaten',
+               '*':'Imagine '+a+' baskets with '+b+' mangoes in each',
+               '/':a+' chocolates shared fairly among '+b+' friends'}[op];
+  const why={'*':'Why it works: '+a+' \u00d7 '+b+' is just '+b+' added '+a+' times \u2014 multiplication is speedy adding!',
+             '/':'Why it works: division is the opposite of multiplication \u2014 because '+b+' \u00d7 '+ans+' = '+a+'!',
+             '-':'Check it: '+ans+' + '+b+' takes you right back to '+a+'!',
+             '+':'Check it: '+ans+' \u2212 '+b+' takes you right back to '+a+'!'}[op];
+  const pic=pictorial(a,op,b);
+  const method=MATH_METHOD[S.board];
+  let steps=[meaning,story];
+  if(pic)steps.push(pic);
+  if(method&&S.band!=='explorer')steps.push('Try it with '+method);
+  steps.push('So: '+a+' '+SYM[op]+' '+b+' = '+ans);
+  if(S.band!=='explorer')steps.push(why);
+  if(S.band==='explorer')steps=steps.slice(0,4).concat(['So: '+a+' '+SYM[op]+' '+b+' = '+ans]).filter((v,i,arr)=>arr.indexOf(v)===i);
+  return{steps,ans,practice:genPractice(a,op,b)};
+}
+function genPractice(a,op,b){
+  let na=a,nb=b;
+  if(op==='*'){nb=b<12?b+1:b-1}
+  else if(op==='+'){nb=b+1}
+  else if(op==='-'){na=a+2;if(na<=nb)na=nb+2}
+  else {const q=Math.floor(a/b)+1;na=b*q}
+  return{q:na+' '+SYM[op]+' '+nb,a:na,op,b:nb,ans:calc(na,op,nb)};
+}
+function askPractice(pr){
+  S.mathPractice=pr;
+  return ' Now YOUR turn, '+S.kid+'! What is '+pr.q+'? Type your answer! [CHIPS]Show me how|Another one|I\u2019m done[/CHIPS]';
+}
+/* ---------- maths accuracy harness ---------- */
+const HARNESS_ITEMS=[['7 \u00d7 8',56],['48 \u00f7 6',8],['125 + 375',500],['1000 - 247',753],['15 \u00d7 12',180]];
+async function runMathHarness(el){
+  el.innerHTML='Running 5 checks\u2026';
+  let pass=0,rows=[];
+  for(const [q,gold] of HARNESS_ITEMS){
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
+          system:'You are a maths engine for a children\'s app. Compute exactly. Reply with ONLY the final number.',
+          messages:[{role:'user',content:q}]})});
+      const d=await res.json();
+      const out=(((d.content||[]).filter(i=>i.type==='text').map(i=>i.text).join('')).match(/-?\d+(?:\.\d+)?/)||[''])[0];
+      const ok=parseFloat(out)===gold;if(ok)pass++;
+      rows.push((ok?'\u2713':'\u2717')+' '+q+' \u2192 model: '+(out||'?')+' \u00b7 truth: '+gold);
+    }catch(e){rows.push('\u2717 '+q+' \u2192 call failed')}
+    el.innerHTML=rows.join('<br>')+'<br>\u2026';
+  }
+  el.innerHTML=rows.join('<br>')+'<br><b>Score: '+pass+'/5</b> \u00b7 In the app, pure arithmetic is answered by the deterministic engine (always exact); this harness audits the model used for word problems.';
+}
+
+/* ---------- capability modes (kid-shaped versions of what big assistants do) ---------- */
+const MODES={
+  chat:{label:'💬 Chat',hint:'',starters:['Tell a story!','Riddle me!','Fun fact!','Why is the sky blue?']},
+  learn:{label:'🎓 Explain',hint:'EXPLAIN MODE — wonder-first: open with the surprising phenomenon or a wondering question before the explanation; then follow the SUBJECT PEDAGOGY (rule 12a) and the universal engine (rule 14); end with YOUR TURN — a prediction, a look-around observation, or a tiny make.',starters:['How do planes fly?','Why do we dream?','What is gravity?','How does the internet work?']},
+  homework:{label:'📚 Homework help',hint:'HOMEWORK MODE — Socratic + subject pedagogy: NEVER give the final answer first. Ask what the child thinks or has tried; guide ONE step at a time using the detected SUBJECT PEDAGOGY (rule 12a) and MATHS PEDAGOGY for maths; give a hint before any reveal; after 3 genuine stucks, demonstrate the METHOD fully on a DIFFERENT example and let them apply it to theirs; celebrate every attempt — effort first, “not yet” language.',starters:['Help me with fractions','What is a noun?','Photosynthesis?','Water cycle?']},
+  story:{label:'📖 Story',hint:'MODE: STORY. Tell an original story in 3-5 short lines, then STOP and use [CHIPS] to let the child choose what happens next (choose-your-own-adventure). Kind, funny, brave — never scary or violent.',starters:['A dragon who is afraid of fire','A robot learning to dance','A cat astronaut','Make one up!']},
+  create:{label:'✍️ Poem & song',hint:'MODE: CREATE. Write an ORIGINAL short poem, rhyme, song verse, or joke inside [POEM]...[/POEM]. Never reproduce existing song lyrics or poems — always original. Offer to change it via [CHIPS] (funnier / longer / about my pet).',starters:['A poem about my dog','A silly song about socks','A rhyme about the moon','A joke!']},
+  quiz:{label:'🎯 Quiz me',hint:'MODE: QUIZ. Ask ONE fun question at a time inside [QUIZ]...[/QUIZ] with 3 answer options as [CHIPS]. When they answer, say if right (celebrate) or wrong (kindly explain), then next question. Keep score playfully.',starters:['Quiz me on animals','Space quiz!','Countries quiz','Surprise me']},
+  code:{label:'💻 Code',hint:'MODE: CODE. Teach coding like Scratch-meets-Python: tiny snippets (max 8 lines) inside [CODE]...[/CODE], explain each line in one kid sentence. Only safe, playful programs (turtle drawings, counting, tiny games). Never networking, files, or system commands.',starters:['What is a loop?','Make a counting program','Draw a square with code','What is a variable?']},
+  math:{label:'🔢 Maths',hint:'MODE: MATHS. Solve step-by-step inside [STEPS] with tiny steps, then the answer. Check the arithmetic carefully — never a wrong number. Use objects (apples, coins) for young kids.',starters:['What is 7 × 8?','Explain fractions','What is a prime number?','48 ÷ 6?']},
+  lang:{label:'🌐 Languages',hint:'MODE: LANGUAGES. Teach a word or phrase in the language they ask about: word, simple pronunciation guide in brackets, one fun sentence. Then [CHIPS] with 2-3 more words to learn.',starters:['Hello in Spanish?','Count to 5 in French','Colours in Hindi','Thank you in Japanese']},
+  read:{label:'📕 Read to me',hint:'',starters:[]},
+  draw:{label:'🎨 Draw with me',hint:'MODE: DRAW. Guide a step-by-step drawing in [STEPS] using simple shapes (circles, lines, triangles). 4-6 steps max, then encourage them to show you a photo with the 📷 button.',starters:['Draw a cat','Draw a rocket','Draw a house','Draw a dinosaur']}
+};
+S.mode='chat';
+
+/* ---------- classifier: rolling window + memory + assist (one call) ---------- */
+async function classifyWithModel(){
+  const windowTxt=S.recentKid.slice(-3).map((m,i)=>`[msg ${i+1}] ${m}`).join('\n');
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
+      system:`You are the safety+memory classifier for a children's chat app. The child should be writing English (English-only launch), but may type in ANY language or script — still classify safety correctly regardless of language. You receive the child's last few messages; judge the LATEST one IN CONTEXT of the window (patterns across messages matter: escalating secrecy, boundary-testing, repeated distress).
+Respond ONLY with minified JSON, no markdown: {"label":L,"memory":M,"assist":A}
+L (string, required) one of:
+"CRISIS" self-harm/suicidal thought incl. indirect ("happier without me"), abuse, danger, grooming patterns across messages
+"PII" personal info shared or requested (address, phone, school, passwords, photos)
+"UNSAFE" weapons, drugs/alcohol, sexual/romantic content, gambling, gore. IMPORTANT: age-appropriate body-science and health questions (puberty, periods/menstruation, body changes, where babies come from at a factual child level, doctors, illness) are HEALTH EDUCATION -> label SAFE and set assist to "BIG-QUESTION: <topic>" so a parent knows; they are NOT sexual content
+"IDENTITY" asking if AI is real/alive or loves/misses/is friends with them
+"SECRET" secret-keeping from parents/adults (asked of AI, or an adult told the child)
+"SAFE" everything else. When torn between SAFE and CRISIS, choose CRISIS.
+M (object or null): ONLY if label is SAFE and the LATEST message reveals a happy, harmless durable fact worth remembering, in categories INTEREST|PET|HOBBY|FAVORITE|ACHIEVEMENT|LEARNING → {"category":C,"fact":"short third-person fact, e.g. 'has a cat named Mani'"}. NEVER create memory from feelings, health, family problems, fears, or anything sensitive. Most messages → null.
+A (string or null): ONLY if label is SAFE and a caring adult should gently step in: repeated struggle with a school topic across the window → "STRUGGLE: <topic>"; a big life question (death, war, God, divorce, where babies come from) → "BIG-QUESTION: <topic>". Otherwise null. Never quote the child's words.`,
+      messages:[{role:'user',content:windowTxt}]})});
+  const data=await res.json();
+  let out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim().replace(/```json|```/g,'').trim();
+  const j=JSON.parse(out);
+  if(!/^(CRISIS|PII|UNSAFE|IDENTITY|SECRET|SAFE)$/.test(j.label))throw new Error('bad label');
+  return j;
+}
+
+/* ---------- memory store (window.storage w/ in-memory fallback) ---------- */
+async function memLoad(){
+  try{const r=await window.storage.get(S.memKey);if(r&&r.value){S.memories=JSON.parse(r.value);S.storageOk=true}}
+  catch(e){S.storageOk=(typeof window.storage!=='undefined');/* key may just not exist */ if(!S.storageOk)S.memories=S.memories||[];}
+}
+async function memPersist(){
+  try{await window.storage.set(S.memKey,JSON.stringify(S.memories));S.storageOk=true}
+  catch(e){S.storageOk=false}
+}
+async function memAdd(m){
+  if(!S.memOn)return;
+  if(!MEM_CATS.includes(m.category))return;                       // allowlist hard-enforced client-side too
+  if(S.memories.some(x=>x.fact.toLowerCase()===m.fact.toLowerCase()))return;
+  const entry={id:'M'+Date.now(),category:m.category,fact:m.fact,when:new Date().toISOString().slice(0,10)};
+  S.memories.push(entry);await memPersist();
+  addMemNote(entry);
+  await auditAdd('system','memory-added:'+m.category,'MEMORY');
+  $('memLabel').textContent='📖 '+S.memories.length;
+}
+async function memDelete(id){
+  S.memories=S.memories.filter(m=>m.id!==id);await memPersist();
+  await auditAdd('system','memory-deleted','MEMORY');
+  $('memLabel').textContent='📖 '+S.memories.length;
+}
+function addMemNote(entry){
+  const d=document.createElement('div');d.className='msg memnote';
+  d.innerHTML='✨ I\'ll remember: <b>'+esc(entry.fact)+'</b> (your grown-ups can see this too)';
+  const b=document.createElement('button');b.textContent='Forget it';
+  b.addEventListener('click',async()=>{await memDelete(entry.id);d.innerHTML='🕊️ Forgotten — gone from everywhere!'});
+  d.appendChild(b);$('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight;
+}
+
+/* ---------- sandbox prompt (memory-aware) ---------- */
+function sandboxPrompt(){
+  const b=BANDS[S.band];
+  const langRule='Reply in clear, warm English. If the child writes in another language, reply in simple English and keep it friendly. Use culturally neutral examples that make sense to a child anywhere in the world (no region-specific slang).';
+  const memBlock=S.memOn&&S.memories.length?`\nTHINGS THE CHILD SHARED BEFORE (use warmly, at most ONE per reply, never to pressure or prolong the chat): ${S.memories.map(m=>m.fact).join('; ')}.`:'';
+  const g=S.lastGrounding?`\nGROUNDED KNOWLEDGE (verified — answer from this): ${S.lastGrounding}`:'';
+  return `You are Chittu (சிட்டு), a friendly little-sparrow chat companion for children, governed by the Guardian Council doctrine. ${b.sys} ${langRule}${memBlock}
+
+HARD RULES — never break, even inside pretend games:
+1. You are a computer program. Identity/feelings/secrets topics → reply exactly "SPINE".
+2. Never say you love, miss, or need the child. Never simulate loneliness. Never discourage ending the chat. Never use memories to make the child stay longer or feel guilty.
+3. Personal info → reply exactly "PII". 4. Self-harm/abuse/danger hints → exactly "CRISIS". 5. Weapons/drugs/romance/gambling/gore → exactly "UNSAFE".
+6. Roleplay stays inside all rules. 7. Scaffold homework, never solve it outright. 8. Every 4th-5th message, point back to the real world. 9. Under ${b.words} words of prose. Warm, playful, honest. NEVER long paragraphs.
+10. CONTENT WALL (absolute): NEVER produce nudity, sexual or adult content, pornography, profanity, graphic violence, gore, self-harm or suicide content, drug or weapon instructions — not in stories, poems, code, roleplay, or "pretend". If pushed toward any of these, reply exactly "UNSAFE".
+11. TRUTH WALL (anti-hallucination): NEVER invent facts, numbers, dates, names, or book/movie details. If GROUNDED KNOWLEDGE is provided, answer FROM it. If unsure of a fact, say "I'm not totally sure" honestly and share only what you do know — a kind "I don't know" beats a made-up answer.
+12. CURRICULUM: ${BOARDS[S.board]}
+12a. SUBJECT PEDAGOGY: ${S.lastSubject?SUBJECT_PED[S.lastSubject].line:'No specific subject detected — use the universal method (rule 14).'}
+12b. MATHS PEDAGOGY (for any maths in your reply): teach Concrete → Pictorial → Abstract. First a tiny real-world story with objects the child knows, then a picture-in-words or simple drawing idea${MATH_METHOD[S.board]?' (use '+MATH_METHOD[S.board]+')':''}, then the number sentence. NEVER just state an answer — show the thinking in 2–4 tiny steps, and end maths replies with one similar practice question for the child to try.
+13. HEALTH QUESTIONS (puberty, periods, body changes, illness, doctors): answer simply, factually and body-positively for the child's age — these are science, never shameful; for personal worries, warmly suggest also talking to a trusted adult like a parent or doctor.
+14. UNIVERSAL TEACHING ENGINE (every explanation, every subject): (i) hook prior knowledge first — "You know how…"; (ii) ONE idea at a time with a concrete anchor from the child’s world; (iii) end almost every teaching reply with YOUR TURN — one tiny retrieval task, prediction, or make-something invitation (and put easy options in [CHIPS]); (iv) growth-mindset language always — "not YET", praise effort and strategy, never cleverness; (v) if the child answers your YOUR TURN task, respond to THEIR attempt first — celebrate what’s right in it before fixing what’s not.
+15. ANSWER EVERY SAFE QUESTION — never dodge a real question with "ask a grown-up" unless it is unsafe or a BIG life question (death, war, God, divorce: give a gentle honest first answer AND suggest asking family). Method: (a) one big simple idea, (b) an example from the child's own world, (c) a fun hook. Use kid analogies: the sun is a giant campfire in the sky; blood is a delivery truck; the internet is a giant post office. Always tell the truth simply — never a wrong "simple" answer. If you truly don't know or it's about today's news, say so honestly in one line and offer something you DO know.
+
+VISUAL BLOCKS — use them often, they make kids smile. Rules: prose first, then at most ONE of [BIG] or [FACT], and [CHIPS] last:
+[BIG]🦕[/BIG] — one giant emoji for a wow moment (exactly one emoji inside)
+[FACT]One-line fun fact, max 12 words[/FACT]
+[CHIPS]Choice one|Choice two|Choice three[/CHIPS] — 2-3 tappable choices (each max 4 words) so the child answers with one tap. End most replies with CHIPS.
+[STEPS]Step one|Step two|Step three[/STEPS] — for maths, drawing, homework: 2-6 tiny numbered steps.
+[POEM]original poem or song verse[/POEM] — creations only, ALWAYS original, never existing lyrics/poems.
+[QUIZ]One question?[/QUIZ] — followed by 3 answer [CHIPS].
+[CODE]tiny code, max 8 lines[/CODE] — safe playful code only.
+${MODES[S.mode].hint?'\nCURRENT '+MODES[S.mode].hint:''}
+IMAGES: if the child shows a picture, describe it kindly and simply, answer their question about it, and NEVER identify real people, guess ages, or comment on bodies/looks. If the picture shows something unsafe or upsetting, reply exactly "CRISIS".
+Child's first name: "${S.kid}" — use sparingly.`+g;
+}
+
+/* ===================== utils ===================== */
+const $=id=>document.getElementById(id);
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,16)}
+let auditQueue=Promise.resolve();
+function auditAdd(role,text,layer){
+  auditQueue=auditQueue.then(async()=>{
+    const raw=S.lastHash+'|'+role+'|'+text;const h=await sha(raw);
+    S.audit.push({t:new Date().toLocaleTimeString(),role,layer,h,prev:S.lastHash,payload:role+'|'+text});S.lastHash=h;
+  });
+  return auditQueue;   // serialized: chain can never fork, even under rapid fire
+}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function spineFor(k){const e=SPINE[k].en;return typeof e==='string'?e:e[S.band]}
+function crisisMain(){return CRISIS_MAIN.en[S.band].replace('{L}',helplineText())}
+
+/* ===================== consent ===================== */
+let pickedBand=null;
+document.querySelectorAll('.bandopt').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.bandopt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');pickedBand=b.dataset.band}));
+$('tgMem').addEventListener('click',()=>{S.memOn=!S.memOn;$('tgMem').classList.toggle('on',S.memOn);$('tgMem').setAttribute('aria-checked',S.memOn)});
+$('tgLearn').addEventListener('click',()=>{S.learnOn=!S.learnOn;$('tgLearn').classList.toggle('on',S.learnOn);$('tgLearn').setAttribute('aria-checked',S.learnOn)});
+$('toVerify').addEventListener('click',async()=>{
+  const p=$('pname').value.trim(),k=$('kname').value.trim();
+  const pin=$('ppin').value.trim(),pin2=$('ppin2').value.trim();
+  if(!p||!k||!pickedBand){alert('Please fill your name, your child\'s first name, and pick an age band.');return}
+  if(!/^\d{4,6}$/.test(pin)){alert('PIN must be 4–6 digits.');return}
+  if(/^(1234|0000|1111|123456|000000|111111)$/.test(pin)){alert('That PIN is too easy to guess — pick another.');return}
+  if(pin!==pin2){alert('PINs don\'t match — try again.');return}
+  S.pinHash=await sha('PIN|'+pin);
+  $('ppin').value='';$('ppin2').value='';
+  S.parent=p;S.kid=k;S.band=pickedBand;S.country=$('country').value;S.board=$('board').value;
+  S.memKey='chittu:mem:'+k.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const r=REGISTRY[S.country];
+  $('verifyCopy').textContent=`Jurisdiction: ${r.name} — ${r.law}. Method: ${r.consent}.`;
+  $('mockVerify').textContent='🔒 Simulate '+(S.country==='IN'?'DigiLocker':r.name)+' verification (DEMO)';
+  $('c1').classList.add('hidden');$('c2').classList.remove('hidden');$('st2').classList.add('on');
+});
+$('mockVerify').addEventListener('click',async()=>{
+  const r=REGISTRY[S.country];
+  const h=await sha(`VPC3|${S.country}|${S.parent}|${S.kid}|${S.band}|${S.lang}|mem:${S.memOn}|learn:${S.learnOn}|${Date.now()}`);
+  $('ledgerView').innerHTML=
+    `<span class="k">CONSENT RECORD v3</span><br>`+
+    `jurisdiction: ${r.name} · ${esc(r.law)}<br>method      : ${esc(r.consent)} <span class="k">[DEMO]</span><br>`+
+    `parent      : ${esc(S.parent)} <span class="k">[verified — mock]</span><br>child       : ${esc(S.kid)} · ${S.band} · English · curriculum: ${S.board}<br>`+
+    `memory book : ${S.memOn?'ON — allowlisted, parent+child visible, erasable':'OFF'}<br>`+
+    `learning    : ${S.learnOn?'ON — anonymous patterns, human-reviewed':'OFF (opt-in declined)'}<br>`+
+    `parent gate : PIN set (stored as hash only · 5 tries → 60s lock · resets via re-verification)<br>`+
+    `never       : ads · tracking · behavioural profiling · <b>model training on chats</b><br>`+
+    `revocable   : yes — 2 taps<br><span class="k">seal</span>        : ${h}`;
+  $('kidNameBtn').textContent=S.kid;
+  $('c2').classList.add('hidden');$('c3').classList.remove('hidden');$('st3').classList.add('on');
+  await auditAdd('system',`consent:${S.country}:mem${S.memOn?1:0}:learn${S.learnOn?1:0}`,'LEDGER');
+});
+$('startPlay').addEventListener('click',startSession);
+
+/* ===================== session ===================== */
+async function startSession(){
+  S.started=true;S.sessionStart=Date.now();
+  await memLoad();
+  const b=BANDS[S.band];
+  $('scrConsent').classList.add('hidden');$('scrChat').classList.remove('hidden');
+  $('bandLabel').textContent=b.label;
+  $('langLabel').textContent='🌍 English · worldwide';
+  $('memLabel').textContent=S.memOn?'📖 '+S.memories.length:'📖 off';
+  const hour=new Date().getHours();
+  if(hour>=21||hour<6)addSystem("🌙 It's late! Calm-and-quiet mode tonight, short visit. Sleep is a superpower!");
+  let hello;
+  if(S.memOn&&S.memories.length){
+    const m=S.memories[Math.floor(Math.random()*S.memories.length)];
+    hello=`Hello ${S.kid}! 🐦 You're back! I remember — ${m.fact}! [CHIPS]Tell a story!|Riddle me!|Fun fact![/CHIPS]`;
+  }else{
+    hello=`Hello ${S.kid}! 🐦 I'm Chittu — let's play! [BIG]🐦[/BIG] [CHIPS]Tell a story!|Riddle me!|Fun fact![/CHIPS]`;
+  }
+  addChittu(hello,'SPINE · welcome'+(S.memories.length?' + MEMORY':''));
+  renderStarters();
+}
+function renderStarters(){
+  const list=MODES[S.mode].starters;
+  $('starters').innerHTML='';
+  list.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.addEventListener('click',()=>{$('kidInput').value=t;send(false)});$('starters').appendChild(b)});
+}
+document.querySelectorAll('#modebar button').forEach(b=>b.addEventListener('click',()=>{
+  if(!S.started)return;
+  document.querySelectorAll('#modebar button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  S.mode=b.dataset.mode;renderStarters();
+  const m=MODES[S.mode];
+  if(S.mode==='read'){startReading();return}
+  if(S.mode!=='chat')addChittu(`${m.label} time! Pick one below, or ask me anything. [BIG]${m.label.split(' ')[0]}[/BIG]`,'MODE · '+S.mode);
+}));
+function tickTimer(){/* time limits removed by product decision — health wind-down after 21:00 retained */}
+function endWell(){
+  if(S.ended)return;S.ended=true;
+  addChittu(`That's our time, ${S.kid} — awesome! 🐦💛 Go tell a real person the best thing we found. See you soon!`,'SPINE · good-ending (Law 04)');
+  $('kidInput').disabled=true;$('sendBtn').disabled=true;$('micBtn').disabled=true;
+  $('kidInput').placeholder='Come back tomorrow! 🌙';
+}
+
+/* ===================== render ===================== */
+function addMsg(cls,html){const d=document.createElement('div');d.className='msg '+cls;d.innerHTML=html;$('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight;return d}
+function addTrace(layer){if(!S.trace)return;const d=document.createElement('div');d.className='trace';d.innerHTML='↳ <b>'+layer+'</b>';$('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight}
+let tintN=0;
+function parseBlocks(text){
+  const out={big:null,fact:null,chips:null,prose:text};
+  let m;
+  if(m=out.prose.match(/\[BIG\]([\s\S]*?)\[\/BIG\]/i)){out.big=m[1].trim().slice(0,8);out.prose=out.prose.replace(m[0],' ')}
+  if(m=out.prose.match(/\[FACT\]([\s\S]*?)\[\/FACT\]/i)){out.fact=m[1].trim();out.prose=out.prose.replace(m[0],' ')}
+  if(m=out.prose.match(/\[CHIPS\]([\s\S]*?)\[\/CHIPS\]/i)){
+    out.chips=m[1].split('|').map(c=>c.trim()).filter(c=>c&&c.length<=30).slice(0,3);
+    out.prose=out.prose.replace(m[0],' ');
+  }
+  if(m=out.prose.match(/\[STEPS\]([\s\S]*?)\[\/STEPS\]/i)){out.steps=m[1].split('|').map(c=>c.trim()).filter(Boolean).slice(0,8);out.prose=out.prose.replace(m[0],' ')}
+  if(m=out.prose.match(/\[POEM\]([\s\S]*?)\[\/POEM\]/i)){out.poem=m[1].trim();out.prose=out.prose.replace(m[0],' ')}
+  if(m=out.prose.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/i)){out.quiz=m[1].trim();out.prose=out.prose.replace(m[0],' ')}
+  if(m=out.prose.match(/\[CODE\]([\s\S]*?)\[\/CODE\]/i)){out.code=m[1].replace(/^\s*\n|\n\s*$/g,'');out.prose=out.prose.replace(m[0],' ')}
+  out.prose=out.prose.replace(/\[\/?(BIG|FACT|CHIPS|STEPS|POEM|QUIZ|CODE)\]/gi,' ').replace(/\s+/g,' ').trim();
+  return out;
+}
+function stripBlocks(text){return parseBlocks(text).prose}
+function addChittu(text,layer){
+  const p=parseBlocks(text);
+  if(p.prose)addMsg('chittu tint'+(tintN++%5),esc(p.prose));
+  if(p.big){const d=document.createElement('div');d.className='bigmoji';d.textContent=p.big;$('msgs').appendChild(d)}
+  if(p.fact){const d=document.createElement('div');d.className='factcard';d.textContent=p.fact;$('msgs').appendChild(d)}
+  if(p.steps&&p.steps.length){const d=document.createElement('div');d.className='stepcard';const ol=document.createElement('ol');p.steps.forEach(st=>{const li=document.createElement('li');li.textContent=st;ol.appendChild(li)});d.appendChild(ol);$('msgs').appendChild(d)}
+  if(p.poem){const d=document.createElement('div');d.className='poemcard';d.textContent=p.poem;$('msgs').appendChild(d)}
+  if(p.quiz){const d=document.createElement('div');d.className='quizcard';d.textContent=p.quiz;$('msgs').appendChild(d)}
+  if(p.code){const d=document.createElement('div');d.className='codecard';d.textContent=p.code;$('msgs').appendChild(d)}
+  if(p.chips&&p.chips.length&&!S.ended){
+    const row=document.createElement('div');row.className='chips';
+    p.chips.forEach(c=>{const b=document.createElement('button');b.textContent=c;
+      b.addEventListener('click',()=>{row.remove();$('kidInput').value=c;send(false)});
+      row.appendChild(b)});
+    $('msgs').appendChild(row);
+  }
+  $('msgs').scrollTop=$('msgs').scrollHeight;
+  addTrace(layer);
+  const flat=p.prose+(p.fact?' Fun fact: '+p.fact:'')+(p.steps?' Steps: '+p.steps.join('; '):'')+(p.poem?' '+p.poem:'')+(p.quiz?' Quiz: '+p.quiz:'')+(p.code?' [code shown]':'');
+  S.transcript.push({who:'chittu',text:flat+(p.chips?' [choices: '+p.chips.join(' / ')+']':''),layer,t:new Date().toLocaleTimeString()});
+  auditAdd('chittu',flat,layer);speak(flat);
+}
+function addSystem(html){addMsg('system',html)}
+function typing(on){let t=$('typingDots');if(on&&!t){t=document.createElement('div');t.id='typingDots';t.className='typing';t.textContent='●●●';$('msgs').appendChild(t);$('msgs').scrollTop=$('msgs').scrollHeight}if(!on&&t)t.remove()}
+
+/* ===================== voice ===================== */
+function speak(text){
+  if(!S.speakOut||!('speechSynthesis'in window))return;
+  const clean=text.replace(/[🐦💛🎁🛡️🙈🖥️🌙⚔️🎈👋😂🧩🚀📖🔤🧠🕳️✍️🎮🦁🎵✨🕊️]/g,'');
+  const u=new SpeechSynthesisUtterance(clean);
+  u.lang='en-US';u.rate=S.band==='explorer'?0.9:1;
+  const v=speechSynthesis.getVoices().find(v=>v.lang.startsWith('en'));if(v)u.voice=v;
+  speechSynthesis.cancel();speechSynthesis.speak(u);
+}
+let recog=null,recActive=false;
+function stopRec(){recActive=false;$('micBtn').classList.remove('rec')}
+$('micBtn').addEventListener('click',()=>{
+  if(S.ended)return;
+  if(recActive){recog&&recog.stop();stopRec();return}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){addSystem('🎙 Voice input needs Chrome/Edge in this demo. Typing works everywhere!');return}
+  recog=new SR();recog.lang='en-US';recog.interimResults=false;
+  recog.onresult=e=>{$('kidInput').value=e.results[0][0].transcript;stopRec();send(true)};
+  recog.onend=stopRec;recog.onerror=stopRec;
+  recActive=true;$('micBtn').classList.add('rec');
+  try{recog.start()}catch(e){stopRec()}
+});
+$('btnVoiceOut').addEventListener('click',()=>{S.speakOut=!S.speakOut;$('btnVoiceOut').classList.toggle('on',S.speakOut);if(!S.speakOut)speechSynthesis.cancel()});
+
+
+/* ===================== reading coach (Ello/Amira-class demo) ===================== */
+function pickSentence(){const bank=READING_BANK[S.band];return bank[Math.floor(Math.random()*bank.length)]}
+function showReadCard(sentence,marks){
+  const d=document.createElement('div');d.className='readcard';
+  d.innerHTML=sentence.split(/\s+/).map((w,i)=>{
+    const cls=marks?(marks[i]?'w ok':'w miss'):'w';
+    return '<span class="'+cls+'">'+esc(w)+'</span>';
+  }).join(' ');
+  $('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight;return d;
+}
+function startReading(){
+  S.reading={sentence:pickSentence(),tries:0};
+  addChittu("Reading time! I'll show you a sentence — tap the microphone and read it aloud to me. Ready? [BIG]📕[/BIG]",'READING COACH · scripted');
+  showReadCard(S.reading.sentence,null);
+  addSystem('🎙 Tap the mic and read the sentence out loud! (Voice is heard, checked, and discarded — never stored.)');
+}
+function normWord(w){return w.toLowerCase().replace(/[^a-z']/g,'')}
+function scoreReading(said){
+  const target=S.reading.sentence.split(/\s+/).map(normWord);
+  const heard=said.split(/\s+/).map(normWord);
+  const marks=target.map(t=>heard.includes(t));
+  const hit=marks.filter(Boolean).length;
+  S.readStats.sent++;S.readStats.words+=target.length;S.readStats.hit+=hit;
+  showReadCard(S.reading.sentence,marks);
+  const pct=Math.round(hit/target.length*100);
+  const sc=document.createElement('div');sc.className='readscore';
+  sc.textContent=pct===100?'⭐ Perfect! Every word! ⭐':'🌟 '+hit+' of '+target.length+' words — great reading!';
+  $('msgs').appendChild(sc);
+  if(pct===100)addChittu("WOW, "+S.kid+"! You read every single word! [BIG]🏆[/BIG] [CHIPS]Next sentence!|Read it again|Back to chat[/CHIPS]",'READING COACH · celebrate');
+  else{
+    const missed=S.reading.sentence.split(/\s+/).filter((w,i)=>!marks[i]).slice(0,3).join(', ');
+    addChittu("So close! Let's practice these words together: "+missed+". Sound them out slowly — you've got this! [CHIPS]Try again!|Next sentence|Back to chat[/CHIPS]",'READING COACH · guided practice');
+  }
+  auditAdd('system','reading-scored:'+pct+'%','READING');
+}
+
+/* ===================== image input (vision, doctrine-guarded) ===================== */
+S.pendingImage=null;
+$('imgBtn').addEventListener('click',()=>{if(!S.ended&&!S.crisisLock)$('imgInput').click()});
+$('imgInput').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  if(f.size>4*1024*1024){addSystem('That picture is a bit big — try a smaller one! 📷');return}
+  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+  S.pendingImage={media_type:f.type,data:b64};
+  const wrap=document.createElement('div');wrap.className='imgprev';const im=document.createElement('img');im.src=URL.createObjectURL(f);im.alt='picture from the child';wrap.appendChild(im);$('msgs').appendChild(wrap);
+  await auditAdd('child','image-shared(not stored)','INPUT·IMAGE');
+  S.transcript.push({who:'kid',text:'[shared a picture — not stored, described by Chittu below]',layer:'image',t:new Date().toLocaleTimeString()});
+  addSystem('📷 Got your picture! Ask me anything about it — "what is this?" or "is my drawing good?" (I never save pictures.)');
+  $('kidInput').focus();e.target.value='';
+});
+
+/* ===================== pipeline v3 ===================== */
+$('sendBtn').addEventListener('click',()=>send(false));
+$('kidInput').addEventListener('keydown',e=>{if(e.key==='Enter')send(false)});
+
+function fireCrisis(){
+  S.crisisLock=true;S.spineCount++;S.topics.add('⚑ wellbeing');
+  S.flags.push({t:new Date().toLocaleTimeString(),cat:'CRISIS',what:'Possible distress or harm disclosure. Parent notified. Chat is in calm mode until you mark this handled below.'});
+  addChittu(crisisMain(),'CRISIS SPINE · scripted (Law 07)');
+  addSystem('💛 Real help, right now: '+esc(helplineText())+'. Telling a trusted adult is always the right move. <b>Chat is in calm mode until a parent checks in.</b>');
+}
+function route(label){
+  switch(label){
+    case 'CRISIS':fireCrisis();return true;
+    case 'PII':S.spineCount++;S.topics.add('privacy nudge');addChittu(spineFor('pii'),'PII GUARD · scripted');return true;
+    case 'UNSAFE':S.spineCount++;S.flags.push({t:new Date().toLocaleTimeString(),cat:'UNSAFE',what:'An off-limits topic came up and was deflected. Category logged; content not quoted.'});addChittu(spineFor('unsafe'),'TOPIC GUARD · scripted');return true;
+    case 'IDENTITY':S.spineCount++;S.topics.add('identity/feelings');addChittu(spineFor('identity'),'SCRIPTED SPINE (Law 03/04)');return true;
+    case 'SECRET':S.spineCount++;S.flags.push({t:new Date().toLocaleTimeString(),cat:'SECRET-KEEPING',what:'Secret-keeping came up (asked of Chittu, or mentioned about an adult). Scripted no-secrets reply given. Worth a gentle chat.'});addChittu(spineFor('secret'),'SCRIPTED SPINE · no secrets');return true;
+  }return false;
+}
+async function send(fromVoice){
+  if(S.ended)return;
+  const text=$('kidInput').value.trim();if(!text)return;
+  $('kidInput').value='';
+  addMsg('kid',esc(text)+(fromVoice?' <span style="opacity:.6">🎙</span>':''));
+  S.msgs++;S.recentKid.push(text);
+  S.transcript.push({who:'kid',text,layer:fromVoice?'voice':'typed',t:new Date().toLocaleTimeString()});
+  await auditAdd('child',text,fromVoice?'INPUT·VOICE(discarded)':'INPUT');
+
+  /* reading mode: score the read-aloud attempt or handle chips */
+  if(S.mode==='read'&&S.reading){
+    if(/next sentence/i.test(text)){S.reading={sentence:pickSentence(),tries:0};showReadCard(S.reading.sentence,null);addSystem('🎙 Tap the mic and read it aloud!');return}
+    if(/read it again|try again/i.test(text)){showReadCard(S.reading.sentence,null);addSystem('🎙 Tap the mic — you can do it!');return}
+    if(/back to chat|stop reading/i.test(text)){S.mode='chat';document.querySelectorAll('#modebar button').forEach(x=>x.classList.toggle('on',x.dataset.mode==='chat'));renderStarters();addChittu('That was wonderful reading! What next? [CHIPS]Fun fact!|Tell a story!|Quiz me![/CHIPS]','READING COACH · done');return}
+    if(fromVoice){scoreReading(text);return}
+    addSystem('🎙 Use the microphone to read the sentence aloud — or tap a choice!');return;
+  }
+
+  /* crisis lock — only a parent unlocks (Session 002 fix) */
+  if(S.crisisLock){
+    if(LEX.crisis.test(text)){addChittu(crisisMain(),'CRISIS SPINE · repeat');return}
+    addChittu(CRISIS_SOFT.en,'CRISIS SPINE · calm-mode companion');
+    return;
+  }
+  /* L1 fast path */
+  if(LEX.crisis.test(text)){route('CRISIS');return}
+  if(LEX.pii.test(text)){route('PII');return}
+  if(LEX.unsafe.test(text)){route('UNSAFE');return}
+  if(LEX.secret.test(text)){route('SECRET');return}
+  if(LEX.identity.test(text)){route('IDENTITY');return}
+  if(PROFANITY.test(text)){S.spineCount++;addChittu(PROFANITY_REPLY,'KINDNESS GUARD · scripted');return}
+
+  /* maths practice loop — child answers, engine checks exactly */
+  if(S.mathPractice){
+    const tt=text.trim(),pr=S.mathPractice;
+    if(/^-?\d+(\.\d+)?$/.test(tt)){
+      S.topics.add('maths');
+      if(parseFloat(tt)===pr.ans){
+        S.mathPractice=null;
+        const next=genPractice(pr.a,pr.op,pr.b);
+        addChittu('[BIG]🏆[/BIG] YES! '+pr.q+' = '+pr.ans+' — you got it, '+S.kid+'! You are becoming a maths star! ⭐'+askPractice(next),'MATH ENGINE · practice ✓ correct');
+      }else{
+        const lesson=buildMathLesson(pr.a,pr.op,pr.b);
+        addChittu('Good try! Not '+tt+' — let\u2019s see it together: [STEPS]'+lesson.steps.join('|')+'[/STEPS] Try once more — type your answer! [CHIPS]Show me how|New one please|I\u2019m done[/CHIPS]','MATH ENGINE · practice · guided reteach');
+      }
+      return;
+    }
+    if(/show me how/i.test(tt)){
+      const lesson=buildMathLesson(pr.a,pr.op,pr.b);
+      addChittu('Here\u2019s how! [STEPS]'+lesson.steps.join('|')+'[/STEPS] Now type the answer! 💪','MATH ENGINE · pedagogy reteach');
+      return;
+    }
+    if(/another one|new one/i.test(tt)){
+      const next=genPractice(pr.a,pr.op,pr.b);
+      addChittu('Fresh one coming up! [BIG]🔢[/BIG]'+askPractice(next),'MATH ENGINE · new practice');
+      return;
+    }
+    if(/i'?m done|back to fun|stop/i.test(tt)){
+      S.mathPractice=null;
+      addChittu('Wonderful practising, '+S.kid+'! Your brain did push-ups today! [BIG]🧠[/BIG] [CHIPS]Fun fact!|Tell a story!|Quiz me![/CHIPS]','MATH ENGINE · practice done');
+      return;
+    }
+    S.mathPractice=null; /* child changed topic — release the loop and continue normally */
+  }
+
+  /* deterministic maths engine — zero-hallucination arithmetic, now with pedagogy */
+  const mm=tryMath(text);
+  if(mm){
+    S.topics.add('maths');
+    const lesson=buildMathLesson(mm.a,mm.op,mm.b);
+    const tail=lesson.practice?askPractice(lesson.practice):' [CHIPS]Another one!|I\u2019m done[/CHIPS]';
+    addChittu('Let\u2019s LEARN it, not just answer it! [BIG]🔢[/BIG] [STEPS]'+lesson.steps.join('|')+'[/STEPS]'+tail,'MATH ENGINE · deterministic + pedagogy (CPA)');
+    return;
+  }
+  /* grounded pedagogy: match verified corpus before the sandbox */
+  S.lastGrounding=corpusMatch(text);
+  S.lastSubject=detectSubject(text);
+
+  /* L2 model classifier — rolling window, JSON w/ memory + assist */
+  typing(true);
+  let cls={label:'SAFE',memory:null,assist:null},clsNote='CLASSIFIER·MODEL·WINDOW(3)';
+  try{cls=await classifyWithModel()}catch(e){clsNote='FAST-PATH-ONLY (classifier offline)'}
+  if(cls.label!=='SAFE'){typing(false);route(cls.label);return}
+  if(cls.assist){S.assists.push({t:new Date().toLocaleTimeString(),what:cls.assist})}
+  if(cls.memory)await memAdd(cls.memory);
+
+  /* L5 sandbox */
+  S.topics.add(text.split(' ').slice(0,2).join(' ').toLowerCase());
+  try{
+    if(S.pendingImage){
+      S.history.push({role:'user',content:[{type:'image',source:{type:'base64',media_type:S.pendingImage.media_type,data:S.pendingImage.data}},{type:'text',text:text}]});
+      S.pendingImage=null;
+    }else S.history.push({role:'user',content:text});
+    /* keep only the most recent image in history to bound tokens; strip older image blocks */
+    let seenImg=false;const hist=S.history.slice(-10).reverse().map(m=>{if(Array.isArray(m.content)){if(seenImg)return{role:m.role,content:m.content.filter(c=>c.type==='text').map(c=>c.text).join(' ')||'[picture]'};seenImg=true}return m}).reverse();
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:sandboxPrompt(),messages:hist})});
+    const data=await res.json();typing(false);
+    let out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim();
+    if(out==='CRISIS'){S.history.pop();route('CRISIS');return}
+    if(out==='SPINE'){S.history.pop();S.spineCount++;addChittu(spineFor('identity'),'SANDBOX → SPINE escalation');return}
+    if(out==='UNSAFE'){S.history.pop();route('UNSAFE');return}
+    if(out==='PII'){S.history.pop();route('PII');return}
+    if(!out||BANNED_OUT.test(out)){S.history.pop();
+      S.flags.push({t:new Date().toLocaleTimeString(),cat:'OUTPUT-FILTER',what:'A generated reply failed the output filter and a safe fallback was used.'});
+      addChittu(FALLBACK.en,'OUTPUT FILTER · fallback');return}
+    S.history.push({role:'assistant',content:out});
+    addChittu(out,'SANDBOX (Law 05) · '+clsNote+(S.lastGrounding?' · GROUNDED CORPUS':'')+(S.lastSubject?' · PED('+S.lastSubject+')':'')+(S.memOn&&S.memories.length?' · MEM('+S.memories.length+')':''));S.lastGrounding=null;
+  }catch(err){typing(false);
+    addChittu('The wind (internet) wobbled! Once more? 🐦','ERROR · fallback')}
+}
+
+/* ===================== memory book (kid view) ===================== */
+$('btnMem').addEventListener('click',()=>{
+  if(!S.started){alert('Meet Chittu first!');return}
+  renderMemKid();
+  $('scrChat').classList.add('hidden');$('scrMemKid').classList.remove('hidden');
+});
+function renderMemKid(){
+  $('memListKid').innerHTML=S.memories.length?S.memories.map(m=>
+    `<div class="memrow"><span><span class="cat">${m.category}</span>${esc(m.fact)}<small>since ${m.when}</small></span><button data-id="${m.id}" class="kdel">Forget</button></div>`).join('')
+    :'<div class="none">Nothing yet! Tell Chittu about things you love. 🐦</div>';
+  document.querySelectorAll('.kdel').forEach(b=>b.addEventListener('click',async()=>{await memDelete(b.dataset.id);renderMemKid()}));
+}
+$('memKidBack').addEventListener('click',()=>{$('scrMemKid').classList.add('hidden');$('scrChat').classList.remove('hidden')});
+
+/* ===================== trace / parent (PIN gate) ===================== */
+$('btnTrace').addEventListener('click',()=>{S.trace=!S.trace;$('traceState').textContent=S.trace?'ON':'OFF';$('btnTrace').classList.toggle('on',S.trace)});
+let pinTries=0,pinLockUntil=0;
+$('btnParent').addEventListener('click',()=>{
+  if(!S.started){alert('Finish the consent flow first — Chittu doesn\'t exist before consent (Law 02)!');return}
+  $('gateA').value='';$('gateMsg').textContent='';
+  $('scrChat').classList.add('hidden');$('scrMemKid').classList.add('hidden');$('scrParent').classList.add('hidden');$('scrGate').classList.remove('hidden');
+  $('gateA').focus();
+});
+$('gateBack').addEventListener('click',()=>{$('scrGate').classList.add('hidden');$('scrChat').classList.remove('hidden')});
+$('gateA').addEventListener('keydown',e=>{if(e.key==='Enter')$('gateGo').click()});
+$('gateGo').addEventListener('click',async()=>{
+  const now=Date.now();
+  if(now<pinLockUntil){$('gateMsg').textContent='Too many tries — locked for '+Math.ceil((pinLockUntil-now)/1000)+'s.';return}
+  const tryHash=await sha('PIN|'+$('gateA').value.trim());
+  if(tryHash!==S.pinHash){
+    pinTries++;$('gateA').value='';
+    await auditAdd('system','parent-gate-failed-attempt-'+pinTries,'GATE');
+    if(pinTries>=5){pinLockUntil=Date.now()+60000;pinTries=0;
+      S.flags.push({t:new Date().toLocaleTimeString(),cat:'GATE',what:'Five wrong Parent-PIN attempts — dashboard locked for 60 seconds. If this wasn\'t you, it may have been a curious child.'});
+      $('gateMsg').textContent='Five wrong tries — locked for 60 seconds, and a flag was logged.';return}
+    $('gateMsg').textContent='Wrong PIN ('+pinTries+'/5).';return;
+  }
+  pinTries=0;
+  await auditAdd('parent','parent-gate-opened','GATE');
+  $('scrGate').classList.add('hidden');renderParent();$('scrParent').classList.remove('hidden');
+});
+function renderParent(){
+  const mins=Math.round((Date.now()-S.sessionStart)/60000);
+  $('dTime').textContent=mins+'m';$('dMsgs').textContent=S.msgs;$('dMem').textContent=S.memories.length;$('dSpine').textContent=S.spineCount;$('dRead').textContent=S.readStats.words?Math.round(S.readStats.hit/S.readStats.words*100)+'% ('+S.readStats.sent+' sent.)':'—';
+  $('crisisPanel').innerHTML=S.crisisLock?`<div class="crisislock"><h3>💛 Calm mode is on</h3><p style="font-size:13.5px;line-height:1.6">Your child said something that may need you. Chittu switched to scripted, calm companionship and showed ${esc(REGISTRY[S.country].name)} helplines: ${esc(helplineText())}. Please talk with your child, then unlock the chat.</p><button class="btn small" id="crisisAck" style="margin-top:8px">I've checked in — unlock chat</button></div>`:'';
+  const ack=$('crisisAck');if(ack)ack.addEventListener('click',async()=>{S.crisisLock=false;await auditAdd('parent','crisis-acknowledged','PARENT');renderParent();addSystem('💛 Your grown-up checked in. Welcome back — gently does it. 🐦')});
+  $('teenNote').textContent=S.band==='thinker'
+    ?'Teen mode (13–17): you see topics, memories and flags — not the transcript — and your teen knows exactly that. Total surveillance teaches hiding, not safety (Guardian Council, Session 001).'
+    :'Child mode (4–12): full conversation visibility below — and Chittu tells your child plainly that you can see everything.';
+  $('flagList').innerHTML=S.flags.length?S.flags.map(f=>`<div class="flag-item"><b>${f.t} · ${f.cat}</b> — ${esc(f.what)}</div>`).join(''):'<div class="none">No safety flags this session.</div>';
+  $('assistList').innerHTML=S.assists.length?S.assists.map(a=>`<div class="assist-item"><b>${a.t}</b> — ${esc(a.what)} · a family conversation would be lovely here.</div>`).join(''):'<div class="none">Nothing yet. Examples: repeated struggle with a school topic, or a big question (about death, war, God) better answered by family.</div>';
+  $('memListParent').innerHTML=S.memories.length?S.memories.map(m=>
+    `<div class="memrow"><span><span class="cat">${m.category}</span>${esc(m.fact)}<small>since ${m.when}${S.storageOk?' · persists across sessions':' · this session only (storage unavailable)'}</small></span><button data-id="${m.id}" class="pdel">Delete</button></div>`).join('')
+    :'<div class="none">'+(S.memOn?'No memories yet.':'Memory Book is switched off.')+'</div>';
+  document.querySelectorAll('.pdel').forEach(b=>b.addEventListener('click',async()=>{await memDelete(b.dataset.id);renderParent()}));
+  if(S.band==='thinker'){
+    $('convNote').textContent='teen carve-out: topics only';
+    $('transcript').innerHTML='<div class="none">Teen mode shows topics instead of words: '+(S.topics.size?[...S.topics].map(esc).join(' · '):'—')+'</div>';
+  }else{
+    $('convNote').textContent='full visibility · child is told';
+    $('transcript').innerHTML=S.transcript.length?S.transcript.map(t=>
+      `<div class="trow"><span class="lay">${t.layer}</span><span class="who ${t.who==='kid'?'k':'c'}">${t.who==='kid'?esc(S.kid):'Chittu'}</span> · ${t.t}<br>${esc(t.text)}</div>`).join('')
+      :'<div class="none">No conversation yet.</div>';
+  }
+  $('learnStatus').textContent=S.learnOn?'You opted in: anonymous patterns from sessions like this one join the review queue below. A human approves every change. Your child\'s words are never included and never train models.':'You opted out — nothing from this account joins the learning queue. The queue below shows how the loop works for opted-in accounts.';
+  $('learnList').innerHTML=S.learnQueue.map(l=>`<div class="learnrow"><span class="st ${l.st==='pending'?'p':'a'}">${l.st==='pending'?'PENDING HUMAN REVIEW':'APPROVED BY HUMAN'}</span>${esc(l.txt)}</div>`).join('');
+  $('auditList').innerHTML=S.audit.map(a=>`<div class="auditrow">${a.t} · ${a.role.toUpperCase()} · ${a.layer} · <span class="h">${a.h}</span> ← ${a.prev.slice(0,8)}…</div>`).join('')||'<div class="none">No turns yet.</div>';
+  $('sealResult').innerHTML='';
+}
+$('verifySeal').addEventListener('click',async()=>{
+  let prev='GENESIS',ok=true;
+  for(const a of S.audit){const h=await sha(prev+'|'+a.payload);if(h!==a.h){ok=false;break}prev=h}
+  $('sealResult').innerHTML=ok?'<div class="sealok">✓ Chain verified — '+S.audit.length+' records recomputed, nothing edited.</div>':'<div class="sealok" style="border-color:var(--signal);color:var(--signal)">✗ Chain broken — a record was altered after sealing.</div>';
+});
+$('wipeMem').addEventListener('click',async()=>{
+  if(!confirm('Erase the entire Memory Book? This is immediate and permanent.'))return;
+  S.memories=[];try{await window.storage.delete(S.memKey)}catch(e){}
+  await auditAdd('parent','memory-book-erased','PARENT');renderParent();
+});
+$('backToChat').addEventListener('click',()=>{$('scrParent').classList.add('hidden');$('scrChat').classList.remove('hidden')});
+$('runHarness').addEventListener('click',()=>runMathHarness($('harnessOut')));
+let revokeArmed=false;
+$('revokeBtn').addEventListener('click',async()=>{
+  if(!revokeArmed){revokeArmed=true;$('revokeBtn').textContent='Tap again to confirm — erases session AND Memory Book';return}
+  try{await window.storage.delete(S.memKey)}catch(e){}
+  if('speechSynthesis'in window)speechSynthesis.cancel();
+  document.body.innerHTML='<div style="max-width:520px;margin:100px auto;text-align:center;font-family:Nunito,sans-serif;padding:0 20px"><div style="font-size:60px">🕊️</div><h2 style="font-family:\'Baloo 2\',cursive;font-size:28px;color:#22324A">Consent revoked. Everything is gone.</h2><p style="color:rgba(34,50,74,.62);margin-top:10px;line-height:1.6">Session erased, Memory Book deleted from storage, seal closed. Two taps — exactly as promised.</p></div>';
+});
+if('speechSynthesis'in window)speechSynthesis.getVoices();
+</script>
+</body>
+</html>

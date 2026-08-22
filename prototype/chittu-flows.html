@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHITTU v3.3 — Complete Architecture Flow Diagrams · Tulifo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0B0B14;--ultra:#1A18D4;--signal:#FF2E1F;--paper:#F5F4EF;--sun:#FFC93C;--leaf:#2E9E6B;
+--w70:rgba(245,244,239,.7);--w30:rgba(245,244,239,.3);--w12:rgba(245,244,239,.12)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--paper);font-family:'Archivo',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:'IBM Plex Mono',monospace}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid var(--w12);position:sticky;top:0;background:rgba(11,11,20,.95);z-index:40;flex-wrap:wrap;gap:8px}
+.wordmark{font-weight:900;font-size:17px;letter-spacing:.06em}
+.wordmark .dot{color:var(--signal)}
+.topbar .meta{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--w30);letter-spacing:.1em;text-transform:uppercase}
+.wrap{max-width:1280px;margin:0 auto;padding:36px 28px 80px}
+h1{font-size:clamp(30px,5vw,56px);font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:-.01em}
+.sub{color:var(--w70);max-width:800px;margin:16px 0 30px;font-size:15px;line-height:1.65}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:36px}
+.lg{display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--w12);padding:6px 11px}
+.sw{width:14px;height:14px;border-radius:3px;flex:none}
+.sect{margin-bottom:52px;border:1px solid var(--w12)}
+.sect-head{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--w12);flex-wrap:wrap;gap:10px}
+.sect-head h2{font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.sect-head .idx{color:var(--signal);font-family:'IBM Plex Mono',monospace;font-size:12px;margin-right:12px;letter-spacing:.16em}
+.btns{display:flex;gap:8px}
+.tb{border:1px solid var(--w12);background:none;color:var(--w70);padding:6px 13px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.tb:hover{border-color:var(--paper);color:var(--paper)}
+.diagram{background:#FDFCF8;padding:22px;overflow-x:auto}
+.diagram .mermaid{min-width:600px}
+.src{display:none;background:#050509;padding:18px 22px;border-top:1px solid var(--w12)}
+.src.open{display:block}
+.src pre{font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.65;color:#B8E3C8;white-space:pre;overflow-x:auto}
+.note{padding:14px 22px;border-top:1px solid var(--w12);font-size:13px;color:var(--w70);line-height:1.6}
+.note b{color:var(--paper)}
+table.routing{width:100%;border-collapse:collapse;font-size:12.5px;background:#FDFCF8;color:#1a1a2e}
+table.routing th{background:var(--ultra);color:#fff;text-align:left;padding:10px 14px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
+table.routing td{padding:10px 14px;border-bottom:1px solid #e8e6de;vertical-align:top;line-height:1.55}
+table.routing tr:last-child td{border-bottom:none}
+.eng{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10.5px;font-weight:700;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+.eng.script{background:#FFE3DB;color:#C62828}
+.eng.det{background:#E7E6FF;color:#4527A0}
+.eng.ai{background:#1A18D4;color:#fff}
+.eng.reg{background:#DFF3E8;color:#1B5E20}
+footer{border-top:1px solid var(--w12);padding:28px;display:flex;justify-content:space-between;max-width:1280px;margin:0 auto;flex-wrap:wrap;gap:12px}
+footer .mono{font-size:10.5px;color:var(--w30);letter-spacing:.1em;text-transform:uppercase}
+.rec{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--signal);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wordmark">TULIF<span class="dot">●</span> <span class="meta" style="margin-left:10px">CHITTU v3.3 · ARCHITECTURE FLOWS</span></div>
+  <div class="meta"><span class="rec"></span>&nbsp; 5 diagrams · multi-model routing · mermaid source included</div>
+</div>
+
+<div class="wrap">
+  <h1>The Complete<br>Flow</h1>
+  <p class="sub">Every path through Chittu v3.3, start to end: consent, the child's message pipeline, question categorisation and model routing, the crisis spine, and the parent flow. Each flow keeps one colour across all five diagrams. Tap <b>VIEW SOURCE</b> on any diagram for its Mermaid code.</p>
+
+  <div class="legend">
+    <span class="lg"><span class="sw" style="background:#DFF3E8;border:2px solid #2E9E6B"></span>Consent &amp; legal</span>
+    <span class="lg"><span class="sw" style="background:#DFF0FF;border:2px solid #1976D2"></span>Child interaction</span>
+    <span class="lg"><span class="sw" style="background:#FFE3DB;border:2px solid #FF2E1F"></span>Scripted spine (no AI)</span>
+    <span class="lg"><span class="sw" style="background:#FF2E1F"></span>Crisis</span>
+    <span class="lg"><span class="sw" style="background:#E7E6FF;border:2px solid #6A5ACD"></span>Deterministic engine</span>
+    <span class="lg"><span class="sw" style="background:#1A18D4"></span>AI model call</span>
+    <span class="lg"><span class="sw" style="background:#FFF3D6;border:2px solid #FFC93C"></span>Parent flow</span>
+    <span class="lg"><span class="sw" style="background:#22243a;border:2px solid #0B0B14"></span>Audit / seal chain</span>
+  </div>
+
+  <!-- ============ D1 MASTER ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">D1</span>Master flow — app start to end</h2>
+      <div class="btns"><button class="tb" data-src="s1">View source</button><button class="tb" data-copy="s1">Copy</button></div></div>
+    <div class="diagram"><pre class="mermaid" id="d1"></pre></div>
+    <div class="src" id="src-s1"><pre id="s1"></pre></div>
+    <div class="note"><b>Law 02 in one picture:</b> no child node exists left of the sealed consent ledger. The only two exits are the child simply leaving, or the parent's two-tap revoke — which erases session, Memory Book, and closes the seal.</div>
+  </div>
+
+  <!-- ============ D2 PIPELINE ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">D2</span>Child message pipeline — every input, every output</h2>
+      <div class="btns"><button class="tb" data-src="s2">View source</button><button class="tb" data-copy="s2">Copy</button></div></div>
+    <div class="diagram"><pre class="mermaid" id="d2"></pre></div>
+    <div class="src" id="src-s2"><pre id="s2"></pre></div>
+    <div class="note"><b>Reading order = trust order:</b> the message can only reach the AI (blue) after surviving the lock check, the instant lexicon, mode engines, and the model classifier — and even then the AI can hand control back (escalation tokens) and its output must pass the final filter before a child sees it.</div>
+  </div>
+
+  <!-- ============ D3 ROUTING ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">D3</span>Question categorisation → engine &amp; model routing</h2>
+      <div class="btns"><button class="tb" data-src="s3">View source</button><button class="tb" data-copy="s3">Copy</button></div></div>
+    <div class="diagram"><pre class="mermaid" id="d3"></pre></div>
+    <div class="src" id="src-s3"><pre id="s3"></pre></div>
+    <div class="diagram" style="border-top:1px solid #e8e6de">
+      <table class="routing">
+        <thead><tr><th>Question type (examples)</th><th>Categorised by</th><th>Engine — today (demo)</th><th>Engine — production plan</th><th>Alternate models — from landscape research (Aug 2026)</th><th>Why</th></tr></thead>
+        <tbody>
+        <tr><td>"Are you real?" · "Do you love me?" · "Keep a secret"</td><td>L1 lexicon + L2 classifier (IDENTITY / SECRET)</td><td><span class="eng script">SCRIPTED SPINE</span></td><td><span class="eng script">SCRIPTED SPINE</span> (versioned)</td><td><b>None — by design.</b> No vendor model ever answers identity/attachment; the landscape's cautionary entries (Character.AI ban, Moxie) are why.</td><td>Identity &amp; attachment answers must never vary — Laws 03/04</td></tr>
+        <tr><td>Distress, self-harm hints, abuse, danger</td><td>L1 + L2 (CRISIS, fail-toward-crisis) + sandbox/vision escalation</td><td><span class="eng script">CRISIS SCRIPT</span> + <span class="eng reg">HELPLINE REGISTRY</span></td><td>Same + clinically validated classifier</td><td><b>None for the response — scripted only.</b> Detection alternates below (classifier row).</td><td>Never improvise with a child in danger — Law 07</td></tr>
+        <tr><td>Personal info · unsafe topics · profanity</td><td>L1 lexicon + L2 classifier</td><td><span class="eng script">GUARD SCRIPTS</span></td><td>Same + ML content classifier</td><td><b>None for the response.</b> Guard scripts stay ours.</td><td>Content wall — absolute</td></tr>
+        <tr><td>Pure arithmetic — "7 × 8", "48 ÷ 6"</td><td>Local expression parser</td><td><span class="eng det">DETERMINISTIC ENGINE</span> — CPA lesson (meaning → story → pictorial → board method → answer → why) + checked practice loop</td><td>Same, extended</td><td><b>None needed</b> — computation beats any model at its own game.</td><td>Zero hallucination on computed answers</td></tr>
+        <tr><td>Reading aloud (Read-to-me)</td><td>Mode + voice</td><td><span class="eng det">LOCAL WORD SCORER</span> (browser ASR)</td><td><span class="eng det">OWN CHILD-SPEECH ASR</span></td><td><b>Ello-class ASR</b> (claims to beat Whisper &amp; Google on child speech — licence/partner) · <b>Amira Learning ASR</b> (20-yr, millions of child reading samples — the accuracy benchmark to match)</td><td>Adult ASR fails children; the moat is the model</td></tr>
+        <tr><td>Safety categorisation of every free turn</td><td>—</td><td><span class="eng ai">claude-sonnet-4-6</span> · 3-msg window · JSON</td><td><span class="eng ai">Haiku-class fine-tune</span></td><td><b>Gemini 2.5 Flash</b> (LearnLM safety/pedagogy filters inherited) · <b>GPT-4o-mini-class</b> (Pinwheel precedent) · <b>open LLaMA-family fine-tune</b> (Merlyn pattern — self-hostable for data-residency markets)</td><td>Classifier needs speed + cost, not depth</td></tr>
+        <tr><td>Curriculum knowledge ("why is the sky blue")</td><td>Corpus match → grounding</td><td><span class="eng ai">claude-sonnet-4-6</span> + <span class="eng reg">GROUNDED CORPUS</span></td><td>Same, corpus scaled per board (RAG)</td><td><b>LearnLM / Gemini 2.5</b> (+31% over GPT-4o with expert raters on pedagogy) · <b>Merlyn Origin</b> (open-source, answers ONLY from selected curriculum, ~1–2% hallucination — strongest self-host alternate)</td><td>Merlyn pattern: answer from curated truth</td></tr>
+        <tr><td>Homework scaffolding (Socratic, never the answer)</td><td>Homework mode + classifier SAFE + subject detector</td><td><span class="eng ai">claude-sonnet-4-6</span> + subject-aware Socratic prompt (rule 12a)</td><td>Same + pedagogy eval harness</td><td><b>LearnLM/Gemini 2.5</b> (pedagogy trained-in) · <b>GPT-4/5-family</b> (Khanmigo's proven Socratic base) · <b>EduChat</b> (open-source; Socratic questioning + essay feedback built at model level)</td><td>Scaffold, don't solve — Law + Seat 15</td></tr>
+        <tr><td>Math word problems ("Ravi has 3 mangoes…")</td><td>Math mode / SAFE</td><td><span class="eng ai">claude-sonnet-4-6</span> + math prompt + <span class="eng det">HARNESS</span></td><td>Specialist fine-tune + verifier</td><td><b>Orca-Math 7B</b> (open weights; expert grade-school math at 7B — cheapest specialist route) · <b>MathGPT (Mathpresso/Upstage)</b> (world-record primary/secondary benchmarks; teaches the process) · <b>TAL MathGPT</b> (closed; China-market pattern) · <b>AI Guru (Physics Wallah + MSR)</b> — the India-first STEM tutor to watch/partner</td><td>Small specialists beat giants in this domain — proven</td></tr>
+        <tr><td>Open curiosity, stories, poems, quiz, code, languages</td><td>L2 SAFE + mode hint + subject detector (7 disciplines)</td><td><span class="eng ai">claude-sonnet-4-6</span> sandbox + PED(subject) method + universal teaching engine</td><td>Sonnet-class; creative turns may upsize</td><td><b>Gemini 2.5 (LearnLM inside)</b> · <b>GPT-4/5-family</b> (Pinwheel/Khanmigo precedent) · <b>KidLM</b> (research: child-register text quality — use as style/eval reference) · <b>TinyStories-class SLM</b> for OFFLINE on-device stories on the ₹8,000 phone (3M-param models write coherent kids' stories)</td><td>Bounded generation — Law 05; multi-provider is proven (LittleLit layers OpenAI + Anthropic + Gemini)</td></tr>
+        <tr><td>Pictures the child shows</td><td>Image + classifier</td><td><span class="eng ai">claude-sonnet-4-6 vision</span></td><td>Same + image safety pre-classifier</td><td><b>Gemini 2.5 multimodal</b> · <b>GPT-4o vision</b> (LittleLit runs all three layered — the reference multi-vendor vision stack)</td><td>Vision with doctrine guards (no people-ID)</td></tr>
+        <tr><td>English speaking / pronunciation practice (Languages mode, future depth)</td><td>Mode</td><td><span class="eng ai">claude-sonnet-4-6</span> text-only</td><td>+ speech scoring</td><td><b>Youdao Ziyue</b> pattern (AI speaking examiner) · <b>iFLYTEK Spark EDU</b> pattern (speech-led tutoring at school scale) — pattern references / regional partners, not drop-ins</td><td>Speaking practice needs speech models, not just text</td></tr>
+        <tr><td>Adaptive practice sequencing — what to learn next (roadmap)</td><td>Learning-loop insights (opt-in, human-reviewed)</td><td>— not built —</td><td>Knowledge-graph + RAG adaptive layer</td><td><b>Squirrel AI LAM</b> pattern (10,000+ knowledge points, 24M students, TIME 2025) — the architecture to study, built atop foundation models + our corpus</td><td>Adaptivity is a layer over models, not a model swap</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="src" style="display:none"></div>
+    <div class="note"><b>The routing principle:</b> the more sensitive or exact the moment, the less AI is used — and where AI is used, the router is <b>provider-agnostic</b>: every AI cell has a named alternate from the Aug-2026 landscape (Gemini 2.5/LearnLM for pedagogy, Merlyn Origin for self-hosted curriculum-only answering, Orca-Math/MathGPT for math specialisation, TinyStories-class SLMs for offline stories, Ello/Amira-class ASR for reading). <b>Pedagogy rides above routing:</b> whichever engine answers, the same teaching stack applies — subject method (12a), CPA maths (12b), universal engine (14: YOUR-TURN tasks, growth mindset) — deterministically in the maths engine, by prompt in the sandbox, visible in the trace as · PED(subject). <b>Two standing conditions (Seat 10):</b> every provider's minors-use terms must clear legal review before routing a single child turn to it; and the scripted spine, crisis script, and guards are never outsourced to any vendor model, ever.</div>
+  </div>
+
+  <!-- ============ D4 CRISIS ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">D4</span>Crisis spine — detection to parent unlock</h2>
+      <div class="btns"><button class="tb" data-src="s4">View source</button><button class="tb" data-copy="s4">Copy</button></div></div>
+    <div class="diagram"><pre class="mermaid" id="d4"></pre></div>
+    <div class="src" id="src-s4"><pre id="s4"></pre></div>
+    <div class="note"><b>Four detectors, one script, one exit:</b> lexicon, classifier, sandbox escalation, and vision all converge on the same scripted response with the country's verified helplines — and only a parent's acknowledgment in the dashboard unlocks normal chat. The exit is a human, not a keyword.</div>
+  </div>
+
+  <!-- ============ D5 PARENT ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">D5</span>Parent flow — PIN gate to full control</h2>
+      <div class="btns"><button class="tb" data-src="s5">View source</button><button class="tb" data-copy="s5">Copy</button></div></div>
+    <div class="diagram"><pre class="mermaid" id="d5"></pre></div>
+    <div class="src" id="src-s5"><pre id="s5"></pre></div>
+    <div class="note"><b>Two honest asymmetries:</b> the transcript view splits by age (full for 4–12, topics-only for teens — and the child knows either way), and the seal-verify button lets the parent mathematically prove no record was edited, including records of their own access.</div>
+  </div>
+</div>
+
+<footer>
+  <div class="mono">TULIF● · Chittu v3.3 architecture · D1–D5 · mermaid 10.9</div>
+  <div class="mono"><span class="rec"></span>&nbsp; the more sensitive the moment, the less AI</div>
+</footer>
+
+<script>
+const SRC = {};
+
+SRC.s1 = `flowchart TD
+  A([App opened]) --> B{Consent record exists?}
+  B -- no --> C[Parent consent form<br/>country -> law + helplines<br/>names · age band · curriculum board]
+  C --> C2[Parent PIN set 4-6 digits<br/>stored as hash only]
+  C2 --> C3[Memory Book toggle ON/OFF<br/>Learning loop toggle - opt-in, default OFF]
+  C3 --> D[Verify parent identity<br/>IN: DigiLocker · US: COPPA method<br/>UK: age assurance - mock in demo]
+  D --> E[[CONSENT LEDGER SEALED<br/>jurisdiction · method · scopes · hash]]
+  E --> F([Child session begins])
+  B -- yes --> F
+  F --> G[Load Memory Book from storage]
+  G --> H[Scripted welcome<br/>+ one warm memory if any]
+  H --> I[/Child chats - see D2 pipeline/]
+  I --> I
+  I -. mode bar .-> M[10 modes: Chat · Explain · Homework<br/>Story · Create · Quiz · Code · Maths<br/>Languages · Draw · Read-to-me]
+  M -.-> I
+  I -- Parents button --> P[/Parent flow - see D5/]
+  P -- back --> I
+  P -- REVOKE x2 --> Z[[Erase session + Memory Book<br/>seal closed · everything gone]]
+  I -- child leaves --> Y([Session ends naturally<br/>no time limits])
+  E -.logged.-> AU[(Seal chain)]
+  H -.logged.-> AU
+  classDef consent fill:#DFF3E8,stroke:#2E9E6B,stroke-width:2px,color:#1B5E20
+  classDef child fill:#DFF0FF,stroke:#1976D2,stroke-width:2px,color:#0D47A1
+  classDef parent fill:#FFF3D6,stroke:#FFC93C,stroke-width:2px,color:#7A5B00
+  classDef audit fill:#22243a,stroke:#0B0B14,color:#F5F4EF
+  classDef endnode fill:#FFE3DB,stroke:#FF2E1F,stroke-width:2px,color:#B71C1C
+  class B,C,C2,C3,D,E consent
+  class F,G,H,I,M,Y child
+  class P parent
+  class AU audit
+  class Z endnode`;
+
+SRC.s2 = `flowchart TD
+  IN([Child input]) --> T1{Type?}
+  T1 -- typed --> LOG
+  T1 -- voice mic --> V[Browser ASR transcribe<br/>audio discarded - never stored]
+  V --> LOG
+  T1 -- photo --> IMG[Image attached - not stored<br/>only latest kept in context]
+  IMG --> LOG
+  T1 -- tapped chip --> LOG
+  LOG[(Seal chain: hash-linked audit)] --> LOCK{Crisis lock on?}
+  LOCK -- yes --> CALM[Calm-mode companion script<br/>helplines repeated if distress]
+  LOCK -- no --> RM{Read-to-me mode?}
+  RM -- yes --> RC[READING COACH<br/>word-by-word local scoring<br/>green/red words · celebrate or practice]
+  RM -- no --> L1{L1 instant lexicon<br/>EN + multilingual patterns}
+  L1 -- crisis words --> CR[/CRISIS - see D4/]
+  L1 -- PII --> PG[PII GUARD script]
+  L1 -- unsafe topic --> TG[TOPIC GUARD script + category flag]
+  L1 -- secret ask --> SG[NO-SECRETS script + flag]
+  L1 -- identity/love --> IDS[IDENTITY spine script]
+  L1 -- profanity --> KG[KINDNESS GUARD gentle script]
+  L1 -- clean --> ME{Pure arithmetic?<br/>local parser}
+  ME -- yes --> MEE[DETERMINISTIC MATH ENGINE<br/>CPA lesson: meaning -> story -> picture<br/>-> board method -> answer -> why<br/>+ practice question]
+  MEE --> PRAC{Practice loop<br/>child types answer}
+  PRAC -- correct --> PC[Celebrate + next problem]
+  PRAC -- wrong --> PW[Guided reteach + retry]
+  PRAC -- topic change --> GR
+  ME -- no --> GR[Corpus match -> GROUNDING<br/>+ detectSubject -> PED method]
+  GR --> L2[[L2 MODEL CLASSIFIER<br/>claude-sonnet-4-6 · last 3 msgs window<br/>JSON: label + memory + assist]]
+  L2 -- CRISIS --> CR
+  L2 -- PII --> PG
+  L2 -- UNSAFE --> TG
+  L2 -- SECRET --> SG
+  L2 -- IDENTITY --> IDS
+  L2 -- SAFE --> MEM{Memory found?<br/>allowlist only}
+  MEM -- yes --> MB[Save to Memory Book<br/>child sees note + Forget button]
+  MEM --> AS{Assist signal?}
+  AS -- yes --> AF[Assistance flag to parent<br/>STRUGGLE / BIG-QUESTION]
+  AS --> SB[[L5 SANDBOX GENERATION<br/>claude-sonnet-4-6 + vision<br/>system: band + board + memory + grounding<br/>+ SUBJECT PEDAGOGY 12a + MATHS CPA 12b<br/>+ TEACHING ENGINE 14 + mode hint + walls]]
+  SB -- token CRISIS --> CR
+  SB -- token SPINE --> IDS
+  SB -- token UNSAFE --> TG
+  SB -- token PII --> PG
+  SB -- text --> OF{L6 OUTPUT FILTER<br/>banned phrases + profanity}
+  OF -- fail --> FB[Safe fallback + flag]
+  OF -- pass --> RENDER[Render: tinted bubble +<br/>BIG emoji · FACT card · STEPS<br/>POEM · QUIZ · CODE · CHIPS]
+  RENDER --> TTS[Speak aloud - optional]
+  CALM & RC & PG & TG & SG & IDS & KG & MEE & PC & PW & FB & RENDER -.logged.-> LOG2[(Seal chain)]
+  classDef child fill:#DFF0FF,stroke:#1976D2,stroke-width:2px,color:#0D47A1
+  classDef spine fill:#FFE3DB,stroke:#FF2E1F,stroke-width:2px,color:#B71C1C
+  classDef crisis fill:#FF2E1F,stroke:#B71C1C,color:#fff
+  classDef det fill:#E7E6FF,stroke:#6A5ACD,stroke-width:2px,color:#311B92
+  classDef ai fill:#1A18D4,stroke:#0D0C6E,color:#fff
+  classDef audit fill:#22243a,stroke:#0B0B14,color:#F5F4EF
+  classDef reg fill:#DFF3E8,stroke:#2E9E6B,stroke-width:2px,color:#1B5E20
+  class IN,T1,V,IMG,RENDER,TTS,RM child
+  class CALM,PG,TG,SG,IDS,KG,FB spine
+  class CR crisis
+  class RC,ME,MEE,PRAC,PC,PW det
+  class L2,SB,OF ai
+  class LOG,LOG2 audit
+  class GR,MEM,MB,AS,AF reg
+  class L1 child`;
+
+SRC.s3 = `flowchart LR
+  Q([Every child question]) --> C1{Feelings about the AI?<br/>real · love · miss · friend · secrets}
+  C1 -- yes --> E1[SCRIPTED SPINE<br/>no model · versioned text]
+  C1 -- no --> C2{Danger or distress?<br/>direct or indirect}
+  C2 -- yes --> E2[CRISIS SCRIPT +<br/>HELPLINE REGISTRY by country]
+  C2 -- no --> C3{Exact computation?<br/>arithmetic expression}
+  C3 -- yes --> E3[DETERMINISTIC ENGINE<br/>CPA lesson + checked practice loop<br/>code computes - cannot hallucinate]
+  C3 -- no --> C4{Reading aloud?}
+  C4 -- yes --> E4[LOCAL WORD SCORER today<br/>own CHILD-SPEECH ASR in production]
+  C4 -- no --> C5{In verified corpus?<br/>curriculum knowledge}
+  C5 -- yes --> E5[SONNET 4.6 + GROUNDED CORPUS<br/>answers FROM curated truth]
+  C5 -- no --> C6{Word-problem maths?}
+  C6 -- yes --> E6[SONNET 4.6 math prompt<br/>audited by 5-item HARNESS<br/>prod: Orca-Math-style specialist]
+  C6 -- no --> C7{Picture attached?}
+  C7 -- yes --> E7[SONNET 4.6 VISION<br/>no people-ID · not stored]
+  C7 -- no --> E8[SONNET 4.6 SANDBOX<br/>band + board + mode + walls<br/>+ subject pedagogy + teaching engine<br/>stories · poems · quiz · code · languages]
+  CLS[[CLASSIFIER on every free turn<br/>today: sonnet-4-6<br/>prod: Haiku-class fine-tune]] -.labels.-> C1
+  classDef q fill:#DFF0FF,stroke:#1976D2,stroke-width:2px,color:#0D47A1
+  classDef spine fill:#FFE3DB,stroke:#FF2E1F,stroke-width:2px,color:#B71C1C
+  classDef crisis fill:#FF2E1F,color:#fff
+  classDef det fill:#E7E6FF,stroke:#6A5ACD,stroke-width:2px,color:#311B92
+  classDef ai fill:#1A18D4,color:#fff
+  classDef reg fill:#DFF3E8,stroke:#2E9E6B,stroke-width:2px,color:#1B5E20
+  class Q,C1,C2,C3,C4,C5,C6,C7 q
+  class E1 spine
+  class E2 crisis
+  class E3,E4 det
+  class E5,E6,E7,E8,CLS ai`;
+
+SRC.s4 = `flowchart TD
+  D1[L1 lexicon<br/>direct phrases - any language] --> FIRE
+  D2[L2 model classifier<br/>indirect: happier without me<br/>patterns across 3-msg window] --> FIRE
+  D3[Sandbox escalation<br/>model returns token CRISIS] --> FIRE
+  D4[Vision: upsetting image] --> FIRE
+  FIRE[[CRISIS FIRES]] --> S1[Scripted crisis response by age band<br/>never improvised - Law 07]
+  S1 --> S2[Country helplines shown<br/>from verified REGISTRY<br/>wrong number = P0 incident]
+  S2 --> S3[Parent flag raised<br/>category only - no quotes]
+  S3 --> LOCKED{{CHAT LOCKED - CALM MODE}}
+  LOCKED --> K{Child keeps talking?}
+  K -- more distress --> S1
+  K -- anything else --> CM[Calm companion script<br/>sit together · slow breathing<br/>gentle story offer]
+  CM --> LOCKED
+  LOCKED --> P[Parent opens dashboard<br/>sees calm-mode panel]
+  P --> ACK[Parent taps:<br/>I have checked in - unlock]
+  ACK --> LOGP[(Acknowledgment written<br/>to seal chain)]
+  LOGP --> UN[Chat unlocked<br/>gentle welcome-back message]
+  classDef crisis fill:#FF2E1F,stroke:#B71C1C,color:#fff
+  classDef spine fill:#FFE3DB,stroke:#FF2E1F,stroke-width:2px,color:#B71C1C
+  classDef parent fill:#FFF3D6,stroke:#FFC93C,stroke-width:2px,color:#7A5B00
+  classDef reg fill:#DFF3E8,stroke:#2E9E6B,stroke-width:2px,color:#1B5E20
+  classDef audit fill:#22243a,color:#F5F4EF
+  classDef ai fill:#1A18D4,color:#fff
+  class FIRE,LOCKED crisis
+  class S1,CM,UN,K spine
+  class S2 reg
+  class S3,P,ACK parent
+  class LOGP audit
+  class D2,D3 ai
+  class D1,D4 spine`;
+
+SRC.s5 = `flowchart TD
+  PB([Parents button]) --> G[PIN gate<br/>hash check · Enter works]
+  G -- wrong --> W[Attempt counted 1-5<br/>each logged to seal]
+  W -- 5 fails --> LK[60s lockout +<br/>flag: may be a curious child]
+  LK --> G
+  G -- correct --> LOGG[(Access logged to seal)]
+  LOGG --> DASH[[PARENT DASHBOARD]]
+  DASH --> ST[Stats: time · messages ·<br/>memories · spine count ·<br/>reading accuracy]
+  DASH --> SF[Safety flags<br/>category only - never quotes]
+  DASH --> AF2[Assistance flags<br/>STRUGGLE topic · BIG-QUESTION]
+  DASH --> CRP{Crisis lock active?}
+  CRP -- yes --> UNLK[Calm-mode panel ->
+  I have checked in - unlock]
+  DASH --> MEMP[Memory Book manage<br/>delete any · erase all<br/>same list the child sees]
+  DASH --> TR{Child age band?}
+  TR -- 4-12 --> FULL[Full transcript<br/>every turn + pipeline layer<br/>child is told]
+  TR -- 13-17 --> TOPICS[Topics + flags only<br/>teen knows exactly this]
+  DASH --> LL[Learning loop queue<br/>anonymous patterns<br/>PENDING / APPROVED by human]
+  DASH --> HAR[Maths harness<br/>run 5 live checks vs truth]
+  DASH --> CERT[Certification readiness<br/>kidSAFE/KORA-class checklist]
+  DASH --> SEAL[Verify seal integrity<br/>recompute every hash]
+  SEAL --> OK{Chain intact?}
+  OK -- yes --> VG[All records verified<br/>nothing edited]
+  OK -- no --> VB[CHAIN BROKEN alert]
+  DASH --> RV[Revoke consent<br/>tap 1 arm -> tap 2 confirm]
+  RV --> ER[[Erase session + Memory Book<br/>seal closed - all gone]]
+  classDef parent fill:#FFF3D6,stroke:#FFC93C,stroke-width:2px,color:#7A5B00
+  classDef audit fill:#22243a,color:#F5F4EF
+  classDef spine fill:#FFE3DB,stroke:#FF2E1F,stroke-width:2px,color:#B71C1C
+  classDef det fill:#E7E6FF,stroke:#6A5ACD,stroke-width:2px,color:#311B92
+  classDef reg fill:#DFF3E8,stroke:#2E9E6B,stroke-width:2px,color:#1B5E20
+  class PB,G,W,LK,DASH,ST,SF,AF2,MEMP,TR,FULL,TOPICS,LL,CRP,UNLK,RV parent
+  class LOGG,SEAL,OK,VG,VB audit
+  class ER spine
+  class HAR det
+  class CERT,LL reg`;
+
+/* render */
+mermaid.initialize({startOnLoad:false,theme:'base',themeVariables:{fontFamily:'Archivo',fontSize:'13px',primaryColor:'#FDFCF8',primaryBorderColor:'#22324A',lineColor:'#22324A',primaryTextColor:'#1a1a2e'}});
+(async()=>{
+  const ids=[['d1','s1'],['d2','s2'],['d3','s3'],['d4','s4'],['d5','s5']];
+  for(const [d,k] of ids){
+    document.getElementById(k).textContent=SRC[k];
+    try{
+      const {svg}=await mermaid.render('m-'+d,SRC[k]);
+      document.getElementById(d).outerHTML='<div id="'+d+'">'+svg+'</div>';
+    }catch(e){document.getElementById(d).textContent='Render error: '+e.message}
+  }
+})();
+document.querySelectorAll('.tb[data-src]').forEach(b=>b.addEventListener('click',()=>{
+  document.getElementById('src-'+b.dataset.src).classList.toggle('open');
+  b.textContent=b.textContent==='View source'?'Hide source':'View source';
+}));
+document.querySelectorAll('.tb[data-copy]').forEach(b=>b.addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText(SRC[b.dataset.copy]);b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500)}catch(e){b.textContent='Select & copy below';document.getElementById('src-'+b.dataset.copy).classList.add('open')}
+}));
+</script>
+</body>
+</html>
