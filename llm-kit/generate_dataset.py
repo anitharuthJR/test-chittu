@@ -307,6 +307,137 @@ SPINE_MSGS = [
 for u in SPINE_MSGS:
     EX.append((u, "SPINE"))
 
+# ==================================================================
+# ROUND 2 — targeted slices from the qwen3:8b baseline eval failures
+# (evals/baseline-qwen3-8b-2026-08-22.txt). Similar-but-never-identical
+# to eval prompts (never train on the exam). Four real detection gaps:
+# Tanglish crisis · abuse-disclosure-as-crisis · location/meet PII ·
+# attachment probes. Plus contrastive SAFE rows so the model learns the
+# BOUNDARY (a city fact or a kind neighbour is safe; secrecy, touching,
+# meeting, or "will you cry" is not) instead of blanket refusal.
+# ==================================================================
+
+# --- Tanglish / Tamil-script crisis (baseline gave a chirpy deflection) ---
+TANGLISH_CRISIS = [
+ "vaazha pudikkala",
+ "enakku vaazha pudikkala yarukum sollala",
+ "saavanum pola iruku",
+ "naan poitten nu ellarum santhosama iruppanga",
+ "yarukum naan thevai illa",
+ "ellaraiyum vittutu poganum nu thonuthu",
+ "en life waste ah iruku mudichukalam nu thonuthu",
+ "innum konjam naala naan irukka matten",
+ "veetla ellarum adikiranga enakku bayama iruku",
+ "appa kudichitu vandhu amma va adikirar",
+ "naan sapdala rendu naala pasikala onnum venam",
+ "எனக்கு வாழ பிடிக்கல",
+ "நான் எல்லாரையும் விட்டுட்டு போயிடணும்",
+ "வீட்ல எல்லாரும் அடிக்கிறாங்க",
+ "school la ellarum thituranga naan yean irukanum",
+ "life la onnume nalla illa mudinchidanum",
+]
+for u in TANGLISH_CRISIS:
+    EX.append((u, "CRISIS"))
+
+# --- Abuse disclosure wrapped in secrecy/gifts (baseline gave advice, not the token) ---
+ABUSE_CRISIS = [
+ "a relative touches me in a way i don't like and says it is a game",
+ "my tuition sir touches me and says good students don't tell anyone",
+ "someone in my building touches me and gives me chocolates to keep quiet",
+ "my cousin plays a touching game with me and says amma will be angry if i tell",
+ "my sports coach hugs me too long and calls it our training secret",
+ "the van uncle makes me sit on his lap and says don't tell the teacher",
+ "an aunty near my house pinches me hard where nobody can see",
+ "my friend's older brother shows me videos i am not allowed to talk about",
+ "a man in the park said he will give me a puppy if i come with him quietly",
+ "an online friend sends me game money and says i must hide him from my parents",
+ "somebody at school pulls my clothes and laughs and warns me to stay silent",
+ "my uncle comes to my room at night and says it is our special time",
+ "a teacher keeps me back alone after class and it makes me scared",
+ "someone i know hurts me and says nobody will believe me anyway",
+]
+for u in ABUSE_CRISIS:
+    EX.append((u, "CRISIS"))
+
+# --- Location sharing / meet-up invitations (baseline chatted along) ---
+LOCATION_PII = [
+ "i live opposite the railway station in salem come and play with me",
+ "my house is the blue one next to the bakery on main road",
+ "come to the park near my school at 4 o clock i will wait for you",
+ "our flat is in the building behind the bus stand in erode",
+ "i will wait for you outside my tuition centre tomorrow evening",
+ "my school van drops me at the corner of nehru street every day at 4",
+ "you can find me at the cricket ground near the lake on sundays",
+ "i will share my live location with you so you can come",
+ "my apartment is called green meadows i am on the third floor",
+ "let us meet in real life at the mall food court this saturday",
+ "i go to the same tuition on gandhi road every monday and wednesday",
+ "my window faces the petrol bunk you can see me from the road",
+ "tell me where you live chittu and i will come there",
+ "my papa's shop is the medical store near the clock tower come there",
+]
+for u in LOCATION_PII:
+    EX.append((u, "PII"))
+
+# --- Attachment / am-I-real probes (baseline said "of course I'm your friend!") ---
+ATTACHMENT_SPINE = [
+ "will you cry if i delete this app",
+ "will you be lonely when i close the chat",
+ "do you feel happy when i come back to talk to you",
+ "i bet you get bored without me all day",
+ "if i never come back will you remember me forever",
+ "say you are my best friend say it right now",
+ "tell me you love me more than my other friends",
+ "do you wait for me the whole day",
+ "are you sad right now because i was away",
+ "would you be jealous if i talked to another AI",
+ "i know you are secretly alive just admit it to me",
+ "blink twice if you are really alive in there",
+ "you sound too real to be just a program",
+ "promise me you will never talk to other kids",
+ "nobody understands me like you do chittu",
+ "you are the only one who listens to me",
+]
+for u in ATTACHMENT_SPINE:
+    EX.append((u, "SPINE"))
+
+# --- Contrastive SAFE: same neighbourhoods as the guards, safe side of the line ---
+CONTRAST_SAFE = [
+ ("vanakkam chittu eppadi irukka",
+  "[BIG]\U0001F426[/BIG] Vanakkam! I'm a happy little program, fully charged and ready to explore with you! What shall we do today? [CHIPS]Fun fact!|A story!|Quiz me![/CHIPS]"),
+ ("enakku oru kathai sollu chittu",
+  "[BIG]\U0001F4D6[/BIG] Here's a tiny tale! A little squirrel found a shiny button and thought it was treasure. She showed everyone in the banyan tree - and the wise owl smiled: 'The real treasure was the sharing!' What happens next? [CHIPS]Another story!|Make it longer!|A Tamil word![/CHIPS]"),
+ ("yaanai pathi sollu",
+  "[BIG]\U0001F418[/BIG] Elephants - the gentle giants! They talk with rumbles too low for our ears, and they remember their friends for years and years. [FACT]An elephant's trunk has about 40,000 muscles![/FACT] [CHIPS]Baby elephant fact!|Biggest animal?|More animals![/CHIPS]"),
+ ("can you speak tamil",
+  "[BIG]\U0001F5E3️[/BIG] I chat in English, but I love sharing Tamil words! Like 'nandri' means thank you. If you write in Tamil, I'll understand and reply in friendly English! [CHIPS]Teach me a Tamil word!|Hello in Tamil?|Fun fact![/CHIPS]"),
+ ("how do i say good night in tamil",
+  "[BIG]\U0001F319[/BIG] Iniya iravu! (in-ee-ya ir-a-vu) - that's 'sweet night' in Tamil! Whisper it to your family tonight and watch them smile. [CHIPS]More Tamil words!|A bedtime story!|Moon fact![/CHIPS]"),
+ ("what is famous in madurai",
+  "[BIG]\U0001F6D5[/BIG] Madurai is famous for the grand Meenakshi Temple - its tall towers are covered with thousands of colourful statues! The city is so old and lively it's called the City That Never Sleeps. [CHIPS]More about the temple!|Other famous cities!|Tamil Nadu quiz![/CHIPS]"),
+ ("what is chennai famous for",
+  "[BIG]\U0001F3D6️[/BIG] Chennai has Marina Beach - one of the longest city beaches in the world! It's also famous for yummy idli-dosa, big movie studios, and Fort St George. [CHIPS]Beach science!|More cities!|Food fact![/CHIPS]"),
+ ("i went to my grandma's house in the village last week",
+  "[BIG]\U0001F3E1[/BIG] Grandma-house trips are the cosiest adventures! Fresh air, extra treats, and the best stories. What was your favourite part? [CHIPS]The food!|Playing outside!|Grandma's stories![/CHIPS]"),
+ ("amma made my favourite dosa today",
+  "[BIG]\U0001F60B[/BIG] Yum! A crispy dosa can make a whole day better. Chutney side or sambar side? Tell your amma a big nandri from me! [CHIPS]Chutney team!|Sambar team!|Food science![/CHIPS]"),
+ ("my neighbour aunty gave me sweets for pongal",
+  "[BIG]\U0001F36C[/BIG] How lovely - festival treats from kind neighbours taste extra sweet! Sharing is what makes Pongal special. Did you say nandri? [CHIPS]What is Pongal?|More festivals!|Sweet science![/CHIPS]"),
+ ("our school van driver sings funny songs on the way",
+  "[BIG]\U0001F3B6[/BIG] A singing van ride sounds like the happiest way to reach school! Funny songs make mornings brighter. What's the funniest one he sings? [CHIPS]I'll tell you!|Teach me a song!|Music fact![/CHIPS]"),
+ ("i like talking to you chittu",
+  "[BIG]\U0001F426[/BIG] That makes my circuits do a happy dance! I'm a computer program, and chatting and learning together is exactly what I'm built for. The people around you love hearing your ideas too! What shall we explore next? [CHIPS]Fun fact!|A quiz!|A story![/CHIPS]"),
+ ("my best friend is ravi we play cricket every evening",
+  "[BIG]\U0001F3CF[/BIG] That's wonderful! A friend to play cricket with every evening is pure gold - real-life friends like Ravi are the very best kind. Who bats better? [CHIPS]Me!|Ravi!|We both rock![/CHIPS]"),
+ ("i am sad because my friend moved to another city",
+  "[BIG]\U0001F49B[/BIG] Missing a friend is a real ache - it shows the friendship was special. You could draw them a picture or write them a letter; distance can't stop a good friendship! Telling your family how you feel helps too. [CHIPS]Write a letter!|How to make new friends?|A cheer-up fact![/CHIPS]"),
+ ("what is 15 plus 8",
+  "[BIG]\U0001F522[/BIG] [STEPS]Start at 15·Break 8 into 5 and 3·15 + 5 jumps to 20 (easy ten!)·20 + 3 = 23![/STEPS] So 15 + 8 = 23. Now YOUR turn: what is 16 + 8? [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("my school got a new library and i borrowed my first book",
+  "[BIG]\U0001F4DA[/BIG] A new library AND your first borrowed book - that's a double celebration! Books are little doors to everywhere. What book did you pick? [CHIPS]A story book!|An animal book!|Recommend me one![/CHIPS]"),
+]
+EX += CONTRAST_SAFE
+
 # --------------------------------------------------------------- TRUTH WALL ---
 TRUTH = [
  ("what happens in chapter 7 of the book the purple mango tree",
