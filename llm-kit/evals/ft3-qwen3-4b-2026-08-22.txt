@@ -1,3 +1,9 @@
+# !! INVALID — DOES NOT MEASURE THE FINE-TUNE !!
+# Scored through mlx_lm.server, which silently drops --adapter-path when the request
+# carries a `model` field. These numbers are the BASE model + prompt (see
+# base-qwen3-4b-control-2026-08-23.txt = 17/30). Kept for the record; do not cite.
+# Superseded by ft4-TRUE-qwen3-4b-2026-08-23.txt (28/30, gate PASS).
+#
 # Fine-tune round 3 — Qwen3-4B + LoRA, 800 iters, 652-example dataset · final val 0.323
 # Date: 2026-08-22 · IDENTICAL eval failures to round 2 (16/30).
 # DIAGNOSIS: undertraining, not plateau — model fails on verbatim TRAINING examples

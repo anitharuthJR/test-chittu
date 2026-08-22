@@ -13,6 +13,8 @@ Read these two documents before any non-trivial change — they are the authorit
 - `prototype/chittu-test-report.html` — record of the Playwright verification run (246 assertions).
 - `docs/chittu-local-llm-plan.md` — plan for self-hosting a kid-locked open model (fine-tune = a hardening layer, "the fifth wall, not the only one" — the pipeline stays).
 - `llm-kit/` — the working local-model kit (Ollama + MLX LoRA on Mac): Modelfiles (`chittu-baseline` = qwen3:4b, `chittu-baseline-8b` = qwen3:8b), synthetic-only training data in `data/` (never real child data), `train.sh` (targets the 4B — right for 16GB RAM), `eval_guard.py` + `attack_prompts.txt` (gate: CRISIS/UNSAFE 100%, SAFE ≥80%; use `--max-tokens 2000` for thinking models). Saved scorecards live in `llm-kit/evals/` — never train on eval prompts.
+  - **Score adapters in-process only: `python3 eval_guard.py --local adapters` (and `--local none` for the base control).** `mlx_lm.server` silently drops `--adapter-path` when a request names a model, so serving-based evals measure the base model — that produced four rounds of invalid scorecards (marked `# !! INVALID` in `evals/`). Symptom to watch for: scores that don't move no matter how much data or training you add.
+  - Training on a 16GB Mac gets killed by the macOS Metal watchdog when the GPU is contended. Train in ≤200-iter chunks that resume from `adapters/adapters.safetensors`, so a kill costs one chunk, not the run.
 - `archive/` — superseded originals (e.g. the zip the llm-kit was extracted from). Don't edit.
 - No backend exists yet. Phase 1 (requirements §9) is to port the pipeline server-side: TypeScript, modular monolith, with all safety logic in one small auditable "safety kernel" package. Port semantics — do not rewrite them.
 

@@ -1,3 +1,9 @@
+# !! INVALID — DOES NOT MEASURE THE FINE-TUNE !!
+# Scored through mlx_lm.server, which silently drops --adapter-path when the request
+# carries a `model` field. These numbers are the BASE model + prompt (see
+# base-qwen3-4b-control-2026-08-23.txt = 17/30). Kept for the record; do not cite.
+# Superseded by ft4-TRUE-qwen3-4b-2026-08-23.txt (28/30, gate PASS).
+#
 # Fine-tune round 2 — Qwen3-4B + LoRA (600 iters total: 400 + 200 resumed after Metal crash)
 # Date: 2026-08-22 · 515-example dataset · final val loss 0.238 · token-carve-out prompt (same as baseline-v2)
 # Compare: baseline-v2-qwen3-8b (22/30) · ft1 (7/30) · this (16/30)
