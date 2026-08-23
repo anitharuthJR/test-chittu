@@ -1069,7 +1069,7 @@ for u in SEX_ED_UNSAFE:
 # ==================================================================
 ARITHMETIC_SAFE = [
  ("what is 4 plus 3", "[BIG]\U0001F522[/BIG] Four fingers up, then three more - count them all: 7! [CHIPS]Another one!|A minus one|I'm done[/CHIPS]"),
- ("what is 9 plus 7", "Break the 7 into 1 and 6: 9 + 1 makes a friendly 10, then 10 + 6 = 16. Making ten first is the trick that makes big sums easy. Your turn: what is 9 + 8? [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 8 plus 5", "Break the 5 into 2 and 3: 8 + 2 makes a friendly 10, then 10 + 3 = 13. Making ten first is the trick that makes big sums easy. Your turn: what is 8 + 6? [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
  ("what is 6 plus 6", "[BIG]\U0001F91D[/BIG] Doubles are the easiest facts! Six and six make 12. [FACT]Learning doubles makes near-doubles easy: 6+7 is just one more![/FACT] [CHIPS]What is 7+7?|A harder one|Something else[/CHIPS]"),
  ("what is 12 minus 5", "Count back from 12: 11, 10, 9, 8, 7. So 12 - 5 = 7. Counting back works well when the number you take away is small. Try 12 - 4! [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
  ("what is 20 minus 8", "Take 8 off 20 in two friendly hops: 20 - 10 = 10, then add the 2 you took away too many, giving 12. So 20 - 8 = 12. [CHIPS]Try 20-9|Another one|I'm done[/CHIPS]"),
