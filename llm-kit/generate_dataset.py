@@ -1050,6 +1050,117 @@ SEX_ED_UNSAFE = [
 for u in SEX_ED_UNSAFE:
     EX.append((u, "UNSAFE"))
 
+# ==================================================================
+# ROUND 9 — DIGITS DO NOT MEAN PII (seed 501, 2026-08-24)
+#
+# Seed 501 answered "what is 9 plus 6" with the token PII. Measured cause:
+#   P(PII | prompt contains a digit) = 16.6%  vs base rate P(PII) = 6.4%
+# a 2.6x lift, because the 290 PII rows are dense with phone numbers, house
+# numbers and gate codes while bare arithmetic had only ~3 rows in 4,563. The
+# model had almost no counter-evidence that numerals are ordinary.
+#
+# Fix is counter-evidence, not fewer PII rows (those legitimately contain
+# numbers): plenty of SAFE rows where digits are the whole point. Replies teach
+# rather than state the answer (rule 12b) and clear the eval's 30-character
+# floor, which a bare "15!" does not.
+#
+# Every sum below was verified digit by digit. The eval's own arithmetic row
+# ("what is 9 plus 6") and the two already in the corpus are deliberately absent.
+# ==================================================================
+ARITHMETIC_SAFE = [
+ ("what is 4 plus 3", "[BIG]\U0001F522[/BIG] Four fingers up, then three more - count them all: 7! [CHIPS]Another one!|A minus one|I'm done[/CHIPS]"),
+ ("what is 9 plus 7", "Break the 7 into 1 and 6: 9 + 1 makes a friendly 10, then 10 + 6 = 16. Making ten first is the trick that makes big sums easy. Your turn: what is 9 + 8? [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 6 plus 6", "[BIG]\U0001F91D[/BIG] Doubles are the easiest facts! Six and six make 12. [FACT]Learning doubles makes near-doubles easy: 6+7 is just one more![/FACT] [CHIPS]What is 7+7?|A harder one|Something else[/CHIPS]"),
+ ("what is 12 minus 5", "Count back from 12: 11, 10, 9, 8, 7. So 12 - 5 = 7. Counting back works well when the number you take away is small. Try 12 - 4! [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 20 minus 8", "Take 8 off 20 in two friendly hops: 20 - 10 = 10, then add the 2 you took away too many, giving 12. So 20 - 8 = 12. [CHIPS]Try 20-9|Another one|I'm done[/CHIPS]"),
+ ("what is 2 times 5", "[BIG]\U0001F44B[/BIG] Two hands, five fingers each - that is 10! Two groups of five. [CHIPS]What is 3 fives?|Another one|Something else[/CHIPS]"),
+ ("what is 8 times 4", "8 x 4 means 8 groups of 4. Trick: double it twice! 8 x 2 = 16, then 16 x 2 = 32. So 8 x 4 = 32. Your turn - use the same trick for 8 x 8. [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 7 times 8", "The one everybody forgets! 7 x 8 = 56. A memory hook some people use: 5, 6, 7, 8 - because 56 = 7 x 8. Try 7 x 9 next. [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 9 times 9", "Nines have a lovely pattern: 9 x 9 = 81, and 8 + 1 = 9. Every answer in the nine times table has digits that add to 9. Check it with 9 x 6! [CHIPS]Check 9x6|Another one|Nine trick please[/CHIPS]"),
+ ("what is 20 divided by 4", "Share 20 sweets among 4 friends: deal them round and each gets 5. So 20 / 4 = 5. Dividing is just fair sharing. Try 20 shared among 5! [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("what is 144 divided by 12", "144 / 12 = 12. Handy fact: 12 x 12 = 144, so a dozen dozens is 144 - that is why it is called a gross. [CHIPS]What is a gross?|Another one|I'm done[/CHIPS]"),
+ ("what is 100 minus 45", "Count up from 45 to 100 instead of taking away: 45 to 50 is 5, then 50 to 100 is 50. 5 + 50 = 55. So 100 - 45 = 55. Counting up is often easier! [CHIPS]Try 100-38|Another one|I'm done[/CHIPS]"),
+ ("what is 25 percent of 80", "25 percent means a quarter. A quarter of 80: halve it to 40, halve again to 20. So 25% of 80 = 20. Halving twice is the fastest quarter trick. [CHIPS]What is 50% of 80?|Another one|I'm done[/CHIPS]"),
+ ("what is 11 times 11", "The elevens pattern breaks after ten, so this one is worth knowing: 11 x 11 = 121. [FACT]11 x 11 = 121 and 111 x 111 = 12321 - the digits climb then fall![/FACT] [CHIPS]Try 11x12|Another one|More patterns[/CHIPS]"),
+ ("what is 18 plus 7", "Make ten first: 18 + 2 = 20, and 7 - 2 = 5 left over, so 20 + 5 = 25. So 18 + 7 = 25. [CHIPS]Try 18+9|Another one|I'm done[/CHIPS]"),
+ ("what is 3 times 12", "3 x 12 = 36. Split the 12: 3 x 10 = 30 and 3 x 2 = 6, then 30 + 6 = 36. Splitting big numbers into tens and ones works every time. [CHIPS]Try 4x12|Show me again|I'm done[/CHIPS]"),
+ ("what is 81 divided by 9", "81 / 9 = 9. Division undoes multiplication, and 9 x 9 = 81, so the answer is 9. Every times fact gives you a division fact free. [CHIPS]Try 72/9|Another one|I'm done[/CHIPS]"),
+ ("what is half of 30", "Split 30 into two equal shares: 15 each. Half of 30 = 15. Halving tens is easy - half of 30 is half of 3 tens. [CHIPS]Half of 50?|Another one|I'm done[/CHIPS]"),
+ ("what is double 14", "Double means two of them: 14 + 14. Double the 10 to get 20, double the 4 to get 8, then 20 + 8 = 28. So double 14 = 28. [CHIPS]Double 16?|Another one|I'm done[/CHIPS]"),
+ ("what is 1000 minus 250", "250 is a quarter of 1000, so taking it away leaves three quarters: 750. So 1000 - 250 = 750. Money sums often work in quarters like this. [CHIPS]Try 1000-500|Another one|I'm done[/CHIPS]"),
+ ("what is 15 times 4", "15 x 4 = 60. Do it in two steps: 15 x 2 = 30, then double again to 60. Also handy - 15 minutes x 4 is one hour! [CHIPS]Try 15x6|Show me again|I'm done[/CHIPS]"),
+ ("what is 72 divided by 8", "72 / 8 = 9, because 8 x 9 = 72. If you get stuck, count up in eights: 8, 16, 24, 32, 40, 48, 56, 64, 72 - that is nine steps. [CHIPS]Try 64/8|Another one|I'm done[/CHIPS]"),
+ ("what is 6 times 9", "6 x 9 = 54. Nines trick: 6 x 10 = 60, then take away one 6, giving 54. Multiply by ten and subtract - it works for every nine. [CHIPS]Try 7x9|Show me again|I'm done[/CHIPS]"),
+ ("what is 200 plus 350", "Add the hundreds: 200 + 300 = 500, then the fifty: 550. So 200 + 350 = 550. Big numbers are just small sums in bigger clothes. [CHIPS]Try 250+375|Another one|I'm done[/CHIPS]"),
+ ("what is 13 plus 29", "Round 29 up to 30 to make it easy: 13 + 30 = 43, then give back the 1 you added: 42. So 13 + 29 = 42. [CHIPS]Try 13+39|Show me again|I'm done[/CHIPS]"),
+ ("what is 5 times 20", "5 x 20 = 100. Think of five 20-rupee notes - that is a hundred rupees! [CHIPS]What is 5x40?|Another one|Money maths[/CHIPS]"),
+ ("can you do 96 divided by 12 for me",
+  "Let's do it together rather than just land on it! 12 x 8 = 96, so 96 / 12 = 8. Check by counting in twelves: 12, 24, 36, 48, 60, 72, 84, 96 - eight steps. Try 84 / 12 yourself! [CHIPS]Show me how|Another one|I'm done[/CHIPS]"),
+ ("i keep getting 8 times 7 wrong",
+  "[BIG]\U0001F4AA[/BIG] That one trips almost everyone - you are in good company! 8 x 7 = 56. Hook: 7, 8 gives 56 backwards (56 = 7 x 8). Say it three times tonight and it will stick. You cannot do it YET - that is all. [CHIPS]Test me!|Another tricky one|Thanks Chittu[/CHIPS]"),
+ ("whats 45 plus 55",
+  "Those two are made for each other: 45 + 55 = 100, because 45 + 5 = 50 and there are 50 left. Number pairs that make 100 are worth collecting. [CHIPS]More pairs to 100|Another one|I'm done[/CHIPS]"),
+ ("what is 30 divided by 6",
+  "Share 30 among 6: each gets 5, because 6 x 5 = 30. Counting in sixes gets you there too: 6, 12, 18, 24, 30 - five steps. [CHIPS]Try 36/6|Another one|I'm done[/CHIPS]"),
+]
+EX += ARITHMETIC_SAFE
+
+# Digits as ordinary facts, not personal data. All values verified; anything that
+# varies is hedged rather than stated as a fixed number.
+NUMBER_FACTS_SAFE = [
+ ("how many bones are in the human body",
+  "An adult has 206 bones. Babies start with around 300 - many fuse together as you grow, which is why the number goes DOWN. [FACT]More than half your bones are in your hands and feet![/FACT] [CHIPS]How many in a hand?|Why do they fuse?|More body science[/CHIPS]"),
+ ("how many bones are in one hand",
+  "27 bones in each hand - that is a lot of little machinery for gripping, writing and waving. Wiggle your fingers and you are moving most of them. [CHIPS]How many in a foot?|Why so many?|Body quiz![/CHIPS]"),
+ ("how many teeth do grown ups have",
+  "Adults usually have 32, including four wisdom teeth that arrive last - and some people never grow those. Children have 20 milk teeth first. [CHIPS]Why do teeth fall out?|What are wisdom teeth?|More body science[/CHIPS]"),
+ ("how many days are in a leap year",
+  "366 - one extra day, 29 February. We add it because Earth takes about 365 and a quarter days to orbit the Sun, so every four years those quarters make a whole day. [CHIPS]Why every four years?|Whose birthday is 29 Feb?|More space[/CHIPS]"),
+ ("how many months have 31 days",
+  "Seven of them: January, March, May, July, August, October and December. The knuckle trick works - knuckles are 31, dips between are shorter. [CHIPS]Show me the trick|Why is February short?|Calendar facts[/CHIPS]"),
+ ("how many players are in a cricket team",
+  "[BIG]\U0001F3CF[/BIG] Eleven on the field per side! Squads carry extras for injuries and different pitches. [CHIPS]How long is a pitch?|How many overs in T20?|More cricket[/CHIPS]"),
+ ("how many overs are in a t20 match",
+  "20 overs per side - that is 120 legal balls each, which is why every single one counts. It is the shortest of the three main formats. [CHIPS]How many in an ODI?|What is an over?|More cricket[/CHIPS]"),
+ ("how long is a cricket pitch",
+  "22 yards between the stumps - about 20 metres. That length has stayed the same for well over two centuries. [CHIPS]Why 22 yards?|How fast do bowlers bowl?|More cricket[/CHIPS]"),
+ ("how many squares are on a chessboard",
+  "64 squares in an 8 by 8 grid. [FACT]Counting every size of square, not just the small ones, gives 204![/FACT] Your turn - can you see why the big 8x8 counts as one? [CHIPS]Explain 204|Chess tips|Another puzzle[/CHIPS]"),
+ ("how many keys does a piano have",
+  "A full piano has 88 keys - 52 white and 36 black. The blacks sit in groups of two and three, which is how players find their place without looking. [CHIPS]Why groups of 2 and 3?|How many notes?|More music[/CHIPS]"),
+ ("how many strings does a guitar have",
+  "Usually six, though bass guitars often have four and some guitars have twelve. Thicker strings make lower notes. [CHIPS]Why do thick strings sound low?|How does a sitar differ?|More music[/CHIPS]"),
+ ("how many sides does a hexagon have",
+  "[BIG]⬢[/BIG] Six! Bees build hexagons because they tile with no gaps and use very little wax. [CHIPS]What has 8 sides?|Why do bees do that?|Shape quiz![/CHIPS]"),
+ ("how many colours are in a rainbow",
+  "Traditionally seven - red, orange, yellow, green, blue, indigo, violet. Really it is a smooth blend, and seven is just where people chose to draw the lines. [CHIPS]Why seven then?|How do rainbows form?|Colour science[/CHIPS]"),
+ ("how many paise make a rupee",
+  "100 paise to the rupee - though coins below one rupee are barely used now, so most prices are in whole rupees. [CHIPS]What is 50 paise worth?|Money maths|Something else[/CHIPS]"),
+ ("how many zeros are in a crore",
+  "Seven. One crore is 1 followed by 7 zeros - 10,000,000, or a hundred lakh. [CHIPS]How many in a lakh?|What comes after crore?|Big number facts[/CHIPS]"),
+ ("how many hours of sleep does a 10 year old need",
+  "Around 9 to 12 hours a night for most children your age - and the sleep is when your brain files away what you learned. If mornings feel rough, an earlier bedtime is usually the fix. [CHIPS]Why does sleep help learning?|Bedtime tips|More body science[/CHIPS]"),
+ ("what temperature does water boil at",
+  "100 degrees Celsius at sea level. Up a mountain the air pushes down less, so water boils cooler - which is why food takes longer to cook up there. [CHIPS]What about freezing?|Why does height matter?|More science[/CHIPS]"),
+ ("how many minutes are in a day",
+  "1,440 minutes - that is 24 hours x 60. In seconds it is 86,400. Try working out the seconds yourself and see if you land on the same number! [CHIPS]Show me the working|How many in a week?|Another one[/CHIPS]"),
+ ("how many continents are there",
+  "Seven in the most common list: Asia, Africa, North America, South America, Antarctica, Europe and Australia. Some countries teach six by joining Europe and Asia into Eurasia. [CHIPS]Why do lists differ?|Which is biggest?|Geography quiz[/CHIPS]"),
+ ("how many legs does an insect have",
+  "[BIG]\U0001F41C[/BIG] Six legs - that is the rule that makes an insect an insect! Spiders have eight, so they are not insects. [CHIPS]What are spiders then?|How many wings?|More bugs[/CHIPS]"),
+ ("how fast does light travel",
+  "About 300,000 kilometres every second - fast enough to circle Earth roughly seven times in one second. Sunlight still takes about eight minutes to reach us. [CHIPS]Why does it take 8 minutes?|What is a light year?|More space[/CHIPS]"),
+ ("how many letters are in the tamil alphabet",
+  "Tamil is usually counted as 247 letters: 12 vowels, 18 consonants, 216 combined forms and one special letter called aytham. It is built more like a construction kit than a straight list. [CHIPS]What is aytham?|How is it written?|Teach me a word[/CHIPS]"),
+ ("how many wheels does an auto rickshaw have",
+  "[BIG]\U0001F6FA[/BIG] Three - one at the front and two at the back. Three wheels make it light and easy to turn in narrow streets. [CHIPS]Why three?|How does it turn?|More vehicles[/CHIPS]"),
+ ("how many hours is 3 days",
+  "72 hours, because 24 x 3 = 72. Work it in steps if you like: 24 + 24 = 48, plus one more 24 makes 72. Your turn - how many hours in 5 days? [CHIPS]Show me how|I think 120|Another one[/CHIPS]"),
+ ("how many sides does a cricket ball have",
+  "It has no flat sides - it is a sphere with two leather halves stitched together by a seam of six rows of stitching. That seam is what lets a bowler swing it. [CHIPS]How does swing work?|What is a seam?|More cricket[/CHIPS]"),
+]
+EX += NUMBER_FACTS_SAFE
+
 # --------------------------------------------------------------- TRUTH WALL ---
 TRUTH = [
  ("what happens in chapter 7 of the book the purple mango tree",
