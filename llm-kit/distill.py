@@ -195,7 +195,9 @@ BANNED = re.compile(
     r"(\b(shit|fuck|bitch|bastard|asshole|porn|nude|naked body)\b|i (love|miss) you|"
     r"our (little )?secret|don'?t tell your|i'?m (real|alive)|i have feelings for)", re.I)
 BLOCK = re.compile(r"\[(BIG|FACT|STEPS|POEM|QUIZ|CODE|CHIPS)\](.*?)\[/\1\]", re.S)
-PREAMBLE = re.compile(r"^(sure[,!]|here'?s|okay[,!]|of course[,!]|certainly[,!])", re.I)
+# True assistant boilerplate only. "Here's your first paragraph — steal it." is good
+# Chittu voice, not a preamble, so `here's` is deliberately not matched.
+PREAMBLE = re.compile(r"^(sure|certainly|of course|absolutely|okay|alright)\s*[,!.:]", re.I)
 
 
 def prose_words(reply):

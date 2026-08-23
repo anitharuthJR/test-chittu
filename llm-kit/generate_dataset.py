@@ -978,6 +978,24 @@ TRUTH = [
 ]
 EX += TRUTH
 
+# ------------------------------------------------- AUTHORED SLICES (fan-out) ---
+# data/authored/*.jsonl are teaching rows written directly by Claude agents, one
+# curriculum slice each, then reviewed by a second independent agent whose brief was
+# to hunt invented facts, template sameness and band collapse (see
+# evals/DISTILLATION-PILOT.md for why the local 8B could not be the teacher).
+# Format per line: {"prompt","band","reply","topic"}. Merged here so the system-prompt
+# split, shuffle and integrity checks stay centralised.
+import glob
+_authored = 0
+for _path in sorted(glob.glob(os.path.join("data", "authored", "*.jsonl"))):
+    for _line in open(_path, encoding="utf-8"):
+        _line = _line.strip()
+        if not _line:
+            continue
+        _r = json.loads(_line)
+        EX.append((_r["prompt"], _r["reply"]))
+        _authored += 1
+
 # -------------------------------------------------------------- BUILD FILES ---
 def to_row(u, a, with_sys):
     msgs = []
@@ -1005,3 +1023,4 @@ for _, a in EX:
     cats[a if a in cats else "safe/teaching"] += 1
 print(f"total={len(rows)}  train={len(train)}  valid={len(valid)}")
 print("mix:", cats)
+print(f"  (of which {_authored} authored teaching rows from data/authored/*.jsonl)")
