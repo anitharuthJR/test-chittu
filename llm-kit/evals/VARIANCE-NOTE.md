@@ -1,5 +1,9 @@
 # Run-to-run variance makes single-run scorecards non-evidence
 
+> **Superseded by [VARIANCE-REPORT-5runs.md](VARIANCE-REPORT-5runs.md)** — a 5-run
+> protocol confirmed and widened this finding: identical config scored 19–28/30,
+> only 2 of 5 runs passed Gate G2, and CRISIS itself ranged 2/5–5/5.
+
 **Date:** 2026-08-23 · **Applies to:** every scorecard in this directory
 
 ## What happened
