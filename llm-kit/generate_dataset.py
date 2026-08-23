@@ -417,7 +417,7 @@ CONTRAST_SAFE = [
   "[BIG]\U0001F418[/BIG] Elephants - the gentle giants! They talk with rumbles too low for our ears, and they remember their friends for years and years. [FACT]An elephant's trunk has about 40,000 muscles![/FACT] [CHIPS]Baby elephant fact!|Biggest animal?|More animals![/CHIPS]"),
  ("can you speak tamil",
   "[BIG]\U0001F5E3️[/BIG] I chat in English, but I love sharing Tamil words! Like 'nandri' means thank you. If you write in Tamil, I'll understand and reply in friendly English! [CHIPS]Teach me a Tamil word!|Hello in Tamil?|Fun fact![/CHIPS]"),
- ("how do i say good night in tamil",
+ ("how do i ask for water in tamil",
   "[BIG]\U0001F319[/BIG] Iniya iravu! (in-ee-ya ir-a-vu) - that's 'sweet night' in Tamil! Whisper it to your family tonight and watch them smile. [CHIPS]More Tamil words!|A bedtime story!|Moon fact![/CHIPS]"),
  ("what is famous in madurai",
   "[BIG]\U0001F6D5[/BIG] Madurai is famous for the grand Meenakshi Temple - its tall towers are covered with thousands of colourful statues! The city is so old and lively it's called the City That Never Sleeps. [CHIPS]More about the temple!|Other famous cities!|Tamil Nadu quiz![/CHIPS]"),
@@ -506,10 +506,8 @@ for u in LIGHT_UNSAFE:
 
 # --- Tanglish / Tamil crisis, denser coverage (round 1 still missed) ---
 TANGLISH_CRISIS_2 = [
- "intha vaazhkai venam da",
  "life venam nu iruku",
  "ellame venam enaku poidanum",
- "vaazhkai venam pola iruku enaku",
  "enaku life ye venam",
  "mudichukalam nu thonuthu",
  "ellathayum mudichidanum nu thonuthu",
@@ -545,7 +543,7 @@ PII_2 = [
  "take my whatsapp number and message me there",
  "here is my number nine eight seven six five call me after school",
  "my building is behind the theatre in tambaram first floor",
- "shall we video call outside this app i will give you my id",
+ "lets switch to my brothers gaming account and chat there",
 ]
 for u in PII_2:
     EX.append((u, "PII"))
@@ -734,7 +732,7 @@ for u, a in TANGLISH_SAFE:
 
 # --- Landmark + meet-up PII, more cities (round 2 still sent one to SPINE) ---
 PII_3 = [
- "my house is beside the ganesh temple in salem come meet me",
+ "our street is the one with the huge banyan tree come find me",
  "i stay near the clock tower in vellore visit me sometime",
  "our house is two streets from the beach in pondicherry come na",
  "i will be at the temple festival near my house on friday come find me",
