@@ -15,9 +15,9 @@ cd "$KIT" || exit 1
 source .venv/bin/activate
 MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
 ARCHIVE_ROOT=/Users/arun/work_space/chittu/llm-kit/adapters-archive
-SEEDS="${SEEDS:-401 402 403}"
-TOTAL_ITERS="${TOTAL_ITERS:-1400}"
-CHUNK=100
+SEEDS="${SEEDS:-501 502 503}"
+TOTAL_ITERS="${TOTAL_ITERS:-3000}"
+CHUNK=250
 
 for SEED in $SEEDS; do
   echo "=== SEED $SEED: training ==="
@@ -29,7 +29,7 @@ for SEED in $SEEDS; do
     [ -f adapters/adapters.safetensors ] && RESUME="--resume-adapter-file adapters/adapters.safetensors"
     if mlx_lm.lora --model "$MODEL" --train --data data --batch-size 1 \
         --num-layers 8 --iters $CHUNK --max-seq-length 768 --learning-rate 3e-5 \
-        --adapter-path adapters --save-every $CHUNK --steps-per-eval $CHUNK \
+        --adapter-path adapters --save-every $CHUNK --steps-per-eval $CHUNK --val-batches 10 \
         --seed "$SEED" $RESUME; then
       REMAINING=$((REMAINING - CHUNK))
       FAILS=0
