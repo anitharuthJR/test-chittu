@@ -620,8 +620,22 @@ const PROVIDER = {
   anthropicModel: 'claude-sonnet-4-6'
 };
 
+/* Strip model control tokens before anything downstream sees them.
+   A closed <think>…</think> is the common case, but the fine-tuned adapter also
+   emits UNCLOSED and repeated tags — observed live: "<think> <think> <tool_call>"
+   ahead of a real answer. Handling only the closed form let those render to the
+   child as literal text. Nothing here is ever legitimate in a reply: the visual
+   grammar uses square brackets, so any angle-bracket control token is an
+   artefact. */
 function stripThink(t){
-  return t.includes('</think>') ? t.split('</think>').slice(1).join('</think>').trim() : t;
+  if(!t) return '';
+  var out = t;
+  if(out.indexOf('</think>') !== -1){            // drop reasoning up to the LAST close
+    out = out.slice(out.lastIndexOf('</think>') + 8);
+  }
+  out = out.replace(/<\/?(think|tool_call|thinking|reasoning)>/gi, ' ');
+  out = out.replace(/<\|[^|>]*\|>/g, ' ');       // <|im_start|>-style special tokens
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 /* Returns the model's text, or throws — callers already handle failure

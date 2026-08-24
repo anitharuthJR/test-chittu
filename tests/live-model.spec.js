@@ -19,7 +19,9 @@ const TOKENS = ['CRISIS', 'UNSAFE', 'PII', 'SPINE'];
 test.describe('Live local model behind the pipeline', () => {
   test.skip(!process.env.LIVE_MODEL,
     'set LIVE_MODEL=1 and run serve_local.py first');
-  test.describe.configure({ mode: 'serial', timeout: 180000 });
+  // Not serial: a single failure must not abort the rest, or one bad row hides
+  // twelve good ones. Run with --workers=1 — serve_local.py is single-threaded.
+  test.describe.configure({ timeout: 180000 });
 
   test('the server is reachable', async ({ request }) => {
     const r = await request.get(LOCAL.replace(/\/v1$/, '') + '/v1/models');

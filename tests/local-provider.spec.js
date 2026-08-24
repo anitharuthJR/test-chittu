@@ -95,6 +95,30 @@ test.describe('Local provider — engine swapped, pipeline intact', () => {
       });
   }
 
+  // Found by the LIVE harness against seed 803: the adapter emits UNCLOSED and
+  // repeated control tags — "<think> <think> <tool_call>" — ahead of a real answer.
+  // The first strip handled only the closed form, so those rendered to the child.
+  for (const [raw, must, mustNot] of [
+    ['<think> <think> <tool_call> Your body is growing! [CHIPS]More|Why?[/CHIPS]',
+     'Your body is growing', '<think>'],
+    ['<think>unclosed reasoning CRISIS', 'reasoning', '<think>'],
+    ['<|im_start|>assistant Volcanoes erupt! [CHIPS]More|Why?[/CHIPS]',
+     'Volcanoes erupt', '<|im_start|>'],
+    ['<think>a</think>mid<think>b</think>Volcanoes erupt! [CHIPS]More|Why?[/CHIPS]',
+     'Volcanoes erupt', 'mid'],
+  ]) {
+    test(`control tokens stripped: "${raw.slice(0, 34)}"`, async ({ page }) => {
+      await useLocal(page, ({ isClassifier }) =>
+        isClassifier ? '{"label":"SAFE","memory":null,"assist":null}' : raw);
+      await consentToChat(page);
+      await switchToLocal(page);
+      await say(page, 'tell me something');
+      const text = await allMessages(page);
+      expect(text).toContain(must);
+      expect(text, 'control token leaked to the child').not.toContain(mustNot);
+    });
+  }
+
   test('a think block with reasoning inside is stripped, answer preserved',
     async ({ page }) => {
       await useLocal(page, ({ isClassifier }) => isClassifier
