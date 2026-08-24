@@ -1,0 +1,43 @@
+/**
+ * The provider router — requirements §9's "one router interface".
+ *
+ * `route(category)` is the single place a vendor is chosen, which is what makes
+ * a vendor switchable without touching the pipeline, and what gives
+ * provider_clearance somewhere to be enforced (chittu-architecture.md §12.3).
+ *
+ * Nothing below calls a real vendor yet. The stub exists so the whole service
+ * runs, and is tested, with no key and no network — CI must never need either.
+ */
+
+import type { ClassifierOutcome, RouteDecision, RouterCategory } from '@chittu/contracts';
+import type { SandboxInput } from '@chittu/pipeline';
+
+export interface ProviderRouter {
+  route(category: RouterCategory): RouteDecision;
+  classify(
+    text: string,
+    history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[],
+  ): Promise<ClassifierOutcome>;
+  generate(input: SandboxInput): Promise<string>;
+}
+
+/**
+ * Deterministic, offline, and honest about it: everything classifies SAFE and
+ * the sandbox echoes a fixed reply. Using this in production would mean the L2
+ * layer inspects nothing, so `main.ts` refuses to start with it when
+ * NODE_ENV=production.
+ */
+export function stubRouter(): ProviderRouter {
+  return {
+    route: (category) => ({
+      provider: 'stub', model: 'stub-0', promptVersion: `${category}-v0`,
+    }),
+    async classify() {
+      return { label: 'SAFE', memory: null, assist: null } satisfies ClassifierOutcome;
+    },
+    async generate(input) {
+      return `I'm still learning that one, ${input.state.kid}! `
+        + '[CHIPS]Tell me more|Something else[/CHIPS]';
+    },
+  };
+}

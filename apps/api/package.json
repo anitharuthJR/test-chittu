@@ -1,0 +1,21 @@
+{
+  "name": "@chittu/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chittu/contracts": "workspace:*",
+    "@chittu/pipeline": "workspace:*",
+    "@chittu/safety-kernel": "workspace:*",
+    "@chittu/seal": "workspace:*",
+    "@fastify/rate-limit": "^10.2.0",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": { "tsx": "^4.19.0" }
+}

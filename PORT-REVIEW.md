@@ -142,3 +142,28 @@ would have shipped (§1, §2) and surfaced four decisions that were invisible be
 (§3–§6). One reviewer finding was itself wrong — it claimed the spines tests did not
 execute, when they were merely failing to resolve a workspace link that had not been
 installed yet. Agent findings are evidence, not verdicts.
+
+---
+
+## 8. FIXED — the orchestrator sealed only half the conversation
+
+**Found by a smoke test, not by the unit tests. Already corrected.**
+
+`GET /seal` reported **2 records after 2 turns**. The chain was recording each
+child's turn and none of Chittu's replies, because sealing lived at the end of the
+sandbox path rather than in the reply helper.
+
+In the prototype, `auditAdd('chittu', flat, layer)` sits inside `addChittu`, which
+all 26 reply paths call — scripted guards included. So a crisis turn would have
+left the ledger holding the child's words and **no record of what the system said
+back**, which is the moment a ledger most needs to be complete.
+
+Sealing moved into `reply()`, so every path seals both records. Now covered by a
+regression test over all seven reply paths, plus one asserting the chain records
+what the child was *shown* rather than the raw model text — a blocked L6 reply must
+not appear in the ledger as though it had been delivered.
+
+**Worth noting how it was caught.** 554 unit tests were green. `curl` found it in
+one request, because the unit tests asserted the chain *verified* and never
+asserted how much was *in* it. A chain with half the conversation missing verifies
+perfectly.
