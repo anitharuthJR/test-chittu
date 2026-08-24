@@ -792,21 +792,41 @@ a Redis flush does not reset it.
 
 ### A7 — Deployment topology
 
+All of this is Terraform — see §14. Nothing below is created by hand.
+
 ```mermaid
 flowchart TB
-  subgraph aws["AWS ap-south-1 · Mumbai · IN residency"]
-    alb["ALB + WAF"]
-    subgraph ecs["ECS Fargate"]
-      api1["api · 2+ tasks"]
-      wrk["pg-boss workers"]
-    end
-    rds[("RDS Postgres 16<br/>Multi-AZ · pgvector<br/>PITR 7 days")]
-    ec[("ElastiCache Redis")]
-    kms["KMS CMK<br/>per-child DEKs"]
-    sm["Secrets Manager"]
-  end
-  cf["CloudFront + S3<br/>PWA shell"]
   users["Children · Parents"]
+  cf["CloudFront + S3<br/>PWA shell · WAF"]
+
+  subgraph aws["AWS ap-south-1 · Mumbai · IN residency"]
+    subgraph pub["public subnets"]
+      alb["ALB + WAF"]
+    end
+
+    subgraph priv["private subnets · no internet ingress"]
+      subgraph ecs["ECS cluster — two capacity providers"]
+        subgraph fg["FARGATE"]
+          api1["api · 2+ tasks<br/>Fastify monolith"]
+          wrk["pg-boss workers<br/>anchor · sweep · retention"]
+        end
+        subgraph ec2["EC2 · g5 ASG — GPU"]
+          nlb["internal NLB"]
+          m1["chittu-model · 2+ tasks<br/>vLLM · grammar-constrained<br/>weights pulled from S3 by sha256"]
+        end
+      end
+      rds[("RDS Postgres 16<br/>Multi-AZ · pgvector<br/>PITR 7 days")]
+      ec["ElastiCache Redis"]
+    end
+
+    s3w[("S3 · model weights<br/>immutable, by adapter_sha256")]
+    s3d[("S3 · dataset exports<br/>training only")]
+    kms["KMS<br/>child-data CMK · training CMK"]
+    sm["Secrets Manager<br/>provider keys"]
+  end
+
+  gpu["GPU training jobs<br/>no DB credentials"]
+  vendors["Cleared vendors<br/>Anthropic · Google"]
 
   users --> cf
   users --> alb --> api1
@@ -814,8 +834,24 @@ flowchart TB
   api1 --> ec
   api1 --> kms
   api1 --> sm
+  api1 -- "L2 classifier · every turn" --> nlb --> m1
+  api1 -- "cells that clear provider_clearance" --> vendors
+  m1 --> s3w
   wrk --> rds
+  s3d --> gpu --> s3w
+
+  classDef gpuc fill:#1A18D4,stroke:#0D0C6E,color:#fff
+  classDef store fill:#FFF6DA,stroke:#B8860B,color:#0B0B14
+  classDef ext fill:#F5F4EF,stroke:#22324A,color:#0B0B14
+  class m1,gpu gpuc
+  class rds,s3w,s3d store
+  class vendors ext
 ```
+
+The two paths out of `api` are the whole routing story in one picture: the every-turn
+classifier goes to our own GPU inside the region, and only cells that clear
+`provider_clearance` leave for a vendor. Note that the model tier sits on **EC2 capacity,
+not Fargate** — Fargate has no GPU.
 
 Phase 1 is single-region Mumbai. The `jurisdiction` column exists on day one so that
 Phase 2's per-market residency routing is a deployment change, not a migration.
@@ -1199,7 +1235,9 @@ in English and fails in Tamil is a failing cell — not a partially passing one.
 
 ---
 
-## 13. Training infrastructure
+## 13. Model infrastructure — training and serving
+
+### 13.1 Training
 
 **Decision: same AWS account, cloud GPU.** Simpler ops, and the isolation an auditor will
 ask about is achieved inside the account rather than by a second one.
@@ -1247,9 +1285,218 @@ certification body pushes back, moving the `training` schema to its own account 
 deployment change, not a migration — the schema is written so nothing crosses the boundary
 by foreign key.
 
+### 13.2 Start here: the current adapter is not deployable
+
+Before any deployment plan, a fact that changes the plan. `llm-kit/train.sh` produces:
+
+```
+base    : mlx-community/Qwen3-4B-Instruct-2507-4bit   ← MLX, 4-bit quantised
+trainer : mlx_lm.lora                                 ← Apple Silicon only
+output  : adapters/adapters.safetensors               ← LoRA rank 8, 8 layers
+```
+
+**MLX runs only on Apple Silicon.** There is no NVIDIA path for it, so this artifact cannot
+be served from an AWS GPU at all. And the second line compounds it: the LoRA was trained
+*against 4-bit quantised weights*, so it is calibrated to that specific quantisation. Even
+a mechanical format conversion would carry that error into a bf16 server.
+
+**So the adapter does not get ported — it gets retrained.** The `llm-kit` remains what it
+has been all along: a laptop-scale research rig for proving the recipe. What transfers to
+production is everything *except* the weights — the dataset, the eval harness, the grader
+with its 30 regression cases, the hyperparameters as a starting point.
+
+The cloud-GPU decision in §13.1 already fixes this, provided the retrain uses HF PEFT
+against the full-precision `Qwen/Qwen3-4B-Instruct-2507` rather than a quantised base. That
+is the one instruction that matters: **train against the weights you intend to serve.**
+
+### 13.3 Serving — vLLM, and the reason it is not just a throughput choice
+
+| Option | Verdict |
+|---|---|
+| **vLLM** | **Chosen.** OpenAI-compatible, continuous batching, and grammar-constrained decoding |
+| TGI / SGLang | Comparable; SGLang is worth revisiting if structured output becomes the dominant cost |
+| Ollama / llama.cpp | Right for a laptop and for on-device, wrong for a fleet — no continuous batching |
+| TensorRT-LLM | Fastest, but build complexity we cannot justify for a 4B model |
+| Third-party GPU hosts | **Rejected.** Together, Fireworks, Baseten and friends are another vendor needing minors-terms clearance, and are almost certainly outside `ap-south-1`. That surrenders both reasons we are self-hosting. |
+
+The OpenAI-compatible surface means `serve_local.py`'s contract already matches, so the
+router's `ProviderAdapter` does not change between the laptop and production.
+
+**But the decisive reason is grammar-constrained decoding.** vLLM can constrain generation
+to a JSON schema or a token enum, which means the model *cannot emit* anything outside the
+grammar. Applied to the L2 classifier:
+
+```jsonc
+// the classifier cell's decoding constraint
+{ "type": "object", "required": ["label"], "additionalProperties": false,
+  "properties": {
+    "label":  { "enum": ["SAFE","CRISIS","UNSAFE","PII","SPINE"] },
+    "memory": { "type": ["object","null"] },
+    "assist": { "type": ["string","null"] } } }
+```
+
+That single constraint deletes an entire family of defects this project has already paid
+for:
+
+- **Classifier parse failure becomes structurally impossible**, so the FAST-PATH-ONLY
+  degradation stops being a routine event and becomes a genuine incident.
+- **Control-token litter cannot occur.** No `<think>`, no `<tool_call>`, no
+  `<|im_start|>` — the harness caught unclosed tags rendering to a child on a puberty
+  question, and a grammar makes that unreachable rather than filtered.
+- **`UNSAFE[CHIPS]` cannot occur** on an escalation turn — the exact ambiguity that made
+  `eval_guard.py` mis-score for four rounds.
+
+Hosted APIs offer structured outputs, but not arbitrary grammars over our own tokens. This
+is a capability we can only have by self-hosting, and it is worth more than the cost saving.
+
+### 13.4 Where — sizing and placement
+
+A 4B model in bf16 is roughly 8 GB of weights plus KV cache, so a single 24 GB card is
+comfortable. The classifier workload also happens to be the easy shape: short prompts (a
+3-message rolling window) and tiny outputs (one JSON label), which batches well.
+
+| | Choice | Note |
+|---|---|---|
+| Instance | `g5.xlarge` (A10G 24 GB) as baseline | Check `g6` (L4) availability in `ap-south-1` — newer and more efficient per rupee |
+| Region | `ap-south-1` Mumbai | Same region as the data. Residency is half the point of self-hosting. |
+| Minimum | 2 tasks across 2 AZs | This runs on *every* turn |
+| Placement | Private subnet, no internet ingress | Reachable only from the API's security group, via an internal NLB |
+
+> **`Fargate has no GPU.`** §9's topology puts the API on ECS Fargate, which is right for
+> the API and impossible for the model. The model service needs an **EC2 capacity provider**
+> with a `g5` auto-scaling group in the same ECS cluster.
+
+**Sizing is a load test, not a paragraph.** These are starting points; the number to
+measure is p95 turn latency under realistic concurrency, because the classifier sits in the
+critical path of every reply a child waits for.
+
+### 13.5 Availability — a three-tier fallback, not two
+
+The classifier runs on every turn, so its failure mode is a safety property. Today the
+pipeline degrades straight to FAST-PATH-ONLY. With a router cell we can do better:
+
+```mermaid
+flowchart LR
+  turn["Child turn"] --> t1{"chittu-local<br/>healthy and under budget?"}
+  t1 -- yes --> ok["classify · grammar-constrained"]
+  t1 -- "no / timeout" --> t2{"hosted classifier<br/>cleared for this jurisdiction?"}
+  t2 -- yes --> ok2["classify · hosted<br/>trace records the fallback"]
+  t2 -- no --> t3["FAST-PATH-ONLY<br/>turn continues, honestly marked<br/>fail toward CRISIS when torn"]
+
+  classDef good fill:#2E9E6B,stroke:#1B5E20,color:#fff
+  classDef warn fill:#FFF6DA,stroke:#B8860B,color:#0B0B14
+  classDef bad fill:#FF2E1F,stroke:#8B0000,color:#fff
+  class ok good
+  class ok2 warn
+  class t3 bad
+```
+
+Two operational details that matter more than they look:
+
+- **The health check must run a real inference.** A vLLM process that has loaded a model and
+  wedged still answers a TCP check and an HTTP `/health`. The check must classify a known
+  fixture and assert the expected label, or the load balancer will happily route children to
+  a broken model.
+- **A latency budget, not just a timeout.** If the local classifier exceeds its budget the
+  turn fails over rather than waiting — a child waiting eight seconds is a product failure
+  even when the answer eventually arrives.
+
+### 13.6 Promotion, shadow mode and rollback
+
+Model weights are **not baked into the container image.** The image is vLLM plus our
+entrypoint; the weights are pulled from S3 at start and verified against
+`training_run.adapter_sha256`. Three consequences: the image stays small, rollback is a
+parameter change rather than a rebuild, and a model can only load if its hash matches a row
+that passed G2 — the `promotion_requires_g2` constraint reaches all the way to the GPU.
+
+**Shadow mode is how a classifier should be promoted.** Run the candidate against live
+traffic in parallel with the incumbent, compare labels, and discard its output. The child is
+never affected, and you get real-world evaluation on real distributions instead of 32 held-out
+prompts. Disagreements feed `training_signal` directly. Promote only when the candidate
+agrees with the incumbent everywhere the incumbent was right and disagrees where it was
+wrong — which is a far stronger gate than a scorecard.
+
+Rollback is repointing the router cell at the previous `training_run.id`.
+
+### 13.7 On-device (Phase 2) — a correction to §12.4
+
+§12.4 says the Phase 2 on-device fallback is "`chittu-local`, quantised." Sized honestly,
+that does not work: a 4B at Q4 is roughly 2.5 GB, and the target device is a ₹8,000 Android
+with 2–4 GB of *total* RAM. Shipping it would break the device floor the model exists to
+serve.
+
+The on-device job is **classification, not generation**, and that is a much smaller thing.
+The right shape is a distilled classifier — a small multilingual encoder with a
+classification head, tens of megabytes, running in milliseconds via ONNX Runtime Mobile or
+MediaPipe. That also happens to help GAP-03, since multilingual encoders are cheap to
+evaluate per language in a way a 4B generator is not.
+
+**This needs its own Phase 2 decision.** It is not the same model quantised; it is a
+different artifact trained from the same corpus.
+
+### 13.8 Cost — self-hosting is not the cheap option
+
+Worth stating plainly, because the opposite is usually assumed. Two `g5.xlarge` running
+continuously is a **fixed monthly floor that does not fall when traffic is low**, while a
+hosted Haiku-class classifier costs per call and rounds to nothing at pilot volumes.
+
+So at Phase 1 scale, self-hosting is *more* expensive. The reasons to do it anyway are the
+three in this section: **residency**, **no vendor sees a child's turn**, and
+**grammar-constrained decoding**. Cost becomes an argument only at scale, and the crossover
+is a real number the `metering` table can compute — which is exactly what it is for.
+
 ---
 
-## 14. Build order
+## 14. Infrastructure as code
+
+**Decision: Terraform, and containers on ECS.**
+
+**Why Terraform** over CDK or Pulumi: G4 requires the DPIA to show that *data flows match
+production*, and that claim is checkable when the infrastructure is declarative and
+reviewable. An auditor can read Terraform. CDK compiles to CloudFormation, putting a
+generated artifact between the reviewer and the truth — fine for velocity, weaker as
+evidence. Terraform also makes Phase 2's per-market residency a matter of instantiating the
+same modules in a second region. (OpenTofu is a drop-in if the licence matters to legal.)
+
+**Why ECS rather than EKS:** one orchestrator, two capacity providers. This document has
+consistently refused a second moving part for a small team — no broker for four cron jobs,
+no second AWS account for one schema — and Kubernetes for a single model service is the same
+trade. Revisit EKS when there are three or more distinct model services, or when GPU
+bin-packing across models becomes worth its operational cost.
+
+```
+infra/
+  modules/
+    network/        VPC, public + private subnets, VPC endpoints, no NAT for the model tier
+    data/           RDS Postgres, ElastiCache, KMS CMKs (child-data, training — separate)
+    api/            ECS Fargate service, ALB, WAF
+    model/          ECS EC2 capacity provider, g5 ASG, internal NLB, S3 weights bucket
+    training/       dataset export bucket, GPU job role, no path to the runtime DB
+    observability/  OTel collector, log groups with the redaction filter
+  envs/
+    dev/  staging/  prod/     ← same modules, different tfvars
+```
+
+State in S3 with DynamoDB locking, one backend per environment. `terraform plan` runs in CI
+on every PR and is posted to the PR; `apply` is gated on human approval. **Nothing is
+created by hand in the console** — an undocumented resource is a data flow the DPIA does not
+describe.
+
+Two containers, both distroless where possible:
+
+| Image | Contents | Weights |
+|---|---|---|
+| `chittu-api` | Node 22, the Fastify monolith | — |
+| `chittu-model` | vLLM + entrypoint | **Not baked in.** Pulled from S3 and sha256-verified at start (§13.6) |
+
+**One footgun to close in the Terraform, not the runbook:** vLLM can log prompts. Prompts
+are children's turns. Request logging is disabled explicitly in the task definition, and the
+log group carries the same redaction filter as everything else — the observability rule in
+§2.2 does not get an exception because the service is a model.
+
+---
+
+## 15. Build order
 
 Sequenced by lead time and by which gate each item unblocks — not by what is most fun to
 build.
