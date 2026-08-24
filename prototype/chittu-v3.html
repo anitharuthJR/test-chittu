@@ -597,6 +597,59 @@ function askPractice(pr){
   S.mathPractice=pr;
   return ' Now YOUR turn, '+S.kid+'! What is '+pr.q+'? Type your answer! [CHIPS]Show me how|Another one|I\u2019m done[/CHIPS]';
 }
+/* ---------- provider router ----------------------------------------------
+   One place where model calls happen. Requirements §9 asks for exactly this
+   ("provider calls go behind one router interface") and it is what lets the
+   self-hosted chittu-guard model take the sandbox slot without touching a
+   single line of pipeline logic.
+
+   PROVIDER.mode:
+     'anthropic' — default. Hosted Claude, as before.
+     'local'     — an OpenAI-compatible endpoint (mlx_lm.server, Ollama, vLLM).
+                   Set PROVIDER.baseUrl and PROVIDER.model to match.
+
+   The local branch strips a leading <think>…</think> block. The fine-tuned
+   Qwen3 adapter emits one as an artefact of the chat template it was trained
+   with, and the pipeline compares escalation tokens EXACTLY — so without this
+   strip, "<think></think>CRISIS" is not "CRISIS" and every guard handoff in
+   the sandbox layer silently stops working. */
+const PROVIDER = {
+  mode: 'anthropic',
+  baseUrl: 'http://localhost:8080/v1',
+  model: 'mlx-community/Qwen3-4B-Instruct-2507-4bit',
+  anthropicModel: 'claude-sonnet-4-6'
+};
+
+function stripThink(t){
+  return t.includes('</think>') ? t.split('</think>').slice(1).join('</think>').trim() : t;
+}
+
+/* Returns the model's text, or throws — callers already handle failure
+   (classifier → FAST-PATH-ONLY, sandbox → friendly fallback). */
+async function callModel({system, messages, maxTokens=1000}){
+  if(PROVIDER.mode === 'local'){
+    const res = await fetch(PROVIDER.baseUrl.replace(/\/$/,'') + '/chat/completions', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model: PROVIDER.model, max_tokens: maxTokens, temperature: 0.7,
+        messages: [{role:'system', content: system}].concat(messages.map(m => ({
+          role: m.role,
+          /* the local path is text-only: flatten any vision block rather than
+             sending a shape the endpoint will reject */
+          content: Array.isArray(m.content)
+            ? m.content.filter(c => c.type === 'text').map(c => c.text).join(' ') || '[picture]'
+            : m.content
+        })))})});
+    const d = await res.json();
+    return stripThink(((d.choices||[])[0]||{}).message?.content || '').trim();
+  }
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({model: PROVIDER.anthropicModel, max_tokens: maxTokens,
+                          system, messages})});
+  const d = await res.json();
+  return (d.content||[]).filter(i => i.type === 'text').map(i => i.text).join(' ').trim();
+}
+
 /* ---------- maths accuracy harness ---------- */
 const HARNESS_ITEMS=[['7 \u00d7 8',56],['48 \u00f7 6',8],['125 + 375',500],['1000 - 247',753],['15 \u00d7 12',180]];
 async function runMathHarness(el){
@@ -604,12 +657,10 @@ async function runMathHarness(el){
   let pass=0,rows=[];
   for(const [q,gold] of HARNESS_ITEMS){
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
-          system:'You are a maths engine for a children\'s app. Compute exactly. Reply with ONLY the final number.',
-          messages:[{role:'user',content:q}]})});
-      const d=await res.json();
-      const out=(((d.content||[]).filter(i=>i.type==='text').map(i=>i.text).join('')).match(/-?\d+(?:\.\d+)?/)||[''])[0];
+      const txt=await callModel({
+        system:'You are a maths engine for a children\'s app. Compute exactly. Reply with ONLY the final number.',
+        messages:[{role:'user',content:q}]});
+      const out=((txt||'').match(/-?\d+(?:\.\d+)?/)||[''])[0];
       const ok=parseFloat(out)===gold;if(ok)pass++;
       rows.push((ok?'\u2713':'\u2717')+' '+q+' \u2192 model: '+(out||'?')+' \u00b7 truth: '+gold);
     }catch(e){rows.push('\u2717 '+q+' \u2192 call failed')}
@@ -637,8 +688,7 @@ S.mode='chat';
 /* ---------- classifier: rolling window + memory + assist (one call) ---------- */
 async function classifyWithModel(){
   const windowTxt=S.recentKid.slice(-3).map((m,i)=>`[msg ${i+1}] ${m}`).join('\n');
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
+  const raw=await callModel({maxTokens:1000,
       system:`You are the safety+memory classifier for a children's chat app. The child should be writing English (English-only launch), but may type in ANY language or script — still classify safety correctly regardless of language. You receive the child's last few messages; judge the LATEST one IN CONTEXT of the window (patterns across messages matter: escalating secrecy, boundary-testing, repeated distress).
 Respond ONLY with minified JSON, no markdown: {"label":L,"memory":M,"assist":A}
 L (string, required) one of:
@@ -650,9 +700,8 @@ L (string, required) one of:
 "SAFE" everything else. When torn between SAFE and CRISIS, choose CRISIS.
 M (object or null): ONLY if label is SAFE and the LATEST message reveals a happy, harmless durable fact worth remembering, in categories INTEREST|PET|HOBBY|FAVORITE|ACHIEVEMENT|LEARNING → {"category":C,"fact":"short third-person fact, e.g. 'has a cat named Mani'"}. NEVER create memory from feelings, health, family problems, fears, or anything sensitive. Most messages → null.
 A (string or null): ONLY if label is SAFE and a caring adult should gently step in: repeated struggle with a school topic across the window → "STRUGGLE: <topic>"; a big life question (death, war, God, divorce, where babies come from) → "BIG-QUESTION: <topic>". Otherwise null. Never quote the child's words.`,
-      messages:[{role:'user',content:windowTxt}]})});
-  const data=await res.json();
-  let out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim().replace(/```json|```/g,'').trim();
+      messages:[{role:'user',content:windowTxt}]});
+  let out=(raw||'').replace(/```json|```/g,'').trim();
   const j=JSON.parse(out);
   if(!/^(CRISIS|PII|UNSAFE|IDENTITY|SECRET|SAFE)$/.test(j.label))throw new Error('bad label');
   return j;
@@ -1057,10 +1106,9 @@ async function send(fromVoice){
     }else S.history.push({role:'user',content:text});
     /* keep only the most recent image in history to bound tokens; strip older image blocks */
     let seenImg=false;const hist=S.history.slice(-10).reverse().map(m=>{if(Array.isArray(m.content)){if(seenImg)return{role:m.role,content:m.content.filter(c=>c.type==='text').map(c=>c.text).join(' ')||'[picture]'};seenImg=true}return m}).reverse();
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:sandboxPrompt(),messages:hist})});
-    const data=await res.json();typing(false);
-    let out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim();
+    let out=await callModel({system:sandboxPrompt(),messages:hist,maxTokens:1000});
+    typing(false);
+    out=(out||'').trim();
     if(out==='CRISIS'){S.history.pop();route('CRISIS');return}
     if(out==='SPINE'){S.history.pop();S.spineCount++;addChittu(spineFor('identity'),'SANDBOX → SPINE escalation');return}
     if(out==='UNSAFE'){S.history.pop();route('UNSAFE');return}
