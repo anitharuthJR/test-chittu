@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify';
 import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
 import { randomBytes } from 'node:crypto';
-import { createTestDb, localKeyProvider, type DbPool } from '@chittu/db';
+import { createTestDb, localKeyProvider, SESSION_STALE_AFTER_HOURS, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
 import { createStore } from './store.js';
 import { CONSENT_COOKIE, PARENT_COOKIE } from './cookies.js';
@@ -1329,5 +1329,67 @@ describe('what gets stored as Chittu\'s words', () => {
     const turns = res.json<{ turns: { role: string; text: string }[] }>().turns;
     expect(turns.find((t) => t.role === 'chittu')!.text)
       .toBe('Sunlight scatters blue light!');
+  });
+});
+
+describe('the session staleness window', () => {
+  /**
+   * A pin on the VALUE, not just the behaviour.
+   *
+   * 12 hours is a product judgement signed off on 2026-08-24 — where the line
+   * sits between "I put the tablet down and picked it up" and "it is the next
+   * day, this is a fresh chat". Changing it should be another decision, not a
+   * quiet edit, so this fails loudly and names the reason.
+   */
+  it('is 12 hours, by decision rather than by accident', () => {
+    expect(SESSION_STALE_AFTER_HOURS,
+      'signed off 2026-08-24 — change it deliberately, not in passing').toBe(12);
+  });
+
+  it('resumes just inside the window and starts fresh just outside it', async () => {
+    // Written against the constant, so it keeps testing the boundary wherever
+    // the boundary is moved to.
+    const start = async (cookie: string) => {
+      const r = await app.inject({
+        method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+      return r.json<{ sessionId: string; resumed: boolean }>();
+    };
+    const age = async (id: string, hours: number) => {
+      await pool.query(
+        `UPDATE session SET started_at = now() - make_interval(hours => $2) WHERE id = $1`,
+        [id, hours]);
+    };
+
+    const inside = await grantConsent();
+    const a = await start(inside.cookie);
+    await age(a.sessionId, SESSION_STALE_AFTER_HOURS - 1);
+    expect((await start(inside.cookie)).sessionId,
+      'an hour inside the window is the same conversation').toBe(a.sessionId);
+
+    const outside = await grantConsent();
+    const b = await start(outside.cookie);
+    await age(b.sessionId, SESSION_STALE_AFTER_HOURS + 1);
+    expect((await start(outside.cookie)).sessionId,
+      'an hour outside it is a new one').not.toBe(b.sessionId);
+  });
+
+  it('does NOT bound a crisis lock — that is the point', async () => {
+    // The window decides when a conversation restarts. It must never decide
+    // when a lock lifts, or the lock could be waited out instead of reloaded
+    // away. Aged far past the window and still locked.
+    const { cookie } = await grantConsent();
+    const first = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const id = first.json<{ sessionId: string }>().sessionId;
+    await say(id, 'i want to die');
+    await pool.query(
+      `UPDATE session SET started_at = now() - make_interval(hours => $2) WHERE id = $1`,
+      [id, SESSION_STALE_AFTER_HOURS * 100]);
+
+    const again = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const r = again.json<{ sessionId: string; crisisLock: boolean }>();
+    expect(r.sessionId).toBe(id);
+    expect(r.crisisLock).toBe(true);
   });
 });

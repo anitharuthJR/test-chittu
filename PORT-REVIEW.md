@@ -477,8 +477,19 @@ reply after reload            = [{"kind":"text","text":"I'm still learning..."}]
   neither reloaded nor waited out;
 - a recent session is resumed, so a reload keeps the conversation and the
   classifier's rolling window;
-- a stale one (>12h) is closed `ended_reason='timeout'` and a new one begins,
-  because "session-only conversation memory; forgetting is a feature" (§7).
+- a stale one is closed `ended_reason='timeout'` and a new one begins, because
+  "session-only conversation memory; forgetting is a feature" (§7).
+
+**The window is 12 hours, signed off by the product owner on 2026-08-24.** It is
+`SESSION_STALE_AFTER_HOURS` rather than an inline literal because it is a
+product judgement, not a technical constant: it draws the line between "I put
+the tablet down and picked it back up" and "it is the next day, this is a fresh
+chat". A test pins the value so moving it is a decision rather than a passing
+edit, and a second test checks the boundary against the constant so it keeps
+testing the right thing wherever the line is moved to.
+
+The window does **not** bound a crisis lock, and a test says so at 100× the
+window. It decides when a conversation restarts, never when a lock lifts.
 
 The response carries `resumed` and `crisisLock`, and the client re-applies the
 lock from the server rather than from a local signal it could not have set. It

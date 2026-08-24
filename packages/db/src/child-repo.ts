@@ -17,6 +17,22 @@ import { toBuffer } from './consent-repo';
 /** Default conversation retention. Architecture doc §6.3 — a proposal, not a ruling. */
 export const MESSAGE_TTL_DAYS = 30;
 
+/**
+ * How long a paused conversation is still the SAME conversation.
+ *
+ * Signed off by the product owner, 2026-08-24. It is recorded here rather than
+ * left as an inline literal because it is a product judgement, not a technical
+ * constant: it draws the line between "I dropped my tablet and picked it back
+ * up" and "it is the next day and this is a fresh chat". Requirements §7 wants
+ * the second to actually be fresh — "session-only conversation memory;
+ * forgetting is a feature".
+ *
+ * **It does not bound a crisis lock.** A locked session is resumed at any age,
+ * so the lock cannot be waited out; see `openOrResumeSession`. Changing this
+ * number changes when a conversation restarts, never when a lock lifts.
+ */
+export const SESSION_STALE_AFTER_HOURS = 12;
+
 export interface SessionRow {
   readonly id: string;
   readonly childId: string;
@@ -92,13 +108,14 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
      *     the classifier's rolling window;
      *   - a stale one is closed and a new one begins, because "session-only
      *     conversation memory; forgetting is a feature" (requirements §7).
+     *     `SESSION_STALE_AFTER_HOURS` is where that line sits.
      *
      * The child row is locked FOR UPDATE first, so two requests arriving
      * together cannot each decide that no live session exists and create one.
      */
     async openOrResumeSession(
       tx: Db, childId: string, consentId: string, band: Band,
-      opts: { staleAfterHours: number } = { staleAfterHours: 12 },
+      opts: { staleAfterHours: number } = { staleAfterHours: SESSION_STALE_AFTER_HOURS },
     ): Promise<{ id: string; resumed: boolean; crisisLock: boolean }> {
       await tx.query(`SELECT 1 FROM child WHERE id = $1 FOR UPDATE`, [childId]);
 
