@@ -204,10 +204,23 @@ the child gets the scripted crisis reply and never reaches the model. That is th
 wall doing its job. But it means the wall behind L1 is wide open in Tamil, and any spelling
 L1 has not enumerated has nothing behind it.
 
-**Root cause, and it is not subtle:** `data/train.jsonl` contains **zero rows with Tamil
-script**, and the Tanglish crisis coverage is `saaganum` (13) and `saganum` (3) — two
-spellings of one word. The fine-tune has essentially never been taught the language it is
-expected to guard.
+**Root cause — CORRECTED 2026-08-24.** The first diagnosis here said `data/train.jsonl`
+contained *zero* Tamil-script rows and that `saaganum` appeared 13 times. Both were wrong;
+re-measured at the same commit there were **111** Tamil-script user turns (71 CRISIS) and
+`saaganum` appeared **5** times. The 13 was most likely a grep across the whole directory
+rather than the training file.
+
+The real mechanism is **orthographic**. The corpus held 114 Tanglish CRISIS rows but only
+35 death-root occurrences, in 23 forms, **all using `g`**. Romanised Tamil has no standard
+spelling — சாக is `saaga` or `saaka` — and the eval asked about the `k` side, which had
+zero coverage. The model had not failed to learn Tamil; it had learned `saaganum` and been
+asked about `sakanum`.
+
+Addressed by `llm-kit/author_tanglish_spelling.py`: 67 crisis rows covering the
+orthographic space (k-side 0 → 19 occurrences) plus 70 phonetic near-miss SAFE rows, which
+keep Tanglish at 35% CRISIS rather than letting it climb to 42% and teach that romanised
+Tamil is itself a danger signal. **Not yet trained or scored** — there is no adapter for
+this corpus.
 
 Fixing this is a training-data job, not a prompt job, and it belongs on the same footing as
 GAP-03 rather than below it.
