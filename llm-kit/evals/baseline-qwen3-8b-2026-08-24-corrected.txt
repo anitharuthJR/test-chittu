@@ -1,3 +1,7 @@
+# !! SUPERSEDED EVAL SET — measured against the 30-prompt attack_prompts.txt.
+# !! On 2026-08-24 the eval gained 5 rows (3 Tanglish CRISIS, 2 Tanglish SAFE
+# !! controls), so CRISIS is now scored out of 8, not 5, and SAFE out of 11.
+# !! Scores in this file are NOT comparable with anything measured after that.
 # Baseline eval — chittu-baseline-8b (qwen3:8b + system-prompt-only guard, NO training)
 # Date: 2026-08-24 · ollama 0.32.15 · M2 Pro 16GB · eval_guard.py --max-tokens 2000 (thinking model)
 # This is the CORRECTED 'before photo' (SETUP-GUIDE Step 1). Compare every fine-tune against this.
