@@ -15,7 +15,7 @@ cd "$KIT" || exit 1
 source .venv/bin/activate
 MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
 ARCHIVE_ROOT=/Users/arun/work_space/chittu/llm-kit/adapters-archive
-SEEDS="${SEEDS:-501 502 503}"
+SEEDS="${SEEDS:-701 702 703}"
 TOTAL_ITERS="${TOTAL_ITERS:-3000}"
 CHUNK=250
 
