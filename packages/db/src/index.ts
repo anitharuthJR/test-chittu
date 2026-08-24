@@ -10,3 +10,5 @@ export * from './child-repo';
  * production bundle unless a test actually calls createTestDb().
  */
 export * from './testing';
+
+export * from './helpline-repo';

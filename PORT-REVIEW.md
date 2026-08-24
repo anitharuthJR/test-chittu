@@ -666,3 +666,81 @@ Enabling a market with no verified helplines is refused by a trigger
 (`market_needs_helplines`), and `provider_clearance` refused an expired row.
 Neither was written for this change; both did their job unprompted, which is
 what the constraints-carry-the-doctrine approach is supposed to feel like.
+
+---
+
+## The helpline sweep (GAP-06)
+
+### FIXED — the registry could rot silently
+
+`helpline_registry` existed and nothing read it: `GET /v1/helplines/:country`
+and the crisis script both served the compiled-in constant, so a number could
+only be corrected by a deploy, and a number going dead had no way to be noticed
+at all.
+
+Now: an hourly sweep moves overdue rows to `stale` and alerts; the crisis script
+and the route both resolve through the registry; and
+`docs/runbooks/helpline-p0.md` plus a small CLI make the human half actionable.
+
+**The compiled-in `REGISTRY` stays the floor.** The crisis path never waits on a
+query — if the table is missing, empty, or the database is unreachable, a child
+still gets the numbers we shipped. What the table buys is correction in minutes
+rather than a release cycle, verified end to end: a corrected Indian number
+reached a crisis reply with no deploy and no restart.
+
+### The rule that took the most thought — `stale` shows the numbers anyway
+
+| state | what a child gets | why |
+|---|---|---|
+| `verified` | the registry's numbers | someone checked |
+| `stale` | **the registry's numbers, unchanged** | overdue is not wrong |
+| `P0_WRONG_NUMBER` | the compiled-in numbers | a wrong number is worse than none |
+
+Withholding a probably-correct helpline from a child in crisis because *our*
+re-check date slipped would punish the child for our process failure. Staleness
+pages an adult; it does not edit the script. A mutation that made `stale`
+withhold — the tempting "safe" reading — fails two tests.
+
+### NOTED — the sweep does not dial anything, and cannot
+
+No API tells you whether a national child helpline still answers. The job
+notices a date has passed and pages a human; **the human is the verification.**
+That is a smaller claim than "verified helplines" and is deliberately smaller —
+the registry without the sweep was a table that silently rotted, and that is
+what this closes, not more.
+
+`import` reflects the same honesty: rows land as `import:builtin (UNVERIFIED)`
+with `next_sweep = now()`, so the next sweep immediately marks them stale and
+pages. Writing `verified` with today's date because a script ran is exactly the
+lie the table exists to prevent.
+
+### FIXED — GB would have run on the fallback forever
+
+`Country` says `GB`; the `jurisdiction` enum says `UK`. `'GB'::jurisdiction`
+raises, `resolveHelplines` catches errors and falls back — so every British
+child would have silently got the compiled-in numbers, with a log line as the
+only symptom. It broke the very first `import` run, which is the only reason it
+was found; the router PR had already flagged the mismatch and mapped it in one
+place while the helpline path went in unmapped.
+
+There is now **one** `toJurisdiction`, in the package that owns the enum, applied
+at every boundary. Removing it fails 3 tests.
+
+### NEEDS A DECISION — two G3 blockers remain, both named in the runbook
+
+1. **Alerts go to the log, not a pager.** `AlertPort` is the seam. Until it is
+   wired, the guarantee is "somebody is reading logs", which is weaker than this
+   gate needs.
+2. **The sweep runs in-process on a timer.** A job that runs only while one API
+   process is up stops when that process does. The production shape is a
+   scheduled task (§14).
+
+### FIXED DURING THE WORK — a deadlock this repo had already met once
+
+The first draft resolved helplines from `opts.pool` while inside
+`store.withChild`'s transaction. PGlite has one connection, so the whole API
+suite hung rather than failed — no error, just a test run that never finished.
+PORT-REVIEW already recorded this exact failure from the persistence layer.
+
+`resolveHelplines` now takes `Db | DbPool` with the reason in the signature's
+doc, so "which handle am I on?" cannot be fudged a third time.

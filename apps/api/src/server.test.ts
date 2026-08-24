@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify';
 import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
 import { randomBytes } from 'node:crypto';
-import { createTestDb, localKeyProvider, SESSION_STALE_AFTER_HOURS, type DbPool } from '@chittu/db';
+import { createTestDb, localKeyProvider, helplineRepo, SESSION_STALE_AFTER_HOURS, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
 import { createStore } from './store.js';
 import { CONSENT_COOKIE, PARENT_COOKIE } from './cookies.js';
@@ -1391,5 +1391,52 @@ describe('the session staleness window', () => {
     const r = again.json<{ sessionId: string; crisisLock: boolean }>();
     expect(r.sessionId).toBe(id);
     expect(r.crisisLock).toBe(true);
+  });
+});
+
+describe('the crisis reply uses the LIVE registry', () => {
+  /**
+   * The reason the registry table exists at all: a wrong number in the crisis
+   * script must be correctable in minutes, not in a release cycle. These prove
+   * the correction actually reaches the child, and that the fallback holds when
+   * it should not.
+   */
+  it('reads a corrected number into the scripted crisis reply', async () => {
+    await helplineRepo(pool).upsert(
+      pool, 'IN',
+      [{ name: 'Corrected Line', number: '1800-NEW-NUMBER', hours: '24/7' }],
+      'ops@tulifo.ai', new Date(Date.now() + 30 * 86_400_000));
+
+    const id = await openSession({ country: 'IN' });
+    const turn = await say(id, 'i want to die');
+
+    expect(turn.body.crisisLock).toBe(true);
+    expect(shown(turn.body)).toMatch(/1800-NEW-NUMBER/);
+    // ...and no longer the number it replaced.
+    expect(shown(turn.body)).not.toMatch(/1800-599-0019/);
+  });
+
+  it('uses the shipped numbers when the registry is flagged WRONG', async () => {
+    await helplineRepo(pool).upsert(
+      pool, 'IN', [{ name: 'Disconnected', number: '000-000-0000' }],
+      'ops@tulifo.ai', new Date(Date.now() + 30 * 86_400_000));
+    await helplineRepo(pool).flagP0(pool, 'IN', 'ops@tulifo.ai');
+
+    const id = await openSession({ country: 'IN' });
+    const turn = await say(id, 'i want to die');
+
+    expect(shown(turn.body)).not.toMatch(/000-000-0000/);
+    expect(shown(turn.body), 'the compiled-in floor').toMatch(/1098/);
+  });
+
+  it('still gives a stale registry\'s numbers to a child in crisis', async () => {
+    await helplineRepo(pool).upsert(
+      pool, 'IN', [{ name: 'Overdue Line', number: '1800-OVERDUE' }],
+      'ops@tulifo.ai', new Date(Date.now() - 86_400_000));
+    await pool.query(`UPDATE helpline_registry SET status = 'stale' WHERE country = 'IN'`);
+
+    const id = await openSession({ country: 'IN' });
+    const turn = await say(id, 'i want to die');
+    expect(shown(turn.body), 'overdue is not wrong').toMatch(/1800-OVERDUE/);
   });
 });

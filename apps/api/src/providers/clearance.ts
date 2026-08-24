@@ -14,18 +14,10 @@
  * vendors, which is the safe direction to err in.
  */
 
-import type { DbPool } from '@chittu/db';
+import { toJurisdiction, type DbPool } from '@chittu/db';
 
-/**
- * `jurisdiction` in the schema uses UK; `Country` in contracts uses GB, because
- * GB is the ISO code and UK is what the legislation is called. They mean the
- * same market, and a silent mismatch here would mean a clearance row that never
- * matches anything — a provider quietly refused forever, or worse, one quietly
- * allowed because the check found nothing to fail against.
- */
-export function toJurisdiction(country: string): string {
-  return country === 'GB' ? 'UK' : country;
-}
+/** One definition, in the package that owns the enum. Re-exported for callers. */
+export { toJurisdiction } from '@chittu/db';
 
 export interface ClearanceReport {
   readonly cleared: ReadonlySet<string>;
@@ -55,7 +47,7 @@ export async function readClearance(
       WHERE revoked_at IS NULL
         AND expires_at > now()
         AND jurisdiction IN (${holes})`,
-    [...markets]);
+    [...markets.map(toJurisdiction)]);
 
   const byProvider = new Map<string, Set<string>>();
   for (const row of r.rows) {

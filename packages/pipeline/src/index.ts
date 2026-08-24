@@ -54,6 +54,13 @@ export interface SessionState {
   readonly kid: string;
   readonly band: Band;
   readonly country: Country;
+  /**
+   * Resolved helpline text for this turn, from the live registry. Null means
+   * "use the compiled-in numbers" — see `crisisMain`. The pipeline never reads
+   * the registry itself; the caller resolves once and passes it in, so a turn
+   * stays a pure function of its inputs.
+   */
+  readonly helplines?: string | null;
   readonly board: string;
   readonly mode: Mode;
   readonly crisisLock: boolean;
@@ -187,7 +194,7 @@ export async function runTurn(
     const repeat = LEX.crisis.test(text);
     return await reply(
       withInput, walk, ports,
-      repeat ? crisisMain(withInput.band, withInput.country) : CRISIS_SOFT.en,
+      repeat ? crisisMain(withInput.band, withInput.country, withInput.helplines) : CRISIS_SOFT.en,
       repeat ? 'CRISIS SPINE · repeat' : 'CRISIS SPINE · calm-mode companion',
     );
   }
@@ -207,7 +214,7 @@ export async function runTurn(
       });
     }
     const body =
-      kind === 'crisis' ? crisisMain(withInput.band, withInput.country)
+      kind === 'crisis' ? crisisMain(withInput.band, withInput.country, withInput.helplines)
       : kind === 'profanity' ? PROFANITY_REPLY
       : spineFor(fx.spine as Exclude<typeof fx.spine, 'crisis' | 'profanity'>, withInput.band);
 
@@ -300,7 +307,7 @@ async function continueAfterMaths(
       });
     }
     const body = kind === 'crisis'
-      ? crisisMain(state.band, state.country)
+      ? crisisMain(state.band, state.country, state.helplines)
       : spineFor(fx.spine as 'pii' | 'unsafe' | 'identity' | 'secret', state.band);
     return await reply(state, walk, ports, body, `${fx.trace} · L2`, {
       spineCount: state.spineCount + 1,
@@ -343,7 +350,7 @@ async function continueAfterMaths(
       });
     }
     const body = kind === 'crisis'
-      ? crisisMain(afterCls.band, afterCls.country)
+      ? crisisMain(afterCls.band, afterCls.country, afterCls.helplines)
       : spineFor(fx.spine as 'pii' | 'unsafe' | 'identity' | 'secret', afterCls.band);
     return await reply(afterCls, walk, ports, body, `${fx.trace} · sandbox token`, {
       spineCount: afterCls.spineCount + 1,
