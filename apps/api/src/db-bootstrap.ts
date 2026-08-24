@@ -1,0 +1,54 @@
+/**
+ * Getting a database, for whoever is asking.
+ *
+ * Two DRIVERS behind one port — not two code paths. node-postgres when a
+ * DATABASE_URL exists, PGlite otherwise. PGlite is real Postgres compiled to
+ * WASM, so `pnpm dev` and CI run the same SQL, the same constraints and the same
+ * RLS as production; only the transport differs.
+ */
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { createPgPool, wrapPglite, localKeyProvider, devMasterKeyFromEnv,
+  type DbPool, type KeyProvider } from '@chittu/db';
+
+export interface Bootstrapped {
+  readonly pool: DbPool;
+  readonly keys: KeyProvider;
+  readonly driver: 'postgres' | 'pglite';
+}
+
+/** Apply every migration in order, with the pgvector DDL shimmed for PGlite. */
+export async function applyMigrations(
+  exec: (sql: string) => Promise<unknown>, forPglite: boolean,
+): Promise<void> {
+  const dir = fileURLToPath(new URL('../../../db/migrations/', import.meta.url));
+  for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) {
+    let sql = readFileSync(dir + f, 'utf8');
+    if (forPglite) {
+      // PGlite has no pgvector build; the corpus DDL is the only casualty
+      sql = sql.replace(/CREATE EXTENSION IF NOT EXISTS vector;.*\n/, '')
+               .replace(/vector\(1024\)/g, 'real[]')
+               .replace(/CREATE INDEX corpus_chunk_ann[\s\S]*?;\n/, '');
+    }
+    await exec(sql);
+  }
+}
+
+export async function bootstrapDb(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Bootstrapped> {
+  const keys = localKeyProvider(devMasterKeyFromEnv(env), env['NODE_ENV'] ?? 'dev');
+  const url = env['DATABASE_URL'];
+  if (url) {
+    return { pool: await createPgPool({ connectionString: url }), keys, driver: 'postgres' };
+  }
+  if (env['NODE_ENV'] === 'production') {
+    throw new Error('DATABASE_URL is required in production');
+  }
+  const { PGlite } = await import('@electric-sql/pglite');
+  const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
+  const pg = await PGlite.create({ extensions: { pgcrypto } });
+  await applyMigrations((sql) => pg.exec(sql), true);
+  await pg.exec(`INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);
+  return { pool: wrapPglite(pg as never), keys, driver: 'pglite' };
+}

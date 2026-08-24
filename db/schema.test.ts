@@ -10,13 +10,12 @@
  * statements are shimmed out and remain unverified here; everything else is the
  * genuine article.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
-import { PGlite } from '@electric-sql/pglite';
-import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTestDb } from '../packages/db/src/testing';
 
-let db: PGlite;
+let fixture: Awaited<ReturnType<typeof createTestDb>>;
+let db: { query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
+  Promise<{ rows: R[] }>; };
 
 /** parent.email_hash is UNIQUE, so each fixture needs its own. */
 let fixtureSeq = 0;
@@ -26,8 +25,9 @@ async function seedFamily(env: 'dev' | 'prod' = 'dev') {
   // bytea goes in as a literal, not a bound parameter: PGlite binds bytea from a
   // Uint8Array and rejects a hex string, which reads as "Invalid input for bytea type".
   const uniq = `\\x${(++fixtureSeq).toString(16).padStart(8, '0')}`;
-  await db.exec(`DELETE FROM deployment;
-    INSERT INTO deployment (env, region) VALUES ('${env}', 'ap-south-1');`);
+  await db.query(`DELETE FROM deployment`);
+  await db.query(
+    `INSERT INTO deployment (env, region) VALUES ($1, 'ap-south-1')`, [env]);
   const p = await db.query<{ id: string }>(
     `INSERT INTO parent (email_hash, email_enc) VALUES ('${uniq}', '\\x02') RETURNING id`);
   const parentId = p.rows[0]!.id;
@@ -56,14 +56,11 @@ async function rejects(sql: string, params: unknown[] = [], matching?: RegExp) {
 }
 
 beforeAll(async () => {
-  const path = fileURLToPath(new URL('./migrations/0001_init.sql', import.meta.url));
-  let sql = readFileSync(path, 'utf8');
-  sql = sql.replace(/CREATE EXTENSION IF NOT EXISTS vector;.*\n/, '')
-           .replace(/vector\(1024\)/g, 'real[]')
-           .replace(/CREATE INDEX corpus_chunk_ann[\s\S]*?;\n/, '');
-  db = await new PGlite({ extensions: { pgcrypto } });
-  await db.exec(sql);
-}, 120_000);
+  fixture = await createTestDb();
+  db = fixture.pool;
+}, 180_000);
+
+afterAll(async () => { await fixture.close(); });
 
 // ---------------------------------------------------------------------------
 
@@ -349,7 +346,7 @@ describe('revocation actually erases', () => {
 
     // SET LOCAL only applies inside a transaction — outside one it is a no-op,
     // and revoke_and_erase now refuses an unscoped call.
-    await db.transaction(async (tx) => {
+    await fixture.pool.transaction(async (tx) => {
       await tx.query(`SET LOCAL chittu.child_id = '${childId}'`);
       await tx.query(`SELECT revoke_and_erase($1, 'parent request')`, [childId]);
     });
@@ -378,7 +375,7 @@ describe('revocation actually erases', () => {
     // a silent no-op on an erasure request is the worst failure this system has
     let err: Error | null = null;
     try {
-      await db.transaction(async (tx) => {
+      await fixture.pool.transaction(async (tx) => {
         await tx.query(`SET LOCAL chittu.child_id = '${a.childId}'`);
         await tx.query(`SELECT revoke_and_erase($1, 'wrong scope')`, [b.childId]);
       });

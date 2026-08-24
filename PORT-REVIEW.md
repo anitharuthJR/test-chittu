@@ -235,3 +235,74 @@ weaker than it looks. Revocation also nulls the bearer token, so two independent
 mechanisms refuse a revoked consent and an API-level test cannot tell which fired.
 The status path is therefore covered directly by unit tests in `@chittu/consent`.
 Worth remembering if either layer is ever simplified away.
+
+---
+
+## 10. Wiring to Postgres — five defects, and how each was found
+
+### FIXED — `chittu_app` had five RLS policies and no table grants
+
+A policy NARROWS access a role already has; it confers none. The application role
+could not read or write a single row, and the five carefully-scoped policies were
+inert. Invisible because every schema test ran as **superuser**, which bypasses
+both grants and RLS. Found by writing a test that does `SET ROLE chittu_app`.
+
+### FIXED — `UNIQUE(hash)` rejected the second child to ask the same first question
+
+Both chains started from a shared `GENESIS`, so two sessions whose first turn was
+identical produced the same payload hash from the same previous hash — hence the
+same record hash. Two children opening with *"why is the sky blue"* is not an edge
+case. Each session now starts from `GENESIS|<sessionId>`, which also means a
+record cannot be lifted from one child's chain into another's.
+
+### FIXED — `audit_event.layer` was the wrong type
+
+Typed as the `pipeline_layer` enum, on the assumption that the seal carries a
+machine-readable layer. It does not: the prototype seals the human-readable TRACE
+LABEL, because that string is what the parent's ledger displays. Now `text`, with
+the ordered machine-readable walk stored in `message.trace` instead. One column,
+one job.
+
+### FIXED — rate limiting was silently absent from every route
+
+`app.register()` defers plugin loading until `ready()`, so routes declared
+synchronously afterwards were registered before the plugin's `onRequest` hook
+existed — and the hook never reached them. A flood of `/health` returned 200 six
+times out of six with `max: 3`.
+
+This one is worth dwelling on. The architecture doc claims rate limiting protects
+the PIN endpoint, and the PIN lockout is what actually defends a 4-digit secret.
+`buildServer` is now async so the registration is awaited, and a regression test
+floods a route and asserts a 429 — because "we registered the plugin" was never
+evidence that anything was limited.
+
+### FIXED — a repository read from the pool inside its caller's transaction
+
+`loadSession` called `consent.byId()`, which used the pool while the caller held a
+transaction. On PGlite — one connection — that deadlocks, which is how it was
+found. On real Postgres it would NOT have deadlocked; it would have taken a second
+connection and quietly read a different snapshot than the one being written.
+Repository reads now take a `Db` handle, so "which transaction is this in?" cannot
+be fudged.
+
+### NEEDS A DECISION — a teen's words now exist in one place
+
+`message.body_enc` refuses a body for `thinker`, so the classifier's 3-message
+rolling window has nowhere to live across requests. Without it the classifier
+loses context for exactly the band whose turns most need it.
+
+It is currently in `session.runtime_enc`: encrypted under the child's DEK, session
+lifetime rather than 30 days, destroyed by the crypto-shred. But it is still a
+teen's words at rest, and the Session 001 ruling says they are not stored.
+**Chamber II should decide** whether the trade is right, or whether teen
+classification should degrade instead.
+
+### NOTED — what PGlite does not test
+
+PGlite is real Postgres (WASM), so constraints, triggers, RLS and plpgsql are the
+genuine article with no container to run. Three things it does not cover:
+`CREATE EXTENSION vector`, the `vector(1024)` column and the HNSW index are shimmed
+out; there is only one connection, so lock contention and serialization failures
+are unexercised; and it is not the RDS binary. A `docker compose` Postgres 16 +
+pgvector run of the same suite via `DATABASE_URL` would close all three — the `Db`
+port and `bootstrapDb()` already support it.
