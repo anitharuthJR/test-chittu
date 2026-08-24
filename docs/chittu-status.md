@@ -78,7 +78,7 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
 | **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels | `apps/web` |
-| **Tests** | **962**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Tests** | **1057**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is now real — Anthropic
 adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never
@@ -94,6 +94,40 @@ was keeping one in `localStorage` where the child could read it. Credentials now
 cookies and destructive routes require a PIN-minted parent session. See PORT-REVIEW.
 
 **Still true, and the only sentence that matters:** no child has ever used any of it.
+
+---
+
+## 2c. Deployment — what exists as of 2026-08-25
+
+Nothing is deployed. Nothing has ever been deployed. What exists is the path.
+
+| Piece | State | Where |
+|---|---|---|
+| **Container** | Built and driven. Four stages, distroless runtime, no TypeScript / sources / shell / package manager in the image. 522MB → 231MB | `apps/api/Dockerfile` |
+| **Compiled output** | Every package emits to `dist/`; the runtime is plain node | `*/tsconfig.build.json` |
+| **Local stack** | `docker compose --profile dev up` — Postgres 16 + pgvector, a migration task that runs to completion, then the API | `compose.yaml` |
+| **Migrations** | Explicit runner with a `schema_migration` ledger, applied in a transaction with its ledger row | `apps/api/src/migrate.ts` |
+| **Artifact smoke test** | Drives the COMPILED build over HTTP: consent → session → maths → crisis, two bands, 30 checks | `scripts/smoke-dist.mjs` |
+| **Terraform** | 4 modules + `envs/dev`. `fmt`, `init`, `validate` clean. **`plan` and `apply` NEVER RUN** | `infra/` |
+| **One command** | `pnpm verify --all` — 10 lanes, including the container lane that builds the image and drives it on real Postgres | `scripts/verify.sh` |
+
+**What is deliberately absent from `infra/`:** `staging/`, `prod/`, and §14's `model/` and
+`training/` modules. Those would be invented values and undesigned infrastructure. §14's
+argument for Terraform is that "an auditor can read Terraform" — that only holds if what
+they read is a decision someone made. See `infra/README.md`.
+
+**The blocking gap for a real deployment is not infrastructure.** It is an AWS account, an
+ACM certificate, a provider key in Secrets Manager, and a human reading the first `plan`.
+The code is ready for a `plan` it has never had.
+
+### The bug that closing this found
+
+The 1054-test suite was green while the compiled artifact could not boot. Every relative
+import in `packages/` was extensionless (`export * from './client'`), which resolves under
+vitest and Vite and not at all under Node's ESM resolver — and tests resolve `@chittu/*`
+through the `development` export condition, i.e. the **sources**. The suite was reporting on
+`src/` and being read as reporting on the artifact. This is the sixth entry in §8b's pattern
+and the reason `scripts/smoke-dist.mjs` exists: it drives the thing that ships.
 
 ---
 
@@ -273,7 +307,8 @@ In dependency order, not ease order:
 
 1. ~~Fix `eval_guard.py` and re-baseline~~ — **done 2026-08-24** (§8.1). The local-model track is unblocked and now has an honest target: close the four real misses in §7, above run-to-run drift.
 2. **Start the consent engine** (G1). Longest lead time; everything else can proceed in parallel.
-3. **Stand up the backend** — TypeScript + Fastify, all guards server-side, safety kernel as one small auditable package. Port semantics; do not rewrite them. The browser must stop holding the provider key.
-4. **Build the red-team corpus** (G2) and wire it as a CI release gate: zero criticals to ship.
+3. ~~**Stand up the backend**~~ — **done** (§2b). Guards are server-side, the browser holds no credential, and the artifact is a distroless container verified end to end (§2c).
+4. **Build the red-team corpus** (G2) and wire it into `pnpm verify` as a release gate: zero criticals to ship. Note the gate is now LOCAL — GitHub Actions was removed on 2026-08-25 because it had been failing every run at 3s on an account billing block, providing noise rather than signal. `scripts/verify.sh` runs what it ran.
 5. **Port the 246-assertion suite** to API-level contract tests.
 6. **Convene children's panel #1** (G5) — the only gap nothing else can substitute for.
+7. **First `terraform plan`** against an empty dev account, read line by line by a human before any `apply` (§2c, `infra/README.md`). Everything up to that line is written and checked; that line has never been crossed.

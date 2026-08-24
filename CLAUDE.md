@@ -73,8 +73,22 @@ Read these two documents before any non-trivial change — they are the authorit
   2026-08-25 (it had failed every run at 3s on an org billing block, so it was noise, not
   signal). `scripts/verify.sh` runs exactly what CI ran: typecheck, the full suite, the web
   bundle budget, Playwright, the guard grader, corpus leakage and the L1 crisis gate.
-  `pnpm verify --with-pg` adds the real-Postgres lane. There is no second pair of eyes now,
-  so running it is the whole quality gate.
+  `--with-pg` adds the real-Postgres lane, `--with-container` builds the image and drives
+  it, `--all` does both. There is no second pair of eyes now, so running it is the whole
+  quality gate.
+- **`pnpm test` proves nothing about the artifact that ships.** Tests resolve `@chittu/*`
+  through the `development` export condition — the SOURCES. The container runs `dist/*.js`
+  through the `default` condition: different files, a different resolver, different rules.
+  1054 tests were green while the compiled build could not boot at all. So:
+  **every relative import in `packages/` and `apps/api` carries an explicit `.js`** — that is
+  what Node's ESM resolver requires and what a consumer compiling against a generated
+  `.d.ts` under `moduleResolution: nodenext` demands. Extensionless resolves under vitest and
+  Vite and nowhere else. `pnpm verify` has a `compile to dist` lane for the cheap half, and
+  `scripts/smoke-dist.mjs` (via `--with-container`) drives the real thing.
+- **`infra/` has never been applied.** `fmt`, `init -backend=false` and `validate` are clean;
+  `plan` and `apply` have never run and there is no state and no backend. Do not describe it
+  as deployed infrastructure. `staging/`, `prod/`, `model/` and `training/` are deliberately
+  unwritten — see `infra/README.md` for why inventing them would be worse than their absence.
 - **Mutation-test the guards you add.** Break the thing on purpose and confirm tests go red: removing the Law 02 gate must fail 5 tests, disabling the control-token strip must fail 5, disabling the escalation-leak check must fail 6. A guard whose removal is silent is not a guard.
 
 ## When building the backend (Phase 1)
