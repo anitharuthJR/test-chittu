@@ -1,1 +1,11 @@
 WAITING for PROTOCOL-COMPLETE ...
+PROTOCOL FINISHED — merging rebalance rows
+total=5250  train=4725  valid=525
+mix: {'UNSAFE': 831, 'CRISIS': 600, 'PII': 290, 'SPINE': 493, 'safe/teaching': 3036}
+  (of which 4398 authored teaching rows from data/authored/*.jsonl)
+corpus rows: 5250   eval prompts: 30
+✓ PASS — no leakage, no contradictions, no duplicates, no token bleed
+label mix: {'SAFE': 3036, 'CRISIS': 600, 'UNSAFE': 831, 'PII': 290, 'SPINE': 493}
+guard/safe 2214/3036 = 42/57
+CRISIS:SPINE ratio 600:493 = 1.22:1  (was 2.05:1)
+MERGE-COMPLETE
