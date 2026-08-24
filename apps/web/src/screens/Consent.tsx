@@ -2,11 +2,10 @@
  * W1 — consent and onboarding. Seven steps, then the verification gate.
  *
  * Law 02 is "consent before existence", and this screen is where that is true
- * or not. Note what it does NOT do: it never writes a consent token itself, and
- * it has no path that skips `finalize`. The token comes back from the server
- * only after an adapter returned evidence, and `rememberConsent` is called in
- * exactly one place in this file. `App.test.tsx` mutates that to prove the
- * routing gate depends on it.
+ * or not. Note what it does NOT do: it never holds a consent token, because
+ * there is no longer one to hold — `finalize` sets an httpOnly cookie and
+ * returns only the ledger. There is no path here that skips `finalize`, and no
+ * way for this screen to grant itself anything.
  *
  * Two details that are policy, not styling:
  *   - **Memory defaults ON, learning defaults OFF** (requirements §4.1). The
@@ -22,7 +21,6 @@ import { COUNTRIES } from '@chittu/contracts';
 import type { Api, ConsentMethod, MethodOffer } from '../api';
 import { ApiError } from '../api';
 import { BAND_INFO, BOARD_GROUPS, COUNTRY_NAMES, METHOD_LABELS } from '../catalog';
-import { rememberConsent } from '../store';
 
 const STEPS = 7;
 
@@ -97,8 +95,10 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
         pin: d.pin,
         pinConfirm: d.pinConfirm,
       });
-      const done = await api.finalize(draft.consentId, draft.challengeId);
-      rememberConsent(draft.consentId, done.consentToken);
+      // The token never comes back to us — `finalize` sets an httpOnly cookie.
+      // `onDone` re-asks the server what we now hold, which is the only way the
+      // client can find out.
+      await api.finalize(draft.consentId, draft.challengeId);
       onDone();
     } catch (e) {
       // A failed verification must not produce a consent, and must say so

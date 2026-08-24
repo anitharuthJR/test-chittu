@@ -30,8 +30,9 @@ Read these two documents before any non-trivial change — they are the authorit
 - `apps/web/` — the Phase 1 client: Preact + Vite, ~20 KB gzipped against a 100 KB budget that CI enforces (`pnpm --filter @chittu/web size`). It is deliberately thin — it renders the `Block[]` AST the API returns and decides nothing.
   - **`src/safety/render-guard.ts` is the one client file with a safety obligation**, and it duplicates `stripControlTokens` on purpose: importing `@chittu/safety-kernel` would bundle `L1_PATTERNS` into a child's browser and publish the guard list. `render-guard.test.ts` pins the duplicate against the kernel and fails if they diverge — fix drift in the KERNEL, never only here.
   - **Every output channel guards, not just the visible one.** `speak()` (TTS) re-guards its input; the first draft read raw API blocks and would have read aloud what the screen refused to show.
-  - Law 02 is enforced by a single early return in `App.tsx` placed *before* the router is built, so there is no route table to bypass. `App.test.tsx` proves it by asserting `POST /v1/session` is never called — removing the gate fails 5 tests.
-- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (740 tests, two Vitest projects: `server` and `web`).
+  - Law 02 is enforced by early returns in `App.tsx` placed *before* the router is built, so there is no route table to bypass. `App.test.tsx` proves it by asserting `POST /v1/session` is never called — removing the gate fails 5 tests.
+  - **The client holds no credential.** The consent token is an httpOnly cookie the server set at `finalize`; the client asks `GET /v1/consent/status` and gets a three-state answer. `unknown` renders neither the chat nor the consent form — default-deny. Nothing is written to `localStorage`, and a test asserts that.
+- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (777 tests, two Vitest projects: `server` and `web`).
 
 ## Non-negotiable invariants (Guardian Council doctrine — never change without explicit human sign-off)
 
@@ -44,6 +45,8 @@ Read these two documents before any non-trivial change — they are the authorit
 - Parent flags store category only — never a child's quoted words.
 - No engagement mechanics anywhere, including prompts: no streaks, guilt, "don't go" language, or attachment simulation.
 - Consent before existence: no code path may reach the chat before the consent ledger exists.
+- **Destructive actions require a live parent session** (`apps/api/src/cookies.ts`): erasing an account and lifting a crisis lock both need the `chittu_parent` cookie, which only a correct PIN mints and which lasts 15 minutes. Never add a destructive route that trusts a consent cookie alone — a child holds one of those.
+- Credentials travel in httpOnly cookies, never in a response body, a URL, or `localStorage`. `POST /v1/session` has no body fallback on purpose.
 
 ## Known gotchas (regression-locked — tests must cover these)
 

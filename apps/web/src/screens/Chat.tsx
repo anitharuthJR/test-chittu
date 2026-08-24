@@ -19,7 +19,7 @@ import { Composer } from '../components/Composer';
 import { CrisisPanel } from '../components/CrisisPanel';
 import { modeInfo } from '../catalog';
 import {
-  busy, consentToken, crisisLock, memories, messages, mode, nextId, push, session,
+  busy, crisisLock, memories, messages, mode, nextId, push, session,
   speechSynthesisAvailable, lite,
 } from '../store';
 
@@ -33,10 +33,13 @@ export function Chat(
   // One session per visit. The guard is a ref rather than state because two
   // renders must not produce two sessions — that would fork the seal chain.
   useEffect(() => {
-    const token = consentToken.value;
-    if (token === null || session.value !== null || opening.current) return;
+    if (session.value !== null || opening.current) return;
     opening.current = true;
-    api.openSession(token)
+    // No credential passed: the consent cookie travels with the request and the
+    // server decides. This screen is only reachable once the server already
+    // confirmed the consent is active, so a 403 here means it changed underneath
+    // us — revoked in another tab, or expired.
+    api.openSession()
       .then((s) => {
         session.value = s;
         push({
@@ -97,7 +100,7 @@ export function Chat(
     const s = session.value;
     if (s === null) return;
     try {
-      await api.forget(s.sessionId, memoryId, 'child');
+      await api.forget(s.sessionId, memoryId);
       memories.value = memories.value.filter((m) => m.id !== memoryId);
       push({ id: nextId(), role: 'system', text: 'Forgotten. It is gone from the list.' });
     } catch {

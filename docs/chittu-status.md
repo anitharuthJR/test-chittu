@@ -78,13 +78,17 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
 | **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + dashboard | `apps/web` |
-| **Tests** | **740**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Tests** | **777**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is still a stub that
 classifies every turn SAFE, so the API refuses to start with `NODE_ENV=production`. Four parent
-dashboard panels are absent (deliberately, not mocked). The consent token is a bearer credential in
-`localStorage`. Every open question is in `PORT-REVIEW.md`, which is the companion to this file for
-Phase 1 and should be read with it.
+dashboard panels are absent (deliberately, not mocked). Every open question is in `PORT-REVIEW.md`,
+which is the companion to this file for Phase 1 and should be read with it.
+
+**One real vulnerability was found and fixed here (2026-08-24):** `DELETE /v1/consent/:id`
+authenticated nothing, so a consent id alone could erase a child's entire record — and the client
+was keeping one in `localStorage` where the child could read it. Credentials now live in httpOnly
+cookies and destructive routes require a PIN-minted parent session. See PORT-REVIEW.
 
 **Still true, and the only sentence that matters:** no child has ever used any of it.
 

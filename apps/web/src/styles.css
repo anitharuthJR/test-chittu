@@ -76,6 +76,16 @@ button:disabled { cursor: default; opacity: .55; }
 
 /* ---------------------------------------------------------------- shell --- */
 
+/* Shown while the server is being asked whether this browser holds a consent.
+   It deliberately looks like waiting rather than like a product: a family who
+   is signed in sees it for a few hundred milliseconds, and a family who is not
+   sees the consent flow next. */
+.boot {
+  min-height: 100dvh; display: grid; place-content: center;
+  justify-items: center; gap: 10px; color: var(--night-60); font-weight: 700;
+}
+.boot__bird { font-size: 40px; animation: hop .9s ease-in-out infinite; }
+
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
 
 .chat {

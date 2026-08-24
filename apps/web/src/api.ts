@@ -55,10 +55,24 @@ export interface DraftResponse {
   readonly status: string;
 }
 
+/**
+ * No token. It went into an httpOnly cookie, which is the whole point — a
+ * credential in a response body is readable by every script on the page and by
+ * anything that logs a response.
+ */
 export interface FinalizeResponse {
-  readonly consentToken: string;
   readonly ledger: Readonly<Record<string, unknown>>;
 }
+
+/** The only way the client can learn whether it holds a usable consent. */
+export type StatusResponse =
+  | { readonly active: false }
+  | {
+      readonly active: true;
+      readonly band: Band;
+      readonly country: Country;
+      readonly childFirstName: string;
+    };
 
 export interface SessionResponse {
   readonly sessionId: string;
@@ -123,6 +137,12 @@ async function call<T>(
   try {
     res = await fetchImpl(path, {
       ...rest,
+      // The consent and parent cookies are httpOnly, so this is the ONLY way
+      // credentials reach the server — there is nothing for us to attach by
+      // hand. Same-origin because the dev proxy and production both put the API
+      // behind the same host; a cross-origin API would need `include` here and
+      // a CORS policy with `credentials: true` there, and neither exists.
+      credentials: 'same-origin',
       headers: rest.body !== undefined
         ? { 'content-type': 'application/json', ...rest.headers }
         : rest.headers ?? {},
@@ -168,22 +188,30 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
 
     draft: (body: DraftRequest) => go<DraftResponse>('/v1/consent/draft', json(body)),
 
+    /** Sets the consent cookie on success. Returns no credential. */
     finalize: (consentId: string, challengeId: string, proof?: unknown) =>
       go<FinalizeResponse>(
         `/v1/consent/${consentId}/finalize`,
         json(proof === undefined ? { challengeId } : { challengeId, proof })),
 
-    verifyPin: (consentId: string, pin: string) =>
-      go<PinResponse>(`/v1/consent/${consentId}/pin/verify`, json({ pin })),
+    status: () => go<StatusResponse>('/v1/consent/status'),
 
-    revoke: (consentId: string) =>
-      go<RevokeResponse>(`/v1/consent/${consentId}`, { method: 'DELETE' }),
+    // ---- parent -----------------------------------------------------------
+    // No consent id in any of these paths: the server reads the cookie. The
+    // client used to hold an id, and an id was all it took to erase an account.
+
+    /** On success the server issues a 15-minute parent-session cookie. */
+    verifyPin: (pin: string) => go<PinResponse>('/v1/parent/pin/verify', json({ pin })),
+
+    signOutParent: () => go<{ ok: boolean }>('/v1/parent/signout', { method: 'POST' }),
+
+    /** Requires a live parent session. 403 `PARENT_REQUIRED` without one. */
+    revoke: () => go<RevokeResponse>('/v1/consent', { method: 'DELETE' }),
 
     // ---- session ----------------------------------------------------------
 
-    openSession: (consentToken: string, mode?: Mode) =>
-      go<SessionResponse>('/v1/session',
-        json(mode === undefined ? { consentToken } : { consentToken, mode })),
+    openSession: (mode?: Mode) =>
+      go<SessionResponse>('/v1/session', json(mode === undefined ? {} : { mode })),
 
     /** Buffered, never streamed — L6 matches phrases (§4.2). */
     turn: (sessionId: string, text: string, mode?: Mode) =>
@@ -195,9 +223,14 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
     memories: (sessionId: string) =>
       go<{ memories: readonly Memory[] }>(`/v1/session/${sessionId}/memories`),
 
-    forget: (sessionId: string, memoryId: string, by: 'child' | 'parent') =>
+    /**
+     * Who deleted it is decided by the server from the parent cookie, not
+     * declared here. `deleted_by` is audit data, and a caller that can name
+     * itself is not evidence of anything.
+     */
+    forget: (sessionId: string, memoryId: string) =>
       go<{ forgotten: boolean }>(
-        `/v1/session/${sessionId}/memories/${memoryId}?by=${by}`, { method: 'DELETE' }),
+        `/v1/session/${sessionId}/memories/${memoryId}`, { method: 'DELETE' }),
 
     /** The only unlock path in the system. Parent action, PIN-gated in the UI. */
     ackCrisis: (sessionId: string) =>

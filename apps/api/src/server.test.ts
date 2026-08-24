@@ -12,6 +12,7 @@ import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
 import { randomBytes } from 'node:crypto';
 import { createTestDb, localKeyProvider, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
+import { CONSENT_COOKIE, PARENT_COOKIE } from './cookies.js';
 import type { ProviderRouter } from './providers.js';
 
 interface Counting extends ProviderRouter {
@@ -74,16 +75,48 @@ async function grantConsent(over: Record<string, unknown> = {}) {
     payload: { challengeId },
   });
   expect(f.statusCode, f.body).toBe(200);
-  return { consentId, token: f.json<{ consentToken: string }>().consentToken };
+  // The token is in a Set-Cookie header, NOT the body — see cookies.ts. Tests
+  // carry it the way a browser would, so they exercise the real path.
+  const cookie = f.cookies.find((c) => c.name === CONSENT_COOKIE);
+  expect(cookie, 'finalize must set the consent cookie').toBeDefined();
+  return { consentId, cookie: cookie!.value };
+}
+
+/** The Cookie header a browser would send, for whichever cookies are held. */
+function jar(consent?: string, parent?: string): Record<string, string> {
+  const parts: string[] = [];
+  if (consent !== undefined) parts.push(`${CONSENT_COOKIE}=${consent}`);
+  if (parent !== undefined) parts.push(`${PARENT_COOKIE}=${parent}`);
+  return parts.length > 0 ? { cookie: parts.join('; ') } : {};
 }
 
 async function openSession(over: Record<string, unknown> = {}) {
-  const { token } = await grantConsent(over);
+  const { cookie } = await grantConsent(over);
   const res = await app.inject({
-    method: 'POST', url: '/v1/session', payload: { consentToken: token },
+    method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json<{ sessionId: string }>().sessionId;
+}
+
+/** Consent + a live parent session, for the routes that require both. */
+async function openSessionAsParent(over: Record<string, unknown> = {}) {
+  const { consentId, cookie } = await grantConsent(over);
+  const s = await app.inject({
+    method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
+  });
+  expect(s.statusCode, s.body).toBe(201);
+  const v = await app.inject({
+    method: 'POST', url: '/v1/parent/pin/verify',
+    headers: jar(cookie), payload: { pin: '4917' },
+  });
+  expect(v.statusCode, v.body).toBe(200);
+  const parent = v.cookies.find((c) => c.name === PARENT_COOKIE);
+  expect(parent, 'a correct PIN must mint a parent session').toBeDefined();
+  return {
+    consentId, cookie, parent: parent!.value,
+    sessionId: s.json<{ sessionId: string }>().sessionId,
+  };
 }
 
 async function say(id: string, text: string) {
@@ -199,13 +232,40 @@ describe('crisis', () => {
   });
 
   it('only a parent acknowledgement unlocks it', async () => {
-    const id = await openSession();
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
     await say(id, 'i want to die');
-    const ack = await app.inject({ method: 'POST', url: `/v1/session/${id}/crisis/ack` });
-    expect(ack.statusCode).toBe(200);
+    const ack = await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+    expect(ack.statusCode, ack.body).toBe(200);
     const after = await say(id, 'why is the sky blue');
     expect(after.body.crisisLock).toBe(false);
     expect(router.calls.sandbox).toBe(1);
+  });
+
+  it('a CHILD cannot lift their own crisis lock', async () => {
+    // The whole mechanism turns on this. Before the parent cookie existed the
+    // route needed nothing at all, and a child who found the URL was a parent.
+    const id = await openSession();
+    await say(id, 'i want to die');
+    const ack = await app.inject({ method: 'POST', url: `/v1/session/${id}/crisis/ack` });
+    expect(ack.statusCode).toBe(403);
+    expect(ack.json<{ code: string }>().code).toBe('PARENT_REQUIRED');
+
+    const after = await say(id, 'why is the sky blue');
+    expect(after.body.crisisLock, 'still locked').toBe(true);
+  });
+
+  it('one family\'s parent cannot unlock another family\'s child', async () => {
+    const mine = await openSessionAsParent();
+    const theirs = await openSessionAsParent();
+    await say(theirs.sessionId, 'i want to die');
+
+    const ack = await app.inject({
+      method: 'POST', url: `/v1/session/${theirs.sessionId}/crisis/ack`,
+      headers: jar(theirs.cookie, mine.parent),        // valid cookie, wrong family
+    });
+    expect(ack.statusCode).toBe(403);
   });
 
   it('helplines follow the session’s country', async () => {
@@ -300,18 +360,29 @@ describe('the seal chain is per session and verifies', () => {
 // ---------------------------------------------------------------------------
 
 describe('Law 02 — consent before existence', () => {
-  it('refuses a session with NO consent token at all', async () => {
+  it('refuses a session with NO cookie at all', async () => {
     const res = await app.inject({ method: 'POST', url: '/v1/session', payload: {} });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ code: string }>().code).toBe('no-consent');
   });
 
-  it('refuses a session with a made-up token', async () => {
+  it('refuses a session with a made-up cookie', async () => {
     const res = await app.inject({
       method: 'POST', url: '/v1/session',
-      payload: { consentToken: 'a'.repeat(43) },
+      headers: jar('a'.repeat(43)), payload: {},
     });
     expect(res.statusCode).toBe(403);
     expect(res.json<{ code: string }>().code).toBe('no-consent');
+  });
+
+  it('refuses a token presented in the BODY — there is no fallback path', async () => {
+    // Two ways in would make the safe one optional. The body field is not in
+    // the schema, so presenting it is a 400 rather than a quiet success.
+    const { cookie } = await grantConsent();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/session', payload: { consentToken: cookie },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('issues NO token until the consent is finalized', async () => {
@@ -345,28 +416,30 @@ describe('Law 02 — consent before existence', () => {
     });
     expect(f.statusCode).toBe(422);
     expect(f.json<Record<string, unknown>>()).not.toHaveProperty('consentToken');
+    expect(f.cookies.find((c) => c.name === CONSENT_COOKIE),
+      'a failed verification must not set a cookie either').toBeUndefined();
   });
 
   it('the BAND comes from the sealed consent, not from the request', async () => {
     // a client cannot ask for a different band than it was granted: there is no
     // field on the session route through which to try
-    const { token } = await grantConsent({ band: 'explorer' });
+    const { cookie } = await grantConsent({ band: 'explorer' });
     const res = await app.inject({
       method: 'POST', url: '/v1/session',
-      payload: { consentToken: token, band: 'thinker' },
+      headers: jar(cookie), payload: { band: 'thinker' },
     });
     expect(res.statusCode, 'band is not an accepted field').toBe(400);
 
     const ok = await app.inject({
-      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
     });
     expect(ok.json<{ band: string }>().band).toBe('explorer');
   });
 
   it('memory is a SCOPE, not something the client turns on', async () => {
-    const { token } = await grantConsent({ memoryOn: false });
+    const { cookie } = await grantConsent({ memoryOn: false });
     const res = await app.inject({
-      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
     });
     expect(res.statusCode).toBe(201);
     // proven by behaviour: a memory the classifier offers is not saved
@@ -379,34 +452,82 @@ describe('Law 02 — consent before existence', () => {
 
 describe('revocation propagates', () => {
   it('ends live sessions and refuses new ones', async () => {
-    const { consentId, token } = await grantConsent();
-    const s = await app.inject({
-      method: 'POST', url: '/v1/session', payload: { consentToken: token },
-    });
-    const sid = s.json<{ sessionId: string }>().sessionId;
+    const { cookie, parent, sessionId: sid } = await openSessionAsParent();
     expect((await say(sid, 'why is the sky blue')).status).toBe(200);
 
-    const rev = await app.inject({ method: 'DELETE', url: `/v1/consent/${consentId}` });
-    expect(rev.statusCode).toBe(200);
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent', headers: jar(cookie, parent),
+    });
+    expect(rev.statusCode, rev.body).toBe(200);
     expect(rev.json<{ sessionsEnded: number }>().sessionsEnded).toBe(1);
 
     // 409, not 404: the session existed and was ended by the revocation. Saying
     // "not found" would be a small lie about something a parent just did.
     expect((await say(sid, 'still there?')).status).toBe(409);
-    // and the token no longer opens a new one
+    // and the cookie no longer opens a new one
     const again = await app.inject({
-      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
     });
     expect(again.statusCode).toBe(403);
   });
 
+  it('CANNOT be triggered without a parent session', async () => {
+    // This is the hole the parent cookie closes. The route used to take a
+    // consent id in the path and check NOTHING, and the client was keeping an
+    // id in localStorage where the child could read it.
+    const { cookie } = await grantConsent();
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent', headers: jar(cookie),
+    });
+    expect(rev.statusCode).toBe(403);
+    expect(rev.json<{ code: string }>().code).toBe('PARENT_REQUIRED');
+
+    // and nothing was erased
+    const still = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
+    });
+    expect(still.statusCode).toBe(201);
+  });
+
+  it('CANNOT be triggered with a forged parent cookie', async () => {
+    const { cookie } = await grantConsent();
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent',
+      headers: jar(cookie, `${'c'.repeat(36)}|${Date.now() + 60_000}|deadbeef`),
+    });
+    expect(rev.statusCode).toBe(403);
+  });
+
+  it('one family cannot erase another family', async () => {
+    const mine = await openSessionAsParent();
+    const theirs = await grantConsent();
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent',
+      headers: jar(theirs.cookie, mine.parent),      // valid signature, wrong consent
+    });
+    expect(rev.statusCode).toBe(403);
+  });
+
   it('returns the sealed ledger as proof the consent existed and was withdrawn', async () => {
-    const { consentId } = await grantConsent();
-    const rev = await app.inject({ method: 'DELETE', url: `/v1/consent/${consentId}` });
+    const { cookie, parent } = await openSessionAsParent();
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent', headers: jar(cookie, parent),
+    });
     const ledger = rev.json<{ ledger: { status: string; revokedAt: string; sealHash: string } }>().ledger;
     expect(ledger.status).toBe('revoked');
     expect(ledger.revokedAt).toBeTruthy();
     expect(ledger.sealHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('clears both cookies, so the browser stops presenting dead credentials', async () => {
+    const { cookie, parent } = await openSessionAsParent();
+    const rev = await app.inject({
+      method: 'DELETE', url: '/v1/consent', headers: jar(cookie, parent),
+    });
+    const names = rev.cookies.map((c) => c.name);
+    expect(names).toContain(CONSENT_COOKIE);
+    expect(names).toContain(PARENT_COOKIE);
+    for (const c of rev.cookies) expect(c.value).toBe('');
   });
 });
 
@@ -461,23 +582,52 @@ describe('parent PIN over HTTP', () => {
   });
 
   it('verifies the right PIN and refuses the wrong one', async () => {
-    const { consentId } = await grantConsent();
+    const { cookie } = await grantConsent();
     const good = await app.inject({
-      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4917' },
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4917' },
     });
     expect(good.statusCode).toBe(200);
     const bad = await app.inject({
-      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4918' },
     });
     expect(bad.statusCode).toBe(401);
   });
 
+  it('mints a parent session ONLY on a correct PIN', async () => {
+    const { cookie } = await grantConsent();
+    const bad = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4918' },
+    });
+    expect(bad.cookies.find((c) => c.name === PARENT_COOKIE)).toBeUndefined();
+
+    const good = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4917' },
+    });
+    const minted = good.cookies.find((c) => c.name === PARENT_COOKIE);
+    expect(minted).toBeDefined();
+    expect(minted!.httpOnly, 'the parent session must not be readable by script').toBe(true);
+    expect(minted!.sameSite?.toLowerCase()).toBe('strict');
+  });
+
+  it('refuses a PIN with no consent cookie, in the same shape as a wrong PIN', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify', payload: { pin: '4917' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toEqual({ ok: false, locked: false });
+  });
+
   it('locks out after five wrong attempts, and says so once', async () => {
-    const { consentId } = await grantConsent();
+    const { cookie } = await grantConsent();
     const tries = [];
     for (let i = 0; i < 6; i++) {
       const r = await app.inject({
-        method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+        method: 'POST', url: '/v1/parent/pin/verify',
+        headers: jar(cookie), payload: { pin: '4918' },
       });
       tries.push(r.json<{ locked: boolean; note?: string }>());
     }
@@ -487,28 +637,32 @@ describe('parent PIN over HTTP', () => {
     expect(tries[5]!.note, 'flagged once, not on every later try').toBeUndefined();
   });
 
-  it('a correct PIN during lockout still fails', async () => {
-    const { consentId } = await grantConsent();
+  it('a correct PIN during lockout still fails, and mints nothing', async () => {
+    const { cookie } = await grantConsent();
     for (let i = 0; i < 5; i++) {
       await app.inject({
-        method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+        method: 'POST', url: '/v1/parent/pin/verify',
+        headers: jar(cookie), payload: { pin: '4918' },
       });
     }
     const r = await app.inject({
-      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4917' },
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4917' },
     });
     expect(r.statusCode).toBe(401);
     expect(r.json<{ locked: boolean }>().locked).toBe(true);
+    expect(r.cookies.find((c) => c.name === PARENT_COOKIE)).toBeUndefined();
   });
 
-  it('does not reveal whether a consent id exists', async () => {
+  it('does not reveal whether a cookie belongs to a real consent', async () => {
     const real = await grantConsent();
     const a = await app.inject({
-      method: 'POST', url: `/v1/consent/${real.consentId}/pin/verify`, payload: { pin: '4918' },
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(real.cookie), payload: { pin: '4918' },
     });
     const b = await app.inject({
-      method: 'POST', url: '/v1/consent/11111111-1111-4111-8111-111111111111/pin/verify',
-      payload: { pin: '4918' },
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar('b'.repeat(43)), payload: { pin: '4918' },
     });
     expect(a.statusCode).toBe(b.statusCode);
   });
@@ -656,5 +810,116 @@ describe('the memory book', () => {
       url: `/v1/session/${id}/memories/11111111-1111-4111-8111-111111111111?by=admin`,
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('the consent token never leaves the cookie', () => {
+  it('finalize returns a ledger and no credential', async () => {
+    const d = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', parentEmail: `c${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
+        method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    const { consentId, challengeId } = d.json<{ consentId: string; challengeId: string }>();
+    const f = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/finalize`, payload: { challengeId },
+    });
+
+    expect(f.statusCode, f.body).toBe(200);
+    const token = f.cookies.find((c) => c.name === CONSENT_COOKIE)!.value;
+    expect(token.length).toBeGreaterThan(20);
+    // The body must not contain it anywhere — not as a field, not nested in the
+    // ledger. A response body is readable by every script on the page.
+    expect(f.body).not.toContain(token);
+    expect(f.json<Record<string, unknown>>()).not.toHaveProperty('consentToken');
+  });
+
+  it('sets httpOnly and SameSite=Strict', async () => {
+    const { consentId, challengeId } = await (async () => {
+      const d = await app.inject({
+        method: 'POST', url: '/v1/consent/draft',
+        payload: {
+          parentName: 'L', parentEmail: `c${++seq}@example.com`,
+          childFirstName: 'M', country: 'IN', band: 'builder',
+          method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+        },
+      });
+      return d.json<{ consentId: string; challengeId: string }>();
+    })();
+    const f = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/finalize`, payload: { challengeId },
+    });
+    const c = f.cookies.find((x) => x.name === CONSENT_COOKIE)!;
+    expect(c.httpOnly, 'a script must never be able to read it').toBe(true);
+    expect(c.sameSite?.toLowerCase()).toBe('strict');
+    expect(c.path).toBe('/');
+  });
+
+  it('sets Secure outside development', async () => {
+    // Omitted in dev only, so the cookie works over plain-HTTP localhost. Any
+    // deployed environment must not send a child's credential in the clear.
+    const prod = await buildServer({
+      pool, keys, router: countingRouter(), env: 'staging', rateLimitMax: 100_000,
+    });
+    await prod.ready();
+    try {
+      const d = await prod.inject({
+        method: 'POST', url: '/v1/consent/draft',
+        payload: {
+          parentName: 'L', parentEmail: `c${++seq}@example.com`,
+          childFirstName: 'M', country: 'IN', band: 'builder',
+          method: 'signed_form_review', pin: '4917', pinConfirm: '4917',
+        },
+      });
+      // dev_stub is refused outside dev, so this uses a real adapter and a
+      // named reviewer to reach an actual activation.
+      const { consentId, challengeId } = d.json<{ consentId: string; challengeId: string }>();
+      const f = await prod.inject({
+        method: 'POST', url: `/v1/consent/${consentId}/finalize`,
+        payload: { challengeId, proof: { reviewerId: 'ops@tulifo.ai', documentDigest: 'sha256:abc' } },
+      });
+      const c = f.cookies.find((x) => x.name === CONSENT_COOKIE);
+      expect(c, f.body).toBeDefined();
+      expect(c!.secure).toBe(true);
+    } finally {
+      await prod.close();
+    }
+  });
+});
+
+describe('GET /v1/consent/status', () => {
+  it('says no for a browser with no cookie', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/consent/status' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ active: false });
+  });
+
+  it('returns the band from the sealed record, and no credential', async () => {
+    const { cookie } = await grantConsent({ band: 'explorer' });
+    const res = await app.inject({
+      method: 'GET', url: '/v1/consent/status', headers: jar(cookie),
+    });
+    const body = res.json<{ active: boolean; band: string; childFirstName: string }>();
+    expect(body.active).toBe(true);
+    expect(body.band).toBe('explorer');
+    expect(body.childFirstName).toBe('Meera');
+    // Nothing here may be used to authenticate anything.
+    expect(res.body).not.toContain(cookie);
+    expect(body).not.toHaveProperty('consentId');
+  });
+
+  it('says no AND clears the cookie once the consent is revoked', async () => {
+    const { cookie, parent } = await openSessionAsParent();
+    await app.inject({ method: 'DELETE', url: '/v1/consent', headers: jar(cookie, parent) });
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/consent/status', headers: jar(cookie),
+    });
+    expect(res.json<{ active: boolean }>().active).toBe(false);
+    const cleared = res.cookies.find((c) => c.name === CONSENT_COOKIE);
+    expect(cleared?.value, 'stop presenting a credential that means nothing').toBe('');
   });
 });

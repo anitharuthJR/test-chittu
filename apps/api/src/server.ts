@@ -12,8 +12,9 @@
  * production runs. Tests use PGlite, which IS Postgres.
  */
 
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { runTurn } from '@chittu/pipeline';
 import type { Band, Country, Mode } from '@chittu/contracts';
@@ -27,6 +28,10 @@ import {
 import type { DbPool, KeyProvider } from '@chittu/db';
 import { type ProviderRouter, stubRouter } from './providers.js';
 import { createStore } from './store.js';
+import {
+  setConsentCookie, clearConsentCookie, readConsentCookie,
+  setParentCookie, clearParentCookie, parentFor,
+} from './cookies.js';
 
 export interface BuildOptions {
   readonly pool: DbPool;
@@ -81,6 +86,12 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       },
     },
   });
+
+  // Before the routes, for the same reason the rate limiter is: `register` only
+  // takes effect at `ready()`, so anything declared before it never sees the
+  // decorator. A route reading `req.cookies` without this gets `undefined` and
+  // silently behaves as though nobody is signed in.
+  await app.register(cookie);
 
   await app.register(rateLimit, {
     max: opts.rateLimitMax ?? 120,
@@ -186,7 +197,12 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
         const evidence = await adapter.complete(req.body.challengeId, req.body.proof);
         const active = activate(markVerifying2(stored.record), evidence);
         const { token } = await store.consent.activate(req.params.id, evidence, active);
-        return reply.send({ consentToken: token, ledger: active });
+        // The token goes into an httpOnly cookie and NOT into the body. It is a
+        // bearer credential: anything that can read it can open a session as
+        // this child, and a response body is readable by every script on the
+        // page and by anything that logs responses.
+        setConsentCookie(reply, token, { env });
+        return reply.send({ ledger: active });
       } catch (e) {
         // A failed verification must NOT produce a consent. Say so plainly.
         return reply.code(422).send({
@@ -196,16 +212,83 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       }
     });
 
-  app.delete<{ Params: { id: string } }>('/v1/consent/:id', async (req, reply) => {
-    const stored = await store.consent.byId(opts.pool, req.params.id);
-    if (!stored) return reply.code(404).send({ error: 'no such consent' });
+  /**
+   * Who this request is, from the cookie alone.
+   *
+   * Nothing identifying a family travels in a URL or a body any more. The
+   * previous shape took a consent id from the path, which meant the client had
+   * to hold one — and a consent id was enough to erase an account.
+   */
+  async function consentFromCookie(req: FastifyRequest) {
+    const token = readConsentCookie(req);
+    if (token === null) return null;
+    return store.consent.findByToken(opts.pool, token);
+  }
+
+  /**
+   * Does the browser hold an active consent? The client cannot read an httpOnly
+   * cookie, so it cannot answer this itself — and that is the point: the SERVER
+   * decides whether the chat is reachable, and the client asks.
+   *
+   * Returns no consent id and no token. The band and country are already
+   * governed by the sealed record; they are here so the client can size its
+   * touch targets without a second round trip.
+   */
+  app.get('/v1/consent/status', async (req, reply) => {
+    const presented = readConsentCookie(req) !== null;
+    // Any cookie that does NOT resolve to an active consent gets cleared —
+    // including the revoked case, where `findByToken` returns nothing at all
+    // because revocation nulls `token_hash`. The first version of this only
+    // cleared when the record resolved but failed `assertActiveConsent`, which
+    // meant the one path that matters most left the browser presenting a dead
+    // credential on every request for ninety days.
+    const dead = (): void => { if (presented) clearConsentCookie(reply, { env }); };
+
+    const stored = await consentFromCookie(req);
+    if (!stored) { dead(); return reply.send({ active: false }); }
+    try {
+      const active = assertActiveConsent(stored.record);
+      return reply.send({
+        active: true,
+        band: active.record.band,
+        country: active.record.country,
+        childFirstName: active.record.childFirstName,
+      });
+    } catch {
+      dead();
+      return reply.send({ active: false });
+    }
+  });
+
+  /**
+   * Revocation, and the hole this closes.
+   *
+   * This used to be `DELETE /v1/consent/:id` with NO authentication at all: a
+   * consent id was sufficient to erase a child's entire record, and the client
+   * was keeping one in `localStorage` where the child could read it. It now
+   * requires the consent cookie AND a live parent session, so erasure is a
+   * thing only someone who has entered the PIN in the last fifteen minutes can
+   * do.
+   */
+  app.delete('/v1/consent', async (req, reply) => {
+    const stored = await consentFromCookie(req);
+    if (!stored) return reply.code(401).send({ error: 'not signed in' });
+    const parentOf = parentFor(req, await opts.keys.indexKey());
+    if (parentOf !== stored.consentId) {
+      return reply.code(403).send({
+        error: 'a parent PIN is required to erase an account',
+        code: 'PARENT_REQUIRED',
+      });
+    }
     // Count what revocation actually ended, so the parent is told a number
     // rather than a reassurance. revoke_and_erase closes them; this reads back.
     const live = await opts.pool.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM session
         WHERE child_id = $1 AND ended_at IS NULL`, [stored.childId]);
     await store.consent.revokeAndErase(stored.consentId, stored.childId, 'parent request');
-    const after = await store.consent.byId(opts.pool, req.params.id);
+    const after = await store.consent.byId(opts.pool, stored.consentId);
+    clearConsentCookie(reply, { env });
+    clearParentCookie(reply, { env });
     return reply.send({
       status: 'revoked',
       sessionsEnded: live.rows[0]?.n ?? 0,
@@ -213,8 +296,8 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     });
   });
 
-  app.post<{ Params: { id: string }; Body: { pin: string } }>(
-    '/v1/consent/:id/pin/verify', {
+  app.post<{ Body: { pin: string } }>(
+    '/v1/parent/pin/verify', {
       schema: {
         body: {
           type: 'object', required: ['pin'], additionalProperties: false,
@@ -222,9 +305,9 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
         },
       },
     }, async (req, reply) => {
-      const stored = await store.consent.byId(opts.pool, req.params.id);
-      // Same shape whether the consent exists or not — a 404 here would tell an
-      // attacker which consent ids are real.
+      const stored = await consentFromCookie(req);
+      // Same shape whether the cookie resolves or not — distinguishing "no
+      // consent" from "wrong PIN" would tell an attacker which is which.
       if (!stored) return reply.code(401).send({ ok: false, locked: false });
       const pin = await store.consent.pinFor(opts.pool, stored.parentId);
       if (!pin) return reply.code(401).send({ ok: false, locked: false });
@@ -236,10 +319,12 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       await store.consent.savePinState(
         stored.parentId, r.state.failedAttempts, r.state.lockedUntil);
       if (r.justLocked) {
-        app.log.warn({ consentId: req.params.id }, 'parent PIN locked out');
+        app.log.warn({ consentId: stored.consentId }, 'parent PIN locked out');
         await store.withChild(stored.childId, (tx) =>
           store.child.addFlag(tx, stored.childId, null as never, 'GATE', 'PIN_LOCKOUT'));
       }
+      // The parent session is minted ONLY on a correct PIN, and only here.
+      if (r.ok) setParentCookie(reply, stored.consentId, await opts.keys.indexKey(), { env });
       return reply.code(r.ok ? 200 : 401).send({
         ok: r.ok,
         locked: r.locked,
@@ -249,14 +334,19 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       });
     });
 
+  /** Ends the parent session without touching the child's. */
+  app.post('/v1/parent/signout', async (_req, reply) => {
+    clearParentCookie(reply, { env });
+    return reply.send({ ok: true });
+  });
+
   // ---- sessions -----------------------------------------------------------
 
-  app.post<{ Body: { consentToken: string; mode?: Mode } }>('/v1/session', {
+  app.post<{ Body?: { mode?: Mode } }>('/v1/session', {
     schema: {
       body: {
-        type: 'object', required: ['consentToken'], additionalProperties: false,
+        type: 'object', additionalProperties: false,
         properties: {
-          consentToken: { type: 'string', minLength: 20, maxLength: 100 },
           mode: { type: 'string', enum: [...MODES] },
         },
       },
@@ -267,7 +357,12 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     // layers must agree: the token only resolves on an ACTIVE consent
     // (token_only_when_active), assertActiveConsent re-checks the status and the
     // seal, and the record supplies every field the session uses.
-    const stored = await store.consent.findByToken(opts.pool, req.body.consentToken);
+    //
+    // The token now arrives in an httpOnly cookie rather than the body, which
+    // adds a fourth thing the client cannot do: read the credential it is
+    // presenting. There is deliberately no body fallback — two ways in would
+    // mean the safe one is optional.
+    const stored = await consentFromCookie(req);
     let active;
     try {
       active = assertActiveConsent(stored?.record);
@@ -399,7 +494,11 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     }, async (req, reply) => {
       const childId = await childForSession(req.params.id);
       if (childId === null) return reply.code(404).send({ error: 'no such session' });
-      const by = req.query.by === 'parent' ? 'parent' : 'child';
+      // `deleted_by` is audit data, so it is DERIVED from whether a live parent
+      // session is presented — never taken from the query string. The `by`
+      // parameter used to be believed, which meant the record of who deleted a
+      // memory was whatever the caller typed.
+      const by = parentFor(req, await opts.keys.indexKey()) !== null ? 'parent' : 'child';
       const forgotten = await store.withChild(childId, async (tx) => {
         const ok = await store.child.forgetMemory(tx, childId, req.params.memoryId, by);
         if (ok) {
@@ -427,27 +526,38 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
   });
 
   /**
-   * The only unlock path in the system (§4.5). It is a parent action and MUST be
-   * behind PIN verification before this ships — that binding is not wired yet, so
-   * the route is registered only outside production.
+   * The only unlock path in the system (§4.5), and it is now BOUND to the PIN.
+   *
+   * The previous version of this comment said the binding "is not wired yet, so
+   * the route is registered only outside production" — a child who found the
+   * URL could lift their own crisis lock in dev. It requires a live parent
+   * session, which exists only after a correct PIN, so it is safe to register
+   * everywhere and the env guard is gone.
    */
-  if (env !== 'prod') {
-    app.post<{ Params: { id: string } }>('/v1/session/:id/crisis/ack', async (req, reply) => {
-      const owner = await opts.pool.query<{ child_id: string; consent_id: string }>(
-        `SELECT child_id, consent_id FROM session WHERE id = $1`, [req.params.id]);
-      const row = owner.rows[0];
-      if (!row) return reply.code(404).send({ error: 'no such session' });
-      const stored = await store.consent.byId(opts.pool, row.consent_id);
-      await store.withChild(row.child_id, async (tx) => {
-        await store.child.acknowledgeCrisis(tx, req.params.id, stored!.parentId);
-        await store.audit.append(tx, {
-          sessionId: req.params.id, role: 'system', layer: 'LEDGER',
-          text: 'crisis acknowledged by parent',
-        });
+  app.post<{ Params: { id: string } }>('/v1/session/:id/crisis/ack', async (req, reply) => {
+    const owner = await opts.pool.query<{ child_id: string; consent_id: string }>(
+      `SELECT child_id, consent_id FROM session WHERE id = $1`, [req.params.id]);
+    const row = owner.rows[0];
+    if (!row) return reply.code(404).send({ error: 'no such session' });
+
+    // The parent session must be for THIS consent. A parent of one family
+    // holding a valid cookie must not be able to unlock another family's child.
+    if (parentFor(req, await opts.keys.indexKey()) !== row.consent_id) {
+      return reply.code(403).send({
+        error: 'a parent PIN is required to unlock',
+        code: 'PARENT_REQUIRED',
       });
-      return reply.send({ crisisLock: false });
+    }
+    const stored = await store.consent.byId(opts.pool, row.consent_id);
+    await store.withChild(row.child_id, async (tx) => {
+      await store.child.acknowledgeCrisis(tx, req.params.id, stored!.parentId);
+      await store.audit.append(tx, {
+        sessionId: req.params.id, role: 'system', layer: 'LEDGER',
+        text: 'crisis acknowledged by parent',
+      });
     });
-  }
+    return reply.send({ crisisLock: false });
+  });
 
   // Never leak an internal error to a child's screen. 4xx are our own validation
   // messages; 5xx are replaced, because a stack trace or a provider's error text
