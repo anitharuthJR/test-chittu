@@ -561,12 +561,19 @@ END; $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION revoke_and_erase(p_child uuid, p_reason text)
 RETURNS void AS $$
 BEGIN
-  -- Under RLS, a mismatch between p_child and the request's chittu.child_id
-  -- would make every statement below match zero rows and return successfully.
-  -- A silent no-op on an erasure request is the worst failure this system has:
-  -- the parent is told "erased" and nothing was. Fail loudly instead.
-  IF current_setting('chittu.child_id', true) IS NOT NULL
-     AND current_setting('chittu.child_id', true)::uuid <> p_child THEN
+  -- Under RLS every statement below is filtered by chittu.child_id. If that
+  -- setting is ABSENT, the policies match zero rows and this function returns
+  -- successfully having erased nothing; if it is present but DIFFERENT, likewise.
+  -- A silent no-op on an erasure request is the worst failure this system has —
+  -- the parent is told "erased" and nothing was. So demand the scope explicitly
+  -- and fail loudly on either shape. Callers must SET LOCAL chittu.child_id.
+  -- coalesce, not IS NULL: once a session has touched the key at all,
+  -- current_setting returns '' rather than NULL, and '' would fall straight
+  -- through an IS NULL guard into the silent-no-op case.
+  IF coalesce(current_setting('chittu.child_id', true), '') = '' THEN
+    RAISE EXCEPTION 'revoke_and_erase requires chittu.child_id to be set for %', p_child;
+  END IF;
+  IF current_setting('chittu.child_id', true)::uuid <> p_child THEN
     RAISE EXCEPTION 'revoke_and_erase called for % under a session scoped to %',
       p_child, current_setting('chittu.child_id', true);
   END IF;
@@ -695,8 +702,11 @@ CREATE TABLE training_signal (
     CHECK (state = 'PENDING_HUMAN_REVIEW' OR reviewed_by IS NOT NULL),
   -- The abstractor's output vocabulary only. Rejects raw prose reaching this
   -- column by any route: no capitals, no punctuation beyond placeholders.
+  -- NB: Postgres regex bounds max out at 255, so the length lives in its own
+  -- check rather than a {1,300} repetition — which is a compile error, and one
+  -- that a syntax-only parse will happily accept.
   CONSTRAINT shape_is_abstracted
-    CHECK (shape ~ '^[a-z0-9 <>_?''-]{1,300}$')
+    CHECK (shape ~ '^[a-z0-9 <>_?''-]+$' AND length(shape) BETWEEN 1 AND 300)
 );
 CREATE INDEX signal_triage_idx ON training_signal(failure_class, state, k_sessions DESC);
 
