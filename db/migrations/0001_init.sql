@@ -220,6 +220,17 @@ CREATE TRIGGER consent_no_dev_stub
   BEFORE INSERT OR UPDATE ON consent_record
   FOR EACH ROW EXECUTE FUNCTION reject_dev_stub_in_prod();
 
+-- Bearer token for opening a session. Stored as a keyed hash: a credential at
+-- rest is not the same thing as an identifier at rest. See db/migrations/0002.
+ALTER TABLE consent_record
+  ADD COLUMN token_hash bytea,
+  ADD COLUMN token_issued_at timestamptz;
+CREATE UNIQUE INDEX consent_token_unique
+  ON consent_record (token_hash) WHERE token_hash IS NOT NULL;
+ALTER TABLE consent_record
+  ADD CONSTRAINT token_only_when_active
+  CHECK (token_hash IS NULL OR status = 'active');
+
 -- =============================================================================
 -- 3. CHILD RUNTIME  (sessions, messages, memories)
 -- =============================================================================
@@ -537,17 +548,25 @@ ALTER TABLE memory  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE flag    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message ENABLE ROW LEVEL SECURITY;
 
+-- NULLIF: once a session has touched the key, current_setting returns '' rather
+-- than NULL, and ''::uuid raises rather than matching nothing. Fail closed means
+-- returning no rows, not returning a 500 — and the same empty-vs-null confusion
+-- already had to be fixed once in revoke_and_erase.
 CREATE POLICY child_scope ON child   FOR ALL TO chittu_app
-  USING (id = current_setting('chittu.child_id', true)::uuid);
+  USING (id = NULLIF(current_setting('chittu.child_id', true), '')::uuid);
 CREATE POLICY session_scope ON session FOR ALL TO chittu_app
-  USING (child_id = current_setting('chittu.child_id', true)::uuid);
+  USING (child_id = NULLIF(current_setting('chittu.child_id', true), '')::uuid);
 CREATE POLICY memory_scope ON memory  FOR ALL TO chittu_app
-  USING (child_id = current_setting('chittu.child_id', true)::uuid);
+  USING (child_id = NULLIF(current_setting('chittu.child_id', true), '')::uuid);
 CREATE POLICY flag_scope ON flag      FOR ALL TO chittu_app
-  USING (child_id = current_setting('chittu.child_id', true)::uuid);
+  USING (child_id = NULLIF(current_setting('chittu.child_id', true), '')::uuid);
 CREATE POLICY message_scope ON message FOR ALL TO chittu_app
   USING (session_id IN (SELECT id FROM session
-                        WHERE child_id = current_setting('chittu.child_id', true)::uuid));
+                        WHERE child_id = NULLIF(current_setting('chittu.child_id', true), '')::uuid));
+
+-- The grants these policies depend on are at the END of this file: several of
+-- the tables involved are not created until later sections, and a GRANT cannot
+-- name a table that does not exist yet.
 
 -- The ops console never touches child-scoped tables at all.
 GRANT SELECT ON metering, helpline_registry, market, learning_insight TO chittu_ops;
@@ -583,7 +602,7 @@ BEGIN
   IF coalesce(current_setting('chittu.child_id', true), '') = '' THEN
     RAISE EXCEPTION 'revoke_and_erase requires chittu.child_id to be set for %', p_child;
   END IF;
-  IF current_setting('chittu.child_id', true)::uuid <> p_child THEN
+  IF NULLIF(current_setting('chittu.child_id', true), '')::uuid <> p_child THEN
     RAISE EXCEPTION 'revoke_and_erase called for % under a session scoped to %',
       p_child, current_setting('chittu.child_id', true);
   END IF;
@@ -851,5 +870,46 @@ CREATE INDEX dataset_export_time_idx ON dataset_export(exported_at DESC);
 
 GRANT SELECT ON provider_clearance TO chittu_ops;
 GRANT SELECT ON dataset_export TO chittu_ops;
+
+COMMIT;
+
+-- =============================================================================
+-- 16. PRIVILEGES
+--
+-- Deliberately last: a GRANT cannot name a table created later in the file.
+--
+-- A POLICY NARROWS ACCESS A ROLE ALREADY HAS — it confers none. Section 11's
+-- five policies were written without these grants, which left chittu_app unable
+-- to read or write a single row while appearing to be carefully scoped. It was
+-- invisible because everything was verified as superuser, and superusers bypass
+-- both grants and RLS. Test as the role the application actually uses.
+-- =============================================================================
+
+BEGIN;
+
+GRANT SELECT, INSERT, UPDATE ON
+  parent, parent_pin, child, child_data_key,
+  consent_record, consent_verification, session, memory, flag
+  TO chittu_app;
+
+-- revoke_and_erase deletes message rows outright
+GRANT SELECT, INSERT, UPDATE, DELETE ON message TO chittu_app;
+
+-- append-only: the grant agrees with the trigger rather than relying on it
+GRANT SELECT, INSERT ON audit_event, seal_anchor TO chittu_app;
+GRANT USAGE, SELECT ON SEQUENCE audit_event_id_seq TO chittu_app;
+
+-- reference data, read-only
+GRANT SELECT ON flag_note_template, helpline_registry, market, deployment,
+                corpus_entry, corpus_chunk, provider_clearance TO chittu_app;
+
+-- metering is written by the runtime and read only by the ops console
+GRANT INSERT ON metering TO chittu_app;
+GRANT USAGE, SELECT ON SEQUENCE metering_id_seq TO chittu_app;
+
+-- NOTE the absences, which are the control: chittu_app is granted nothing on
+-- training_signal, training_example, training_run, dataset_export, admin_user
+-- or transcript_grant. The runtime cannot reach the training corpus or the
+-- named-humans tables at all.
 
 COMMIT;

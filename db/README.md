@@ -1,5 +1,17 @@
 # Database
 
+## Migrations before and after first deployment
+
+**Nothing is deployed yet, so `docs/chittu-schema.sql` is the single source of
+truth and `0001_init.sql` is generated from it.** A change goes into the schema
+file and 0001 is regenerated. That keeps the reviewed compliance artifact and the
+thing that actually runs from drifting apart, which they did within one session
+of having two files.
+
+**The moment a database exists that we cannot drop, this inverts:** 0001 freezes,
+migrations become strictly additive and append-only, and the schema file becomes a
+generated snapshot instead. Do not carry the current habit past that point.
+
 Migrations are **plain SQL**, applied in filename order. The schema is a compliance
 artifact — an auditor reads it directly — so it is authored in SQL rather than generated
 from a query builder. Drizzle is used for *typed queries over* this schema, never to

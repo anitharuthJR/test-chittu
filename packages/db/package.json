@@ -1,0 +1,21 @@
+{
+  "name": "@chittu/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chittu/consent": "workspace:*",
+    "@chittu/contracts": "workspace:*",
+    "@chittu/seal": "workspace:*",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.7",
+    "@types/pg": "^8.11.0"
+  }
+}
