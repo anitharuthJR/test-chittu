@@ -144,10 +144,18 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
       });
     },
 
-    /** Open a session for an already-verified consent. */
-    async openSession(childId: string, consentId: string, band: Band): Promise<string> {
+    /**
+     * Open a session for an already-verified consent — or resume the live one.
+     *
+     * Resuming is a safety control: `crisis_lock` is per-session, so always
+     * creating a new session made a page reload an escape from it. See
+     * `openOrResumeSession`.
+     */
+    async openSession(childId: string, consentId: string, band: Band): Promise<{
+      id: string; resumed: boolean; crisisLock: boolean;
+    }> {
       return withChildScope(pool, childId, (tx) =>
-        child.openSession(tx, childId, consentId, band));
+        child.openOrResumeSession(tx, childId, consentId, band));
     },
 
     withChild<T>(childId: string, fn: (tx: Db) => Promise<T>): Promise<T> {

@@ -33,7 +33,7 @@ Read these two documents before any non-trivial change — they are the authorit
   - Law 02 is enforced by early returns in `App.tsx` placed *before* the router is built, so there is no route table to bypass. `App.test.tsx` proves it by asserting `POST /v1/session` is never called — removing the gate fails 5 tests.
   - **Fonts are self-hosted and must stay that way** — a `<link>` to fonts.googleapis.com sends every child's IP to a third party on every page load. WOFF2 files + OFL licences live in `src/fonts/`; regenerate with `scripts/build-fonts.sh` (needs `pip install "fonttools[woff]" brotli`). The Tamil face is subset to the brand mark `சிட்டு` alone, so **Tamil anywhere else in the UI needs a rebuild** — `fonts.test.ts` fails and tells you.
   - **The client holds no credential.** The consent token is an httpOnly cookie the server set at `finalize`; the client asks `GET /v1/consent/status` and gets a three-state answer. `unknown` renders neither the chat nor the consent form — default-deny. Nothing is written to `localStorage`, and a test asserts that.
-- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (830 tests, two Vitest projects: `server` and `web`).
+- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (845 tests, two Vitest projects: `server` and `web`).
 
 ## Non-negotiable invariants (Guardian Council doctrine — never change without explicit human sign-off)
 
@@ -47,6 +47,7 @@ Read these two documents before any non-trivial change — they are the authorit
 - **The teen carve-out is enforced twice**: the schema's `teen_bodies_are_never_stored` CHECK, and again in the transcript route, which decides from `session.band` where the CHECK looks at `message.band`. Those can disagree; keep both.
 - No engagement mechanics anywhere, including prompts: no streaks, guilt, "don't go" language, or attachment simulation.
 - Consent before existence: no code path may reach the chat before the consent ledger exists.
+- **`POST /v1/session` resumes, it does not always create.** `crisis_lock` is per-session, so always opening a new one made a page reload an escape from it. A locked session is resumed regardless of age; the client takes `crisisLock` from that response, never from local state.
 - **Destructive actions require a live parent session** (`apps/api/src/cookies.ts`): erasing an account and lifting a crisis lock both need the `chittu_parent` cookie, which only a correct PIN mints and which lasts 15 minutes. Never add a destructive route that trusts a consent cookie alone — a child holds one of those.
 - Credentials travel in httpOnly cookies, never in a response body, a URL, or `localStorage`. `POST /v1/session` has no body fallback on purpose.
 

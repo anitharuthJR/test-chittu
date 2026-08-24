@@ -506,9 +506,54 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       return reply.code(403).send({ error: err.message, code: err.code });
     }
     const c = active.record;
-    const sessionId = await store.openSession(stored!.childId, stored!.consentId, c.band);
-    return reply.code(201).send({ sessionId, band: c.band, country: c.country });
+    // Resumes the live session where there is one. `resumed` and `crisisLock`
+    // are returned so the client can repaint the conversation and, crucially,
+    // re-apply a lock it did not witness — a reloaded page has no memory of the
+    // turn that locked it.
+    const s = await store.openSession(stored!.childId, stored!.consentId, c.band);
+    return reply.code(201).send({
+      sessionId: s.id, band: c.band, country: c.country,
+      resumed: s.resumed, crisisLock: s.crisisLock,
+    });
   });
+
+  /**
+   * The child's own conversation, for repainting after a reload.
+   *
+   * Session-scoped like the memory book: the session id is the capability the
+   * caller already holds. It returns the child's OWN turns — this is not the
+   * parent view and carries no flags, no trace and no other session.
+   */
+  app.get<{ Params: { id: string } }>(
+    '/v1/session/:id/messages', {
+      schema: {
+        params: {
+          type: 'object', required: ['id'], additionalProperties: false,
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    }, async (req, reply) => {
+      const owner = await opts.pool.query<{ child_id: string; band: string }>(
+        `SELECT child_id, band FROM session WHERE id = $1`, [req.params.id]);
+      const row = owner.rows[0];
+      if (!row) return reply.code(404).send({ error: 'no such session' });
+
+      const turns = await store.withChild(row.child_id, (tx) =>
+        store.child.ownTranscript(tx, req.params.id, row.child_id));
+
+      // A teen's words were never written down, so there is nothing to restore.
+      // That is the cost of the carve-out and it is stated rather than shown as
+      // an empty screen, which would read as a bug.
+      const teen = row.band === 'thinker';
+      return reply.send({
+        restorable: !teen,
+        note: teen
+          ? "We don't keep what you type, so your earlier messages aren't saved. "
+            + 'Chittu still remembers the nice things you chose to share.'
+          : null,
+        turns: teen ? [] : turns,
+      });
+    });
 
   // ---- the pipeline. Buffered, never streamed. ----------------------------
 
@@ -554,10 +599,25 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           newId: () => randomUUID(),
         });
 
+        /**
+         * What Chittu SAID, flattened for storage.
+         *
+         * Chips are excluded, and that is a correction rather than a shortcut.
+         * They are suggested next taps — navigation, not utterance — and
+         * appending their labels to the prose produced lines like "I'm still
+         * learning that one! Tell me more Something else", which reads as if
+         * Chittu said it. That went to a parent's transcript, and once a
+         * reloaded page repaints from the same text, to the child as well.
+         *
+         * The `big` emoji is kept: it is decorative, but it is on screen.
+         */
         const replyText = out.response.blocks
-          .map((b) => (b.kind === 'chips' ? b.chips.join(' ')
-            : b.kind === 'steps' ? b.items.join(' ')
-            : b.kind === 'big' ? b.emoji : b.text)).join(' ');
+          .filter((b) => b.kind !== 'chips')
+          .map((b) => (b.kind === 'steps' ? b.items.join(' ')
+            : b.kind === 'big' ? b.emoji : b.text))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
 
         await store.saveTurn(
           tx, req.params.id, loaded.childId, state.band, out.state,
