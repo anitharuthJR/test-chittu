@@ -167,3 +167,71 @@ not appear in the ledger as though it had been delivered.
 one request, because the unit tests asserted the chain *verified* and never
 asserted how much was *in* it. A chain with half the conversation missing verifies
 perfectly.
+
+---
+
+## 9. The consent engine — deliberate deviations and what is still stubbed
+
+### FIXED — the PIN hash is not the prototype's
+
+`chittu-v3.html:818` does `sha('PIN|' + pin)`: unsalted SHA-256, truncated to 64
+bits, in the browser. Ported verbatim onto a server that would be a real defect —
+a 4-digit PIN has 10,000 possibilities, so an unsalted digest is reversible by
+enumeration in microseconds.
+
+"Port semantics, do not rewrite" governs the safety *behaviour* — the guards, the
+order, the scripted copy. It is not a licence to move a browser demo's crypto onto
+a server. The KDF is now salted scrypt.
+
+**And an honest limit, recorded in the code:** no KDF rescues a 4-digit PIN if the
+hash leaks. The keyspace is the problem. The controls that actually matter are
+never exposing the hash, rate-limiting, and the five-attempt lockout.
+
+### FIXED — scrypt's cost parameters were silently unusable
+
+`N=32768, r=8` needs ~32 MiB, and Node's default `maxmem` is *also* 32 MiB, so
+every call failed with "memory limit exceeded". Caught by the test asserting the
+stored parameters, not by review. Left implicit, the cost parameters would have
+looked configured and been decorative.
+
+Related: `promisify(scrypt)` resolves to the 3-argument overload and **silently
+drops the options object** — so N/r/p would have fallen back to Node's defaults
+even once maxmem was fixed. Wrapped by hand instead.
+
+### DELIBERATE — the weak-PIN list is wider than the prototype's
+
+The prototype rejects six literals and accepts `4321`, `9999`, `2222`. This is the
+one direction it is safe to strengthen without sign-off: **rejecting more PINs
+cannot fail open.** It can only refuse a parent a PIN they wanted, which surfaces
+immediately as a message — unlike a guard that silently stops firing.
+
+### STILL STUBBED — four of six adapters
+
+`card_micro_charge`, `email_plus`, `gov_id_review`, `consent_manager_token` and
+`age_assurance_uk` have a real shape and no implementation. Each **throws with the
+reason** rather than succeeding quietly, because a silently-succeeding stub in this
+position would mint consent records for verifications that never happened.
+
+`GET /v1/consent/methods` returns `methods` (what a parent can complete today) and
+`offers` (everything valid in that country, each with `blockedOn`). The first is for
+the client; the second is so ops can see what blocks a market.
+
+Implemented and usable: `dev_stub` (non-production, refused in prod by both the code
+and the database) and `signed_form_review`, which works because it is a human ops
+process rather than a vendor API — though its document-retention rules need the DPO
+before it carries a real family.
+
+### DigiLocker is refused twice
+
+No adapter exists, `selectAdapter` throws, and `CONSTRAINT digilocker_deferred`
+refuses the method in the database. Two independent refusals for one deferral, so
+no ledger row can claim a verification that no code performed. When the adapter
+ships, both come off together.
+
+### A note on mutation coverage
+
+Removing the `assertActiveConsent` call failed only **one** API test, which is
+weaker than it looks. Revocation also nulls the bearer token, so two independent
+mechanisms refuse a revoked consent and an API-level test cannot tell which fired.
+The status path is therefore covered directly by unit tests in `@chittu/consent`.
+Worth remembering if either layer is ever simplified away.
