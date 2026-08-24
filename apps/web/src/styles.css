@@ -14,6 +14,87 @@
  * phone. Extra width buys navigation and calmer margins, never longer lines.
  */
 
+/*
+ * The brand faces, served from our own origin.
+ *
+ * NOT linked from fonts.googleapis.com. That would send every child's IP address
+ * to a third party on every page load, which is the same rule as "no analytics
+ * SDK of any kind" (§2.1) and a live DPDP question rather than a theoretical
+ * one. All four are SIL OFL 1.1; the licences ship beside the files in
+ * `fonts/OFL/`, and `scripts/build-fonts.sh` regenerates the binaries.
+ *
+ * `font-display: swap` on every face: text is readable in a fallback
+ * immediately and reflows when the real face lands. On the device floor — a
+ * ₹8,000 Android on 3G — a blocked first paint is the worse failure.
+ *
+ * There is deliberately no `<link rel="preload">`. It would have to name a
+ * fingerprinted filename that only exists after the build, and a stale hardcoded
+ * path fails silently. The stylesheet is render-blocking and discovered
+ * immediately, so the font requests start about as early anyway.
+ */
+
+@font-face {
+  font-family: 'Nunito';
+  src: url('./fonts/nunito-latin-var.woff2') format('woff2-variations');
+  font-weight: 400 800;      /* variable: the axis is instanced to this range */
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The rupee sign, and only the rupee sign.
+ *
+ * ₹ is in Google's `latin-ext` subset rather than `latin`, so it was falling
+ * back mid-sentence in a different face. This is an India-first product whose
+ * maths lessons talk about money, and a mismatched glyph at 15.5px in body copy
+ * is far more noticeable than one in a 9.5px diagnostic strip. 1.2 KB.
+ */
+@font-face {
+  font-family: 'Nunito';
+  src: url('./fonts/nunito-ext-rupee-var.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+20B9;
+}
+
+@font-face {
+  font-family: 'Baloo 2';
+  src: url('./fonts/baloo2-latin-var.woff2') format('woff2-variations');
+  font-weight: 700 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./fonts/plexmono-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The brand mark, சிட்டு, and nothing else.
+ *
+ * Baloo 2 carries no Tamil, so before this the logotype fell through to whatever
+ * Tamil face the device happened to have — a different design on every phone,
+ * for the one string that is supposed to be constant. Baloo Thambi 2 is the
+ * Tamil sibling of Baloo 2 by the same foundry, so the two sit together.
+ *
+ * `unicode-range` is what keeps this honest: the file contains ONLY the glyphs
+ * in the brand mark, so restricting it to the Tamil block means the browser
+ * never reaches for it to render anything else and never finds it empty.
+ */
+@font-face {
+  font-family: 'Baloo Thambi 2';
+  src: url('./fonts/baloothambi2-tamil-800-brand.woff2') format('woff2');
+  font-weight: 700 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0B80-0BFF;
+}
+
 :root {
   --sky: #EAF6FF;
   --paper: #FFF9EE;
@@ -32,11 +113,13 @@
   --ultra: #1A18D4;
   --signal: #FF2E1F;
 
-  /* Self-hosted faces are not in the repo yet — see index.html. These stacks
-     are the honest fallback until they are, and they must never become a
-     fonts.googleapis.com <link>. */
+  /* Self-hosted, above. The fallbacks still matter: they are what a child reads
+     during `swap`, and what they read if a font request fails on a bad radio.
+     'Baloo Thambi 2' sits after 'Baloo 2' in the display stack because Baloo 2
+     carries no Tamil — the browser falls through per-character for the brand
+     mark and for nothing else. */
   --font-body: 'Nunito', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Baloo 2', 'Nunito', 'Avenir Next', system-ui, sans-serif;
+  --font-display: 'Baloo 2', 'Baloo Thambi 2', 'Nunito', 'Avenir Next', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --measure: 60ch;
