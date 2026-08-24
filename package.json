@@ -1,14 +1,22 @@
 {
-  "name": "chittu-tests",
+  "name": "chittu",
   "private": true,
-  "version": "1.0.0",
-  "description": "Regression harness for the chittu-v3 prototype. Walkthrough Step 15 described a 246-assertion run; this is that harness as code.",
+  "version": "0.1.0",
+  "description": "Chittu — safety-first conversational AI for children. Phase 1 backend + the prototype regression harness.",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "report": "playwright show-report"
+    "build": "pnpm -r --filter './packages/**' --filter './apps/**' run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:prototype": "playwright test",
+    "dev": "pnpm --filter @chittu/api run dev"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0"
-  }
+    "@electric-sql/pglite": "^0.5.7",
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "packageManager": "pnpm@11.9.0"
 }
