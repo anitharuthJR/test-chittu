@@ -1,3 +1,21 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# MLX fine-tune outputs (large binaries — regenerate with llm-kit/train.sh)
+llm-kit/adapters/
+
+# Archived gate-passing adapters (large binaries, keep out of git)
+llm-kit/adapters-archive/
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
+
+# Node / Playwright
 node_modules/
 test-results/
 playwright-report/
