@@ -1,15 +1,26 @@
 import { buildServer } from './server.js';
 import { stubRouter } from './providers.js';
+import { anthropicAdapter } from './providers/anthropic.js';
+import { createRouter } from './providers/router.js';
+import { readClearance, enabledMarkets } from './providers/clearance.js';
 import { bootstrapDb } from './db-bootstrap.js';
 
 const port = Number(process.env['PORT'] ?? 8080);
+const isProd = process.env['NODE_ENV'] === 'production';
+const apiKey = process.env['ANTHROPIC_API_KEY'] ?? '';
 
-// The stub classifies everything SAFE. Starting with it in production would mean
-// L2 inspects nothing, so refuse rather than degrade silently.
-if (process.env['NODE_ENV'] === 'production') {
+/**
+ * Config first, connections second.
+ *
+ * This check sits above `bootstrapDb()` deliberately: in production the
+ * database is also required, so leaving it below meant the missing-key refusal
+ * was shadowed by a missing-DATABASE_URL error and never seen. Refuse on the
+ * cheapest, most specific thing first.
+ */
+if (isProd && apiKey === '') {
   throw new Error(
-    'refusing to start: no real provider router is wired yet, and the stub '
-    + 'classifies every turn SAFE. See apps/api/src/providers.ts.',
+    'refusing to start: ANTHROPIC_API_KEY is not set, so the only available '
+    + 'router is the stub — and the stub classifies every turn SAFE.',
   );
 }
 
@@ -21,5 +32,58 @@ if (driver === 'pglite') {
   );
 }
 
-const app = await buildServer({ pool, keys, router: stubRouter(), logger: true });
+/**
+ * Choosing a router is the last place a safety decision gets made before the
+ * service is answering children, so all three refusals live here and none of
+ * them degrade quietly.
+ *
+ * The stub classifies every turn SAFE. Running it in production would mean L2
+ * inspects nothing while the trace still says L2_CLASSIFIER ran — a lie in the
+ * one record a certifier reads.
+ */
+async function chooseRouter() {
+  if (apiKey === '') {
+    if (isProd) {
+      throw new Error(
+        'refusing to start: ANTHROPIC_API_KEY is not set, so the only available '
+        + 'router is the stub — and the stub classifies every turn SAFE.',
+      );
+    }
+    console.warn(
+      '[chittu] no ANTHROPIC_API_KEY — using the offline stub router. '
+      + 'Every turn classifies SAFE and the sandbox echoes a fixed reply.',
+    );
+    return stubRouter();
+  }
+
+  const adapters = { anthropic: anthropicAdapter({ apiKey }) };
+
+  if (!isProd) {
+    // Outside production, clearance is not enforced: there are no signed terms
+    // to check against on a laptop, and requiring a seeded table to run `pnpm
+    // dev` would only teach people to seed it meaninglessly.
+    console.warn('[chittu] provider clearance is NOT enforced outside production.');
+    return createRouter({ adapters });
+  }
+
+  const markets = await enabledMarkets(pool);
+  const { cleared, partial } = await readClearance(pool, markets);
+  if (cleared.size === 0) {
+    throw new Error(
+      `refusing to start: no provider is cleared for every enabled market `
+      + `[${markets.join(', ') || 'none enabled'}]. provider_clearance is the `
+      + `Seat 10 switch, and an empty result means the review has not happened.`,
+    );
+  }
+  for (const [provider, missing] of Object.entries(partial)) {
+    console.warn(
+      `[chittu] ${provider} is NOT cleared for ${missing.join(', ')} — not routable.`);
+  }
+  return createRouter({ adapters, cleared });
+}
+
+const app = await buildServer({
+  pool, keys, router: await chooseRouter(), logger: true,
+  ...(isProd ? { env: 'prod' as const } : {}),
+});
 await app.listen({ port, host: '127.0.0.1' });

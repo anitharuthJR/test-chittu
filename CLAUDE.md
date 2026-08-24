@@ -33,7 +33,7 @@ Read these two documents before any non-trivial change — they are the authorit
   - Law 02 is enforced by early returns in `App.tsx` placed *before* the router is built, so there is no route table to bypass. `App.test.tsx` proves it by asserting `POST /v1/session` is never called — removing the gate fails 5 tests.
   - **Fonts are self-hosted and must stay that way** — a `<link>` to fonts.googleapis.com sends every child's IP to a third party on every page load. WOFF2 files + OFL licences live in `src/fonts/`; regenerate with `scripts/build-fonts.sh` (needs `pip install "fonttools[woff]" brotli`). The Tamil face is subset to the brand mark `சிட்டு` alone, so **Tamil anywhere else in the UI needs a rebuild** — `fonts.test.ts` fails and tells you.
   - **The client holds no credential.** The consent token is an httpOnly cookie the server set at `finalize`; the client asks `GET /v1/consent/status` and gets a three-state answer. `unknown` renders neither the chat nor the consent form — default-deny. Nothing is written to `localStorage`, and a test asserts that.
-- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (848 tests, two Vitest projects: `server` and `web`).
+- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (942 tests, two Vitest projects: `server` and `web`).
 
 ## Non-negotiable invariants (Guardian Council doctrine — never change without explicit human sign-off)
 
@@ -42,7 +42,9 @@ Read these two documents before any non-trivial change — they are the authorit
 - Classifier fails toward CRISIS when torn; on classifier failure the turn continues honestly marked FAST-PATH-ONLY.
 - The L1 lexicon stays multilingual (English + Tamil + Tanglish) even though the product surface is English-only.
 - Memory allowlist (INTEREST | PET | HOBBY | FAVORITE | ACHIEVEMENT | LEARNING) is enforced in code (`memAdd`), not only in prompts. Never memories from feelings, health, family matters, fears, or crisis moments.
-- Pure arithmetic is answered by the deterministic engine — never routed to a model.
+- Pure arithmetic is answered by the deterministic engine — never routed to a model. Verified against a live router: a maths turn and a crisis turn make **zero** vendor calls.
+- **The classifier never invents a SAFE.** `parseClassifier` throws on anything it does not fully recognise and the router does not catch it; the pipeline turns that into an honest `FAST-PATH-ONLY` turn. A lenient parse would be indistinguishable from a working classifier until the turn it mattered.
+- **Prompts are safety logic.** The fifteen hard rules (`@chittu/pedagogy/sandbox-prompt.ts`) and the classifier prompt (`@chittu/safety-kernel/classifier.ts`) are ported verbatim in substance; tests assert each clause still appears, because a deleted prompt line looks like nothing in a diff.
 - Parent flags store category only — never a child's quoted words. The dashboard payload is asserted against this: a test sends a distinctive sentence and greps the whole response for it.
 - **The teen carve-out is enforced twice**: the schema's `teen_bodies_are_never_stored` CHECK, and again in the transcript route, which decides from `session.band` where the CHECK looks at `message.band`. Those can disagree; keep both.
 - No engagement mechanics anywhere, including prompts: no streaks, guilt, "don't go" language, or attachment simulation.

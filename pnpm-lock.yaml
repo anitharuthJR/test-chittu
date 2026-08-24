@@ -35,6 +35,12 @@ importers:
       '@chittu/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@chittu/maths-engine':
+        specifier: workspace:*
+        version: link:../../packages/maths-engine
+      '@chittu/pedagogy':
+        specifier: workspace:*
+        version: link:../../packages/pedagogy
       '@chittu/pipeline':
         specifier: workspace:*
         version: link:../../packages/pipeline

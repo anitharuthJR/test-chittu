@@ -599,3 +599,70 @@ response. The renderer drops a leaked escalation token from the screen; a speech
 synthesiser reading the raw response would have said it out loud anyway. It now
 guards its own input. The general shape — *every* output channel guards, not just
 the visible one — should be checked again when the reading coach lands.
+
+---
+
+## The provider router
+
+### FIXED — the router is real
+
+`apps/api/src/providers/` now holds an Anthropic adapter and a router that
+implements §12's cell assignments. `main.ts` picks it when `ANTHROPIC_API_KEY`
+is set and falls back to the stub — loudly — when it is not.
+
+The prompts came with it. The classifier prompt and its parser are in
+`@chittu/safety-kernel` (L2 is a safety layer, and it inherits that package's
+100%-coverage bar); the fifteen-rule sandbox prompt and the 23 curriculum boards
+are in `@chittu/pedagogy`. Both were **ported, not rewritten** — a test asserts
+each hard rule still appears, because a prompt clause deleted in a tidy-up looks
+like nothing at all in a diff.
+
+### NOTED — the one thing the tests cannot prove
+
+There is no `ANTHROPIC_API_KEY` in this environment and CI must never need one,
+so the suite drives the adapter over real HTTP against a local Node server
+standing in for the vendor. That exercises the request body, the headers, the
+timeout, the retry policy, the error mapping and the control-token strip — but
+it **does not prove Anthropic accepts our request shape**. The first real call
+is still the first real call. Everything up to the wire is verified; the wire is
+not.
+
+The stand-in was also driven end to end: consent → chat → a rendered reply, with
+the fake vendor logging `CLASSIFY model=claude-haiku-4-5 system=2010b` and
+`SANDBOX model=claude-sonnet-5 system=5206b`, and with the no-model paths
+confirmed to make **zero** vendor calls.
+
+### NOTED — the classifier cell is a substitution, not the design
+
+§12.2's finding is that there is no kid-safety classifier to buy, and the
+intended engine for L2 is our own self-hosted `chittu-local`. It is not
+deployable yet (§13.2, and the CRISIS 3/8 scorecard), so the cell points at
+Haiku 4.5 today. `DEFAULT_CELLS` says so in a comment; it is a placeholder with
+a name, not a decision.
+
+### NEEDS A DECISION — clearance is per-deployment, not per-child
+
+`provider_clearance` is keyed by `(provider, jurisdiction)`, and the honest
+per-turn check would use the child's own country. `classify()` receives no
+country — the port passes text and history — so the router instead requires a
+provider to be cleared for **every enabled market**, an intersection.
+
+That errs toward calling fewer vendors, which is the safe direction, but it is
+coarser than the schema supports: a vendor cleared for India and not the UK is
+unusable for Indian children too. Threading jurisdiction through the port is the
+fix. **Decide before a second market is enabled**, because until then the
+intersection and the correct answer are the same thing.
+
+### FIXED — GB and UK were never going to match
+
+`Country` in contracts uses `GB`; the schema's `jurisdiction` enum uses `UK`.
+A clearance row for the UK would never have matched a British child, and the
+failure mode is silent in the dangerous direction: a check that finds nothing to
+fail against. `toJurisdiction()` maps it, with a test.
+
+### NOTED — two schema controls fired during verification
+
+Enabling a market with no verified helplines is refused by a trigger
+(`market_needs_helplines`), and `provider_clearance` refused an expired row.
+Neither was written for this change; both did their job unprompted, which is
+what the constraints-carry-the-doctrine approach is supposed to feel like.
