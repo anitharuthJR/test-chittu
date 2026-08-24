@@ -10,6 +10,18 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
+    // Resolve @chittu/* through the `development` export condition — i.e. to
+    // src/*.ts, which is what vitest and tsx already do. WITHOUT this, `tsc
+    // --noEmit` follows `types: ./dist/index.d.ts` and fails on a fresh clone
+    // with "Cannot find module '@chittu/contracts'", because dist/ is generated
+    // and gitignored. `pnpm verify` hid that by running its build lane after
+    // typecheck, so the second run of the day always passed.
+    //
+    // Every tsconfig.build.json turns this OFF again, deliberately: the build
+    // MUST resolve through dist/*.d.ts, because compiling against the generated
+    // declarations is the only thing that catches an emit which typechecks from
+    // source and cannot be imported by node.
+    "customConditions": ["development"],
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   }
