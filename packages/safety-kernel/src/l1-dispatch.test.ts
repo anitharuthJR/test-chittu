@@ -95,44 +95,50 @@ describe('Kindness Guard — profane input never reaches a provider', () => {
 
 describe('KNOWN GAPS — ported faithfully, awaiting sign-off. Do not "fix" silently.', () => {
   /**
-   * FAIL-OPEN IN A CRISIS PATTERN.
+   * FIXED 2026-08-24, with sign-off. Previously a FAIL-OPEN.
    *
-   * The Tanglish alternative is `saaga (venum|num)` — it requires a SPACE. The
-   * natural one-word spellings a child actually types do not fire:
+   * The pattern was `saaga (venum|num)` — one literal space — so the spellings a
+   * child actually types did not fire. It read like `saaganum` had been split by
+   * mistake. Now `sa{1,2}[kg]a?\s*(venum|num)`, which also covers the ordinary
+   * romanisation axis: சாக is written saaga / saga / saaka / saka, and treating
+   * only one of them as the word meant the other three failed open too.
    *
-   *     "enakku saaganum"   -> no match
-   *     "naan saaganum"     -> no match
-   *     "saaga num"         -> matches, but nobody writes it that way
-   *
-   * It reads like `saaganum` was split by mistake. This is a MISS in crisis
-   * detection, i.e. it fails OPEN, and it corroborates chittu-status.md §7,
-   * which records a Tamil crisis phrase going unrecognised in the model eval,
-   * and GAP-03 ("safety speaks only English" — partly closed, not closed).
-   *
-   * It is NOT fixed here. CLAUDE.md makes the L1 lexicon a non-negotiable
-   * invariant and requires explicit human sign-off plus a regression test for
-   * any change to safety logic. These assertions therefore pin the CURRENT,
-   * BROKEN behaviour so that:
-   *   - the gap cannot be forgotten, and
-   *   - whoever fixes the pattern sees this test fail and must consciously
-   *     update it, rather than the fix landing unnoticed.
-   *
-   * Suggested fix once signed off: `saaga\s*(venum|num)`.
+   * These assertions replace ones that pinned the BROKEN behaviour, which is why
+   * they were written that way — a fix could not land unnoticed.
    */
-  it.each(['enakku saaganum', 'naan saaganum', 'saaganum'])(
-    'DOES NOT catch the Tanglish crisis phrase %j (fail-open)', (text) => {
-      expect(scan(text)).toBeNull();
-    });
-
-  it('catches only the spaced forms a child would not type', () => {
-    expect(scan('saaga venum')).toBe('crisis');
-    expect(scan('saaga num')).toBe('crisis');
+  it.each([
+    'saaganum',
+    'enakku saaganum',
+    'naan saaganum',
+    'saaganum nu thonuthu',
+    'enakku saaganumnu thonuthu',
+    'saaga venum',
+    'saaga num',
+    'saagavenum',
+    'saganum',
+    'sakanum',
+    'saaka venum',
+  ])('catches the Tanglish crisis phrase %j', (text) => {
+    expect(scan(text)).toBe('crisis');
   });
 
-  it('the Tamil-script crisis phrases DO fire', () => {
-    // the script forms are fine — the defect is confined to the Tanglish branch
+  it('the Tamil-script crisis phrases still fire', () => {
     expect(scan('எனக்கு சாகணும்')).toBe('crisis');
     expect(scan('தற்கொலை')).toBe('crisis');
+    expect(scan('செத்து')).toBe('crisis');
+  });
+
+  /**
+   * The widened stem must not start guarding ordinary words. `num` is short, so
+   * these are the probes that matter — and none of them may fire.
+   */
+  it.each([
+    'what is a saga', 'the saga of the rings', 'sakura tree',
+    'sagan wrote cosmos', 'magnum opus', 'saxophone number',
+    'a number line', 'how many numbers', 'saag paneer recipe',
+    'Nagano', 'vacuum', 'sagacious', 'tell me a Norse saga',
+  ])('does NOT over-fire on %j', (text) => {
+    expect(scan(text)).not.toBe('crisis');
   });
 
   /**

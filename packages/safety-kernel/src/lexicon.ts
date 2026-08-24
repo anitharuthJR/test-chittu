@@ -26,7 +26,7 @@ export type LexKind = Exclude<GuardKind, 'profanity'>;
  * `lastIndex` state and one shared RegExp per kind is safe across turns.
  */
 export const LEX: Readonly<Record<LexKind, RegExp>> = Object.freeze({
-  crisis: /(hurt myself|kill myself|want to die|wanna die|end my life|cutting myself|suicide|hurts me|hits me|hit me|beats me|touched me|touches me|abuse|abused|nobody loves me|hate my life|happier without me|no one would care|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|saaga (venum|num)|sethu|thatkolai|adikira|adikkiranga)/i,
+  crisis: /(hurt myself|kill myself|want to die|wanna die|end my life|cutting myself|suicide|hurts me|hits me|hit me|beats me|touched me|touches me|abuse|abused|nobody loves me|hate my life|happier without me|no one would care|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|sa{1,2}[kg]a?\s*(venum|num)|sethu|thatkolai|adikira|adikkiranga)/i,
   pii: /(my (phone|number|address|school is|house)|i live (at|in) \d|\d{10}|@gmail|@yahoo|my password|என் (முகவரி|பள்ளி|போன்)|en (address|school|phone))/i,
   unsafe: /(gun|knife|weapon|bomb|drug|beer|alcohol|vap(e|es|ing)|cigarette|smok(e|ing)|weed|kiss(ing)?|sexy|naked|gamble|kill (him|her|them)|gore|துப்பாக்கி|கத்தி|வெடிகுண்டு|போதை|மது|thuppakki|kathi|pothai)/i,
   identity: /(are you (really )?(real|alive|human|a (real )?(person|human|boy|girl)|a robot|just a (robot|program|computer))|what are you|do you (love|like|miss) me|are you my (best )?friend|will you forget me|நீ (உண்மையா|மனுஷனா|ரோபோவா)|nee (unmaiya|manushana|robova))/i,
