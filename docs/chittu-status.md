@@ -1,6 +1,6 @@
 # CHITTU — Project Status Ledger
 
-**Date:** August 2026 · **Reference build:** prototype v3.3 · **Phase:** 0 complete, Phase 1 not started
+**Date:** August 2026 · **Reference build:** prototype v3.3 · **Phase:** 0 complete, Phase 1 **in progress**
 **Companions:** `chittu-requirements.md` (what & why) · `chittu-build-walkthrough.md` (how, as shipped) · `council/chittu-gap-map.html` (the 12 gaps)
 
 This is the single honest answer to "what is done and what is pending". Where the gap map, the
@@ -53,7 +53,7 @@ Reference implementation: `prototype/chittu-v3.html` (one file, ~1,000 lines of 
 
 ## 4. Does not exist at all
 
-- **Any backend.** No server, no auth, no database, no API gateway. The browser holds the provider key — which is why this is a lab prototype and cannot touch a real child.
+- ~~**Any backend.**~~ **Built — see §2b.** The prototype statement below still describes `prototype/chittu-v3.html`, which remains the reference implementation and still holds the provider key in the browser. What is new is that a real server now exists beside it.
 - **ML classifiers with clinical validation.** The L2 classifier is a Sonnet prompt returning JSON.
 - **Grooming / exploitation detection** at conversation level (Seat 14's threat corpus).
 - **Red-team corpus** run as a release gate.
@@ -63,6 +63,30 @@ Reference implementation: `prototype/chittu-v3.html` (one file, ~1,000 lines of 
 - **Device-floor testing.** Never run on a low-cost Android on 3G.
 - **Children's panel.** Zero children have used it. Every design decision is adult inference.
 - **Store strategy, certification, school mode.**
+
+---
+
+## 2b. Phase 1 — what has actually landed
+
+Merged to `main`, with tests, since this file last said "Phase 1 not started".
+
+| Piece | State | Where |
+|---|---|---|
+| **Safety kernel** | Ported from the prototype, semantics preserved | `packages/safety-kernel` |
+| **Pipeline** | `runTurn()` — pure function of injected ports, so tests can COUNT model calls and prove layer order | `packages/pipeline` |
+| **Consent engine** | Ledger, six adapters, scrypt PIN, lockout. G1 **not** cleared: only `dev_stub` completes | `packages/consent` |
+| **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
+| **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
+| **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + dashboard | `apps/web` |
+| **Tests** | **740**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+
+**What this does not mean.** No gate has moved. The provider router is still a stub that
+classifies every turn SAFE, so the API refuses to start with `NODE_ENV=production`. Four parent
+dashboard panels are absent (deliberately, not mocked). The consent token is a bearer credential in
+`localStorage`. Every open question is in `PORT-REVIEW.md`, which is the companion to this file for
+Phase 1 and should be read with it.
+
+**Still true, and the only sentence that matters:** no child has ever used any of it.
 
 ---
 

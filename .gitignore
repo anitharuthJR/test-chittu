@@ -20,3 +20,4 @@ node_modules/
 test-results/
 playwright-report/
 live-harness.log
+apps/web/dist/

@@ -27,7 +27,11 @@ Read these two documents before any non-trivial change — they are the authorit
   - **Score adapters in-process only: `python3 eval_guard.py --local adapters` (and `--local none` for the base control).** `mlx_lm.server` silently drops `--adapter-path` when a request names a model, so serving-based evals measure the base model — that produced four rounds of invalid scorecards (marked `# !! INVALID` in `evals/`). Symptom to watch for: scores that don't move no matter how much data or training you add.
   - Training on a 16GB Mac gets killed by the macOS Metal watchdog when the GPU is contended. Train in ≤200-iter chunks that resume from `adapters/adapters.safetensors`, so a kill costs one chunk, not the run.
 - `archive/` — superseded originals: prototype v1 and v2. Don't edit, don't import from. See `archive/README.md` — in particular, session timers and the arithmetic parent gate were deliberately removed and must not come back.
-- No backend exists yet. Phase 1 (requirements §9) is to port the pipeline server-side: TypeScript, modular monolith, with all safety logic in one small auditable "safety kernel" package. Port semantics — do not rewrite them.
+- `apps/web/` — the Phase 1 client: Preact + Vite, ~20 KB gzipped against a 100 KB budget that CI enforces (`pnpm --filter @chittu/web size`). It is deliberately thin — it renders the `Block[]` AST the API returns and decides nothing.
+  - **`src/safety/render-guard.ts` is the one client file with a safety obligation**, and it duplicates `stripControlTokens` on purpose: importing `@chittu/safety-kernel` would bundle `L1_PATTERNS` into a child's browser and publish the guard list. `render-guard.test.ts` pins the duplicate against the kernel and fails if they diverge — fix drift in the KERNEL, never only here.
+  - **Every output channel guards, not just the visible one.** `speak()` (TTS) re-guards its input; the first draft read raw API blocks and would have read aloud what the screen refused to show.
+  - Law 02 is enforced by a single early return in `App.tsx` placed *before* the router is built, so there is no route table to bypass. `App.test.tsx` proves it by asserting `POST /v1/session` is never called — removing the gate fails 5 tests.
+- `packages/` + `apps/api/` — the Phase 1 backend, built. TypeScript + Fastify, Postgres via `@chittu/db`, all safety logic in `@chittu/safety-kernel` and `@chittu/pipeline`. **Port semantics — do not rewrite them**; the prototype is still the reference. `PORT-REVIEW.md` records every deviation and every question left for a human. Run everything with `pnpm test` (740 tests, two Vitest projects: `server` and `web`).
 
 ## Non-negotiable invariants (Guardian Council doctrine — never change without explicit human sign-off)
 
@@ -51,7 +55,9 @@ Read these two documents before any non-trivial change — they are the authorit
 
 - After editing `prototype/chittu-v3.html`: extract the JS and run `node --check` on it, then exercise the page headless (Playwright + stubbed API) following the pattern in walkthrough Step 15.
 - After editing `llm-kit/eval_guard.py`: run `python3 llm-kit/test_eval_guard.py` — it must print `30/30`. The grader IS the G2 gate; grading rules are safety logic. Its four LOOSENESS GUARD cases are real model misses that must stay FAIL — if a change makes them pass, the change is wrong.
+- After editing `apps/web/`: `pnpm test` for the suite, then **load the page and drive it**. Start the API with `apps/api/node_modules/.bin/tsx src/main.ts` (PGlite, no container needed) and `vite` in `apps/web`; the dev proxy points `/v1` at :8080. Walk consent → chat → a crisis turn → the parent PIN. The crisis panel once covered the entire conversation at the 900px breakpoint with all 740 tests green — layout defects on the screens that matter most are not reachable from a test runner.
 - Any change to safety logic requires a matching regression test before it lands. A syntax check alone is not verification — it has missed real bugs here before.
+- **Mutation-test the guards you add.** Break the thing on purpose and confirm tests go red: removing the Law 02 gate must fail 5 tests, disabling the control-token strip must fail 5, disabling the escalation-leak check must fail 6. A guard whose removal is silent is not a guard.
 
 ## When building the backend (Phase 1)
 

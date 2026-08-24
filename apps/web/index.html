@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Chittu</title>
+  <meta name="description" content="A safety-first companion for children, by Tulifo." />
+  <meta name="theme-color" content="#EAF6FF" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!--
+    No analytics tag, no tag manager, no third-party script of any kind. That is
+    architecture §2.1 and it is a hard constraint: platform rules for children's
+    apps plus the DPDP profiling ban. If you are about to add one, the answer is
+    no — take it to the Council.
+
+    Fonts are NOT linked from Google. Hotlinking fonts.googleapis.com sends every
+    child's IP address to a third party on every page load, which is precisely
+    the thing the line above exists to prevent. The brand faces must be
+    self-hosted before launch; until they are, the stacks in styles.css fall back
+    to system faces, which is honest rather than pretty. See PORT-REVIEW §12.
+  -->
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>
+    Chittu needs JavaScript to work. Sorry about that.
+  </noscript>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

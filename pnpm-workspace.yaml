@@ -2,6 +2,8 @@ packages:
   - 'packages/*'
   - 'apps/*'
 allowBuilds:
-  esbuild: set this to true or false
+  # Vite's bundler. The placeholder that sat here was never resolved, so esbuild's
+  # postinstall never ran and `vite build` failed on a missing binary.
+  esbuild: true
 minimumReleaseAgeExclude:
   - '@electric-sql/pglite@0.5.7'

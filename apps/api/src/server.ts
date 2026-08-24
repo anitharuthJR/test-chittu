@@ -347,6 +347,75 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       return reply.send(result);
     });
 
+  // ---- the memory book ----------------------------------------------------
+  /**
+   * Scoped by SESSION, not by child id. The session id is the capability the
+   * caller already holds; taking a child id from the request would let a client
+   * name a child it has no session for, and the row-level security scope would
+   * then be set from an attacker-supplied value.
+   *
+   * Child and parent both read the SAME list and both can delete from it
+   * (requirements §4.3) — `deleted_by` records which. A memory book that showed
+   * a child one thing and an adult another would make the child's copy a
+   * decoration, and the point of showing it is that a child can act on it.
+   */
+  async function childForSession(sessionId: string): Promise<string | null> {
+    const r = await opts.pool.query<{ child_id: string }>(
+      `SELECT child_id FROM session WHERE id = $1`, [sessionId]);
+    return r.rows[0]?.child_id ?? null;
+  }
+
+  app.get<{ Params: { id: string } }>(
+    '/v1/session/:id/memories', {
+      schema: {
+        params: {
+          type: 'object', required: ['id'], additionalProperties: false,
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    }, async (req, reply) => {
+      const childId = await childForSession(req.params.id);
+      if (childId === null) return reply.code(404).send({ error: 'no such session' });
+      const memories = await store.withChild(childId, (tx) =>
+        store.child.listMemories(tx, childId));
+      return reply.send({ memories });
+    });
+
+  app.delete<{ Params: { id: string; memoryId: string }; Querystring: { by?: string } }>(
+    '/v1/session/:id/memories/:memoryId', {
+      schema: {
+        params: {
+          type: 'object', required: ['id', 'memoryId'], additionalProperties: false,
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            memoryId: { type: 'string', format: 'uuid' },
+          },
+        },
+        querystring: {
+          type: 'object', additionalProperties: false,
+          properties: { by: { type: 'string', enum: ['child', 'parent'] } },
+        },
+      },
+    }, async (req, reply) => {
+      const childId = await childForSession(req.params.id);
+      if (childId === null) return reply.code(404).send({ error: 'no such session' });
+      const by = req.query.by === 'parent' ? 'parent' : 'child';
+      const forgotten = await store.withChild(childId, async (tx) => {
+        const ok = await store.child.forgetMemory(tx, childId, req.params.memoryId, by);
+        if (ok) {
+          // Sealed, because "you can delete it" is a claim a parent should be
+          // able to check rather than take on trust. The fact of the deletion is
+          // recorded; the fact deleted is not.
+          await store.audit.append(tx, {
+            sessionId: req.params.id, role: 'system', layer: 'LEDGER',
+            text: `memory forgotten by ${by}`,
+          });
+        }
+        return ok;
+      });
+      return reply.code(forgotten ? 200 : 404).send({ forgotten });
+    });
+
   app.get<{ Params: { id: string } }>('/v1/session/:id/seal', async (req, reply) => {
     const v = await store.audit.verify(req.params.id);
     if (v.records === 0) {

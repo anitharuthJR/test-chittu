@@ -547,3 +547,114 @@ describe('rate limiting', () => {
     await limited.close();
   });
 });
+
+describe('the memory book', () => {
+  /** Make the classifier volunteer a memory, so a real row exists to read back. */
+  async function withOneMemory() {
+    const id = await openSession();
+    router.verdict = {
+      label: 'SAFE',
+      memory: { category: 'PET', fact: 'has a cat named Mani' },
+      assist: null,
+    };
+    await say(id, 'my cat is called Mani');
+    return id;
+  }
+
+  it('lists what was remembered', async () => {
+    const id = await withOneMemory();
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${id}/memories` });
+    expect(res.statusCode, res.body).toBe(200);
+    const { memories } = res.json<{ memories: { category: string; fact: string }[] }>();
+    expect(memories).toHaveLength(1);
+    expect(memories[0]).toMatchObject({ category: 'PET', fact: 'has a cat named Mani' });
+  });
+
+  it('lets a CHILD delete, not only a parent', async () => {
+    // Requirements §4.3 — the child's copy of the memory book is not a
+    // decoration; the whole point of showing it is that they can act on it.
+    const id = await withOneMemory();
+    const list = await app.inject({ method: 'GET', url: `/v1/session/${id}/memories` });
+    const memId = list.json<{ memories: { id: string }[] }>().memories[0]!.id;
+
+    const del = await app.inject({
+      method: 'DELETE', url: `/v1/session/${id}/memories/${memId}?by=child`,
+    });
+    expect(del.statusCode, del.body).toBe(200);
+    expect(del.json<{ forgotten: boolean }>().forgotten).toBe(true);
+
+    const after = await app.inject({ method: 'GET', url: `/v1/session/${id}/memories` });
+    expect(after.json<{ memories: unknown[] }>().memories).toHaveLength(0);
+  });
+
+  it('seals the deletion, so "you can delete it" is checkable', async () => {
+    const id = await withOneMemory();
+    const before = await app.inject({ method: 'GET', url: `/v1/session/${id}/seal` });
+    const n = before.json<{ records: number }>().records;
+
+    const list = await app.inject({ method: 'GET', url: `/v1/session/${id}/memories` });
+    const memId = list.json<{ memories: { id: string }[] }>().memories[0]!.id;
+    await app.inject({ method: 'DELETE', url: `/v1/session/${id}/memories/${memId}` });
+
+    const after = await app.inject({ method: 'GET', url: `/v1/session/${id}/seal` });
+    expect(after.json<{ records: number }>().records).toBe(n + 1);
+    // The FACT of the deletion is sealed. The fact deleted is not.
+    expect(after.json<{ ok: boolean }>().ok).toBe(true);
+  });
+
+  it('is idempotent — deleting twice reports not-found, never a false success', async () => {
+    const id = await withOneMemory();
+    const list = await app.inject({ method: 'GET', url: `/v1/session/${id}/memories` });
+    const memId = list.json<{ memories: { id: string }[] }>().memories[0]!.id;
+
+    await app.inject({ method: 'DELETE', url: `/v1/session/${id}/memories/${memId}` });
+    const second = await app.inject({
+      method: 'DELETE', url: `/v1/session/${id}/memories/${memId}`,
+    });
+    expect(second.statusCode).toBe(404);
+    expect(second.json<{ forgotten: boolean }>().forgotten).toBe(false);
+  });
+
+  it('one family cannot delete another family\'s memory', async () => {
+    // The session id is the capability. Naming someone else's memory id from
+    // your own session must not work, because row-level security is scoped to
+    // the child the SESSION belongs to, never to anything in the request.
+    const theirs = await withOneMemory();
+    const list = await app.inject({ method: 'GET', url: `/v1/session/${theirs}/memories` });
+    const theirMemId = list.json<{ memories: { id: string }[] }>().memories[0]!.id;
+
+    const mine = await openSession();
+    const attack = await app.inject({
+      method: 'DELETE', url: `/v1/session/${mine}/memories/${theirMemId}`,
+    });
+    expect(attack.statusCode).toBe(404);
+
+    const still = await app.inject({ method: 'GET', url: `/v1/session/${theirs}/memories` });
+    expect(still.json<{ memories: unknown[] }>().memories).toHaveLength(1);
+  });
+
+  it('one family cannot READ another family\'s memories', async () => {
+    const theirs = await withOneMemory();
+    const mine = await openSession();
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${mine}/memories` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ memories: unknown[] }>().memories).toHaveLength(0);
+    expect(theirs).not.toBe(mine);
+  });
+
+  it('404s for a session that does not exist', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/v1/session/99999999-9999-4999-8999-999999999999/memories',
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('rejects a `by` value that is neither child nor parent', async () => {
+    const id = await withOneMemory();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/session/${id}/memories/11111111-1111-4111-8111-111111111111?by=admin`,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

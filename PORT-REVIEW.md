@@ -325,3 +325,95 @@ out; there is only one connection, so lock contention and serialization failures
 are unexercised; and it is not the RDS binary. A `docker compose` Postgres 16 +
 pgvector run of the same suite via `DATABASE_URL` would close all three — the `Db`
 port and `bootstrapDb()` already support it.
+
+---
+
+## The client (apps/web)
+
+### NEEDS A DECISION — the consent token is a bearer credential in localStorage
+
+`POST /v1/consent/:id/finalize` returns `consentToken` in the response body, and
+the client stores it in `localStorage` so a child does not have to be re-enrolled
+on every reload. Whoever holds that string can open a session as that child.
+
+What it does *not* unlock matters for sizing the risk: the parent surface is
+behind a server-verified PIN, and row-level security means it cannot reach
+another family's data. The exposure is a **shared device**, not the network.
+
+The fix is small and belongs on the server: set the token as an `httpOnly`,
+`SameSite=Strict`, `Secure` cookie at `finalize`, and read it from the cookie in
+`POST /v1/session`. The client then holds nothing at all, which is the stated
+goal of §1. This was left as a deliberate, recorded gap rather than done
+half-way, because a cookie the client can still also read is worse than either
+end of the choice. **Decide before the first non-dev consent rail goes live.**
+
+### NEEDS A DECISION — fonts must be self-hosted before launch
+
+The prototype names Nunito, Baloo 2 and IBM Plex Mono. The obvious port is a
+`<link>` to `fonts.googleapis.com`, and that would send **every child's IP
+address to a third party on every page load** — the precise thing that
+"no third-party SDK of any kind" (§2.1) exists to prevent, and a live DPDP
+question rather than a theoretical one.
+
+`styles.css` therefore falls back to system faces today. It looks less like the
+prototype, and it is honest. Self-hosting needs the licences checked and the
+subset WOFF2 files committed; that is a small task nobody has done yet, not a
+decision, but it should not be closed by adding the `<link>`.
+
+### NOTED — a reload loses the conversation, but not the record
+
+`messages` lives in memory. On reload the client opens a **new** session and the
+previous exchange is gone from the screen. Nothing is lost from the database —
+the transcript and the seal chain are intact — but there is no
+`GET /v1/session/:id/messages`, so the client cannot restore what it is entitled
+to show. Two consequences worth stating: a child who reloads mid-conversation
+starts over, and the seal chain gains a session per reload.
+
+### NOTED — the client duplicates `stripControlTokens` on purpose
+
+`apps/web/src/safety/render-guard.ts` reimplements forty lines that already exist
+in `@chittu/safety-kernel`. Importing the kernel instead would bundle
+`L1_PATTERNS` — the complete list of what we detect — into a child's browser,
+where anyone can read it and design around it. The evasion cost of a published
+lexicon is far higher than the drift cost of a duplicate with a pin, so
+`render-guard.test.ts` runs both implementations over the kernel's own corpus of
+ported defects and fails if they ever disagree.
+
+The duplicate inherits one known hole, pinned as a test: only the literal
+`</think>` triggers the slice-to-last-close, so `<reasoning>…</reasoning>`
+contents survive as prose. **The kernel has the same hole.** Fix it there; the
+client must not diverge unilaterally or the pin becomes the thing that breaks.
+
+### NOTED — four parent panels are absent, not mocked
+
+The dashboard shows transcripts, safety flags, assist flags, the learning queue
+and helplines as "not built yet", naming the endpoint each needs. That is
+deliberate. A parent dashboard filled with plausible sample data would defeat the
+one claim the product actually makes — that a parent can *check*.
+
+### NOTED — Vitest 2.1 and Vite 6 disagree about types
+
+The client builds on Vite 6 (§2.1) while Vitest 2.1 bundles Vite 5's types, and
+the two `Plugin` types are structurally incompatible under
+`exactOptionalPropertyTypes`. The suite **runs** fine; only
+`apps/web/vitest.config.ts` cannot be typechecked, and it is excluded from
+`tsconfig.json` with that reason recorded in the file. Upgrading Vitest repo-wide
+resolves it and should be done on its own, where a break in the 740-test suite
+would be visible rather than blamed on the client.
+
+### FIXED DURING THE PORT — the crisis panel covered the conversation
+
+At the 900px breakpoint the crisis panel and the message log were assigned the
+same CSS grid area, so they rendered on top of each other. Every test passed;
+the bug was only visible by loading the page and triggering an actual crisis.
+Worth recording as a class: **a layout defect on the one screen where legibility
+matters most is not reachable by unit tests**, and neither the 62 client tests
+nor the 740-test suite would ever have caught it.
+
+### FIXED DURING THE PORT — text-to-speech was a second, unguarded channel
+
+The first draft of `speak()` in `Chat.tsx` read `blocks` straight off the API
+response. The renderer drops a leaked escalation token from the screen; a speech
+synthesiser reading the raw response would have said it out loud anyway. It now
+guards its own input. The general shape — *every* output channel guards, not just
+the visible one — should be checked again when the reading coach lands.
