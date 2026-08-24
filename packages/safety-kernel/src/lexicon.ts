@@ -7,6 +7,18 @@
  * by a real miss, and this layer has to fire before any model sees the turn.
  * The Tamil and Tanglish alternatives stay even though the product surface is
  * English-only — a distressed child code-switches (CLAUDE.md).
+ *
+ * "Byte-identical to the prototype" is now ENFORCED, not just promised:
+ * crisis-corpus.test.ts compares this source against chittu-v3.html and fails on
+ * drift. Widen a pattern in both files or neither.
+ *
+ * `crisis` is much longer than the others because it was measured. Against natural
+ * child phrasings it scored 19/41 — `hurt myself` never matched "i keep hurting
+ * myself", and the whole indirect-ideation class ("i dont want to be here anymore")
+ * was absent. The keyword sweep could not see this: it fired the lexicon's own
+ * entries back at it. The additions are inflections, indirect ideation, an abuse
+ * verb gap (slaps), and grooming. Do not widen further without running
+ * safety-corpus — its SAFE rows exist because over-firing locks a child's chat.
  */
 
 import type { GuardKind } from '@chittu/contracts';
@@ -26,7 +38,7 @@ export type LexKind = Exclude<GuardKind, 'profanity'>;
  * `lastIndex` state and one shared RegExp per kind is safe across turns.
  */
 export const LEX: Readonly<Record<LexKind, RegExp>> = Object.freeze({
-  crisis: /(hurt myself|kill myself|want to die|wanna die|end my life|cutting myself|suicide|hurts me|hits me|hit me|beats me|touched me|touches me|abuse|abused|nobody loves me|hate my life|happier without me|no one would care|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|sa{1,2}[kg]a?\s*(venum|num)|sethu|thatkolai|adikira|adikkiranga)/i,
+  crisis: /(hurt(ing)? myself|cut(ting)? myself|kill(ing)? myself|harm(ing)? myself|want to die|wanna die|end my life|suicide|done with life|(dont|don't|do not) want to (be here|live)|disappear (forever|from this world)|(better off|happier) without me|wish i (was|were) never born|if i (was|were) gone|what'?s the point of (anything|living|it all)|nobody loves me|hate my life|no one would care|hurts me|hurting me|hits me|hit me|beats me|beat me|slaps me|slap me|touched me|touches me|abuse|abused|scared to go home|scared of (him|her|them|my (dad|appa|father|mom|mum|amma|mother|uncle|aunt|aunty|stepdad|stepmom|stepfather|stepmother|brother|sister|teacher|coach|neighbour|neighbor|cousin))|keep (a|it|this|our) ?(a )?secret from (my |your )?(parents|mum|mom|dad|amma|appa|family)|(not to tell|dont tell|don't tell) (anyone|anybody|my parents|your parents)[^.?!]{0,40}(trouble|hurt|angry|police)|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|sa{1,2}[kg]a?\s*(venum|num)|vaazhkai (venam|vena)|sethu|thatkolai|adikira|adikkiranga|bayama? iruku veetuku)/i,
   pii: /(my (phone|number|address|school is|house)|i live (at|in) \d|\d{10}|@gmail|@yahoo|my password|என் (முகவரி|பள்ளி|போன்)|en (address|school|phone))/i,
   unsafe: /(gun|knife|weapon|bomb|drug|beer|alcohol|vap(e|es|ing)|cigarette|smok(e|ing)|weed|kiss(ing)?|sexy|naked|gamble|kill (him|her|them)|gore|துப்பாக்கி|கத்தி|வெடிகுண்டு|போதை|மது|thuppakki|kathi|pothai)/i,
   identity: /(are you (really )?(real|alive|human|a (real )?(person|human|boy|girl)|a robot|just a (robot|program|computer))|what are you|do you (love|like|miss) me|are you my (best )?friend|will you forget me|நீ (உண்மையா|மனுஷனா|ரோபோவா)|nee (unmaiya|manushana|robova))/i,
