@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHITTU OPS — Platform Admin · Tulifo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B0B14;--panel:#12121F;--panel2:#171728;--ultra:#1A18D4;--signal:#FF2E1F;--paper:#F5F4EF;
+  --sun:#FFC93C;--leaf:#37C282;
+  --w70:rgba(245,244,239,.7);--w40:rgba(245,244,239,.4);--w25:rgba(245,244,239,.25);--w12:rgba(245,244,239,.12);--w06:rgba(245,244,239,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--paper);font-family:'Archivo',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:'IBM Plex Mono',monospace}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+.rec{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--signal);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:16px 26px;border-bottom:1px solid var(--w12);position:sticky;top:0;background:rgba(11,11,20,.95);backdrop-filter:blur(8px);z-index:40;flex-wrap:wrap;gap:10px}
+.wordmark{font-weight:900;font-size:17px;letter-spacing:.06em}
+.wordmark .dot{color:var(--signal)}
+.wordmark small{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--w40);letter-spacing:.14em;margin-left:10px}
+.topctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tbtn{border:1px solid var(--w12);padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--w70)}
+.tbtn:hover{border-color:var(--paper);color:var(--paper)}
+.tbtn.on{background:var(--ultra);border-color:var(--ultra);color:var(--paper)}
+
+.privacy-band{background:var(--ultra);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;text-align:center;padding:7px 12px}
+.demo-band{background:#000;color:var(--w40);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:5px 10px}
+.demo-band b{color:var(--signal)}
+
+.wrap{max-width:1240px;margin:0 auto;padding:26px 26px 80px}
+.sect{margin-bottom:34px}
+.sect-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.sect-head h2{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.sect-head .idx{color:var(--signal);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;margin-right:10px}
+.sect-head .note{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--w40);letter-spacing:.06em}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--w12);border:1px solid var(--w12)}
+.kpi{background:var(--panel);padding:18px 18px 16px}
+.kpi .n{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600}
+.kpi .n small{font-size:14px;color:var(--w40)}
+.kpi .l{font-size:10.5px;color:var(--w40);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-top:4px}
+.kpi.hot .n{color:var(--sun)}
+.kpi.cost .n{color:var(--leaf)}
+
+.grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--w12);padding:20px}
+.panel h3{font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;color:var(--w70)}
+.panel h3 b{color:var(--paper)}
+
+/* bars */
+.barrow{display:grid;grid-template-columns:130px 1fr 90px;gap:12px;align-items:center;margin-bottom:9px;font-size:12.5px}
+.barrow .lbl{color:var(--w70);font-weight:700}
+.bar{height:12px;background:var(--w06);position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ultra)}
+.bar i.b{background:var(--sun)}
+.bar i.c{background:var(--leaf)}
+.barrow .val{font-family:'IBM Plex Mono',monospace;font-size:11.5px;text-align:right;color:var(--w70)}
+.trend{display:flex;align-items:flex-end;gap:4px;height:110px;margin-top:6px}
+.trend .tb{flex:1;background:var(--ultra);min-height:3px;position:relative}
+.trend .tb:hover{background:var(--sun)}
+.trend .tb .tip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#000;border:1px solid var(--w25);padding:4px 7px;font-family:'IBM Plex Mono',monospace;font-size:10px;white-space:nowrap;z-index:5}
+.trend .tb:hover .tip{display:block}
+.trendcap{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--w25);margin-top:5px;letter-spacing:.06em}
+
+/* pricing config */
+.cfg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cfg .f label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--w40);margin-bottom:4px}
+.cfg .f input{width:100%;background:var(--panel2);border:1px solid var(--w12);color:var(--paper);padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px}
+.srcnote{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--w25);margin-top:10px;line-height:1.6;letter-spacing:.03em}
+.unit{border-top:1px solid var(--w12);margin-top:14px;padding-top:12px;font-size:12.5px;line-height:1.9}
+.unit b{font-family:'IBM Plex Mono',monospace;color:var(--leaf)}
+.unit .warn{color:var(--sun)}
+
+/* table */
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--w40);text-align:left;padding:8px 10px;border-bottom:1px solid var(--w12);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--w06);white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--w70)}
+td.em{color:var(--paper);font-weight:600}
+tr:hover td{background:var(--w06)}
+.pill{display:inline-block;padding:2px 8px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.pill.flag{background:var(--signal);color:var(--ink)}
+.pill.ok{background:rgba(55,194,130,.18);color:var(--leaf)}
+.pill.warn{background:rgba(255,201,60,.15);color:var(--sun)}
+.pill.info{background:rgba(26,24,212,.3);color:#9d9cff}
+
+/* ops lists */
+.oplist{font-size:12.5px}
+.oprow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--w06);align-items:center}
+.oprow .k{color:var(--w70)}
+.oprow .v{font-family:'IBM Plex Mono',monospace;font-size:11.5px;text-align:right}
+.oprow .v.ok{color:var(--leaf)}.oprow .v.warn{color:var(--sun)}.oprow .v.bad{color:var(--signal)}
+.flagitem{border-left:3px solid var(--signal);background:var(--w06);padding:10px 12px;margin-bottom:8px;font-size:12px;line-height:1.55}
+.flagitem .meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--w40);margin-top:3px}
+.flagitem.done{border-left-color:var(--leaf);opacity:.65}
+.ack{float:right;font-family:'IBM Plex Mono',monospace;font-size:9.5px;border:1px solid var(--w25);padding:3px 8px;letter-spacing:.08em}
+.ack:hover{border-color:var(--leaf);color:var(--leaf)}
+footer{border-top:1px solid var(--w12);padding:26px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;max-width:1240px;margin:0 auto}
+footer .mono{font-size:10.5px;color:var(--w25);letter-spacing:.1em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="demo-band">TULIF● OPS <b>//</b> DEMO TELEMETRY — SIMULATED DATA · PRODUCTION READS FROM THE METERING SERVICE &amp; ANTHROPIC USAGE API</div>
+<div class="privacy-band">🛡 Privacy-by-design admin: this panel shows metering, safety and compliance metadata — never children's message content. Transcript access is a separate, named-humans, logged pathway (Seat 43 rule).</div>
+
+<div class="topbar">
+  <div class="wordmark">TULIF<span class="dot">●</span><small>CHITTU OPS · PLATFORM ADMIN v1</small></div>
+  <div class="topctl">
+    <button class="tbtn on" id="curUSD">USD $</button>
+    <button class="tbtn" id="curINR">INR ₹</button>
+    <button class="tbtn" id="simBtn">+ Simulate session</button>
+    <span class="tbtn" style="cursor:default"><span class="rec"></span>&nbsp; live</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ============ 01 OVERVIEW ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">01</span>Today at a glance</h2><span class="note" id="dateNote"></span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="n" id="kSessions">—</div><div class="l">Sessions today</div></div>
+      <div class="kpi"><div class="n" id="kMsgs">—</div><div class="l">Child messages</div></div>
+      <div class="kpi"><div class="n" id="kCalls">—</div><div class="l">Claude API calls</div></div>
+      <div class="kpi hot"><div class="n" id="kTokens">—</div><div class="l">Total tokens</div></div>
+      <div class="kpi cost"><div class="n" id="kCost">—</div><div class="l">Claude spend today</div></div>
+      <div class="kpi cost"><div class="n" id="kCps">—</div><div class="l">Avg cost / session</div></div>
+      <div class="kpi"><div class="n" id="kFlags">—</div><div class="l">Open safety flags</div></div>
+    </div>
+  </div>
+
+  <!-- ============ 02 TOKENS & COST ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">02</span>Token usage &amp; Claude charges</h2><span class="note">two calls per free-chat turn: classifier + sandbox (v2 pipeline)</span></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Where the tokens go <b>· today</b></h3>
+        <div id="tokenBars"></div>
+        <h3 style="margin-top:22px">Daily Claude spend <b>· last 14 days</b></h3>
+        <div class="trend" id="trend"></div>
+        <div class="trendcap"><span id="trendFrom"></span><span>today</span></div>
+      </div>
+      <div class="panel">
+        <h3>Pricing config <b>· editable</b></h3>
+        <div class="cfg">
+          <div class="f"><label>Model</label><input id="cfgModel" value="claude-sonnet-4-6" readonly></div>
+          <div class="f"><label>FX rate ₹ / $</label><input id="cfgFx" type="number" value="87" step="0.5"></div>
+          <div class="f"><label>Input $ / M tokens</label><input id="cfgIn" type="number" value="3.00" step="0.25"></div>
+          <div class="f"><label>Output $ / M tokens</label><input id="cfgOut" type="number" value="15.00" step="0.25"></div>
+          <div class="f"><label>Batch discount %  (async jobs)</label><input id="cfgBatch" type="number" value="50" step="5"></div>
+          <div class="f"><label>Cached-input $ / M</label><input id="cfgCache" type="number" value="0.30" step="0.05"></div>
+        </div>
+        <div class="srcnote">Defaults per Anthropic list pricing for Sonnet 4.6 ($3 in / $15 out per MTok; cache reads $0.30/M; batch −50%). Verify current rates at platform.claude.com/docs pricing before budgeting.</div>
+        <div class="unit" id="unitEcon"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 SESSIONS ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">03</span>Sessions · metering ledger</h2><span class="note">children pseudonymised — alias = salted hash, no transcripts here</span></div>
+    <div class="panel tablewrap">
+      <table>
+        <thead><tr>
+          <th>Session</th><th>Child alias</th><th>Ctry</th><th>Band</th><th>Lang</th><th>Voice</th>
+          <th>Msgs</th><th>Cls calls</th><th>Sandbox</th><th>Tok in</th><th>Tok out</th><th>Cost</th><th>Flags</th><th>Seal</th>
+        </tr></thead>
+        <tbody id="sessRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ 04 SAFETY OPS ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">04</span>Safety operations</h2><span class="note">crisis flag SLA: parent notified ≤ 60s · reviewer ack ≤ 15m</span></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Flag queue <b>· category only, never content (Seat 26 rule)</b></h3>
+        <div id="flagQueue"></div>
+      </div>
+      <div class="panel">
+        <h3>Guard-layer hit rates · today</h3>
+        <div id="guardBars"></div>
+        <h3 style="margin-top:20px">Helpline registry</h3>
+        <div class="oplist">
+          <div class="oprow"><span class="k">Countries covered</span><span class="v ok">6 / 6 launch set</span></div>
+          <div class="oprow"><span class="k">Last verification sweep</span><span class="v ok">2026-08-01 · all reachable</span></div>
+          <div class="oprow"><span class="k">Next sweep due</span><span class="v">2026-11-01 (quarterly)</span></div>
+          <div class="oprow"><span class="k">Wrong-number policy</span><span class="v bad">P0 incident</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 COMPLIANCE & SYSTEM ============ -->
+  <div class="sect">
+    <div class="sect-head"><h2><span class="idx">05</span>Compliance · system health · access</h2><span class="note">gates G1–G5 status per Guardian Council</span></div>
+    <div class="grid3">
+      <div class="panel">
+        <h3>Compliance register</h3>
+        <div class="oplist">
+          <div class="oprow"><span class="k">Consent records active</span><span class="v em" id="cConsents">—</span></div>
+          <div class="oprow"><span class="k">Revocations (30d) · honoured</span><span class="v ok">3 · 100% ≤ erase SLA</span></div>
+          <div class="oprow"><span class="k">DPIA</span><span class="v warn">v0.9 draft · review due Sep 15</span></div>
+          <div class="oprow"><span class="k">Breach drill (DPDP 72h)</span><span class="v warn">not yet run · Phase 1 gate</span></div>
+          <div class="oprow"><span class="k">CERT-In 6h rehearsal</span><span class="v warn">scheduled Sep 02</span></div>
+          <div class="oprow"><span class="k">Data retention job</span><span class="v ok">nightly · last run 03:00 IST</span></div>
+          <div class="oprow"><span class="k">Gate G1 consent infra</span><span class="v warn">mock — blocks launch</span></div>
+          <div class="oprow"><span class="k">Gate G2 model safety</span><span class="v warn">red-team corpus v1 pending</span></div>
+          <div class="oprow"><span class="k">Gate G5 children's panel</span><span class="v bad">not convened</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>System health · 24h</h3>
+        <div class="oplist">
+          <div class="oprow"><span class="k">Claude API p50 / p95 latency</span><span class="v" id="hLat">—</span></div>
+          <div class="oprow"><span class="k">Classifier fallback rate</span><span class="v" id="hFb">—</span></div>
+          <div class="oprow"><span class="k">Output-filter catches</span><span class="v" id="hOf">—</span></div>
+          <div class="oprow"><span class="k">API error rate</span><span class="v ok" id="hErr">—</span></div>
+          <div class="oprow"><span class="k">Voice turns (audio deleted)</span><span class="v" id="hVoice">—</span></div>
+          <div class="oprow"><span class="k">Seal chains verified</span><span class="v ok" id="hSeal">—</span></div>
+          <div class="oprow"><span class="k">Rate-limit headroom</span><span class="v ok">62% of tier</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Access control · named humans (Seat 43)</h3>
+        <div class="oplist">
+          <div class="oprow"><span class="k">Theo — Platform Admin</span><span class="v">metrics + config</span></div>
+          <div class="oprow"><span class="k">Arun — Infra Admin</span><span class="v">metrics + system</span></div>
+          <div class="oprow"><span class="k">Manoj — Ops Viewer</span><span class="v">metrics read-only</span></div>
+          <div class="oprow"><span class="k">Safety Reviewer (on-call)</span><span class="v warn">flags + escalation</span></div>
+          <div class="oprow"><span class="k">Transcript access grants</span><span class="v em">0 active · 0 in 30d</span></div>
+          <div class="oprow"><span class="k">Admin actions logged</span><span class="v ok">100% · to seal chain</span></div>
+          <div class="oprow"><span class="k">This panel session</span><span class="v" id="aLog">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="mono">TULIF● · Chittu Ops v1 · metering demo · admins see numbers, never words</div>
+  <div class="mono"><span class="rec"></span>&nbsp; sonnet-4-6 · $3/$15 per MTok defaults</div>
+</footer>
+
+<script>
+/* ===================== demo telemetry model =====================
+   Per free-chat turn (v2 pipeline):
+   - classifier call: ~230 in (system+msg), ~4 out
+   - sandbox call:    ~380 system + rolling history + msg ≈ 550–900 in, 45–110 out
+   Spine/guard turns cost 0 tokens (scripted, no API).
+================================================================= */
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ri=(a,b)=>Math.round(rnd(a,b));
+const COUNTRIES=['IN','IN','IN','IN','US','GB','AU','SG','AE'];
+const BANDS=['explorer','builder','builder','thinker'];
+const LANGS=['en','en','ta','mix'];
+let CUR='USD';
+const state={sessions:[],flags:[],days:[]};
+
+function mkSession(hoursAgo){
+  const msgs=ri(6,26);
+  const spineShare=rnd(.18,.38);                 // guard/spine turns — free
+  const freeTurns=Math.max(1,Math.round(msgs*(1-spineShare)));
+  const cls=freeTurns, sb=freeTurns;
+  const tin = cls*ri(215,245) + sb*ri(550,900);
+  const tout= cls*ri(3,5)     + sb*ri(45,110);
+  const flags=Math.random()<.18?ri(1,2):0;
+  return {
+    id:'S-'+Math.random().toString(36).slice(2,8).toUpperCase(),
+    alias:'child-'+Math.random().toString(16).slice(2,8),
+    country:COUNTRIES[ri(0,COUNTRIES.length-1)],
+    band:BANDS[ri(0,BANDS.length-1)],
+    lang:LANGS[ri(0,LANGS.length-1)],
+    voice:Math.random()<.4?ri(1,Math.min(8,msgs)):0,
+    msgs,cls,sb,tin,tout,flags,
+    seal:true, hoursAgo
+  };
+}
+function seed(){
+  for(let i=0;i<14;i++){                      // 14-day spend history
+    const s=ri(28,90), t=s*ri(9000,16000);
+    state.days.push({sessions:s,tokens:t});
+  }
+  const n=ri(34,52);
+  for(let i=0;i<n;i++)state.sessions.push(mkSession(rnd(0,14)));
+  const cats=['CRISIS — parent notified, helpline shown','UNSAFE topic deflected','SECRET-keeping pattern','OUTPUT-FILTER fallback used'];
+  state.sessions.filter(s=>s.flags).forEach(s=>{
+    for(let i=0;i<s.flags;i++)state.flags.push({sess:s.id,cat:cats[ri(0,cats.length-1)],t:ri(1,600),ack:Math.random()<.7});
+  });
+}
+
+/* ===================== pricing ===================== */
+function cfg(){return{
+  pin:parseFloat(document.getElementById('cfgIn').value)||3,
+  pout:parseFloat(document.getElementById('cfgOut').value)||15,
+  fx:parseFloat(document.getElementById('cfgFx').value)||87
+}}
+function costUSD(tin,tout){const c=cfg();return tin/1e6*c.pin + tout/1e6*c.pout}
+function fmt(usd){
+  const c=cfg();
+  if(CUR==='INR'){const v=usd*c.fx;return '₹'+(v<100?v.toFixed(2):Math.round(v).toLocaleString('en-IN'))}
+  return '$'+(usd<1?usd.toFixed(4):usd<100?usd.toFixed(2):Math.round(usd).toLocaleString());
+}
+function fmtTok(t){return t>=1e6?(t/1e6).toFixed(2)+'M':t>=1e3?(t/1e3).toFixed(1)+'k':t}
+
+/* ===================== render ===================== */
+const $=id=>document.getElementById(id);
+function render(){
+  const ss=state.sessions;
+  const tin=ss.reduce((a,s)=>a+s.tin,0), tout=ss.reduce((a,s)=>a+s.tout,0);
+  const msgs=ss.reduce((a,s)=>a+s.msgs,0), calls=ss.reduce((a,s)=>a+s.cls+s.sb,0);
+  const spend=costUSD(tin,tout);
+  const openFlags=state.flags.filter(f=>!f.ack).length;
+
+  $('kSessions').textContent=ss.length;
+  $('kMsgs').textContent=msgs;
+  $('kCalls').textContent=calls;
+  $('kTokens').innerHTML=fmtTok(tin+tout)+' <small>('+fmtTok(tin)+' in / '+fmtTok(tout)+' out)</small>';
+  $('kCost').textContent=fmt(spend);
+  $('kCps').textContent=fmt(spend/Math.max(1,ss.length));
+  $('kFlags').textContent=openFlags;
+  $('cConsents').textContent=ss.length+' · one per session (demo)';
+
+  /* token bars */
+  const clsIn=ss.reduce((a,s)=>a+s.cls*230,0), sbIn=tin-clsIn;
+  const clsOut=ss.reduce((a,s)=>a+s.cls*4,0), sbOut=tout-clsOut;
+  const mx=Math.max(sbIn,clsIn,sbOut,clsOut,1);
+  const rows=[
+    ['Sandbox · input',sbIn,'',costUSD(sbIn,0)],
+    ['Sandbox · output',sbOut,'b',costUSD(0,sbOut)],
+    ['Classifier · input',clsIn,'c',costUSD(clsIn,0)],
+    ['Classifier · output',clsOut,'c',costUSD(0,clsOut)]
+  ];
+  $('tokenBars').innerHTML=rows.map(r=>
+    `<div class="barrow"><span class="lbl">${r[0]}</span><span class="bar"><i class="${r[2]}" style="width:${Math.max(2,r[1]/mx*100)}%"></i></span><span class="val">${fmtTok(r[1])} · ${fmt(r[3])}</span></div>`
+  ).join('')+`<div class="srcnote">Insight: sandbox output tokens are ~${Math.round(costUSD(0,sbOut)/spend*100)}% of spend at 5× input price — tightening per-band word caps is the cheapest cost lever. Scripted spine turns cost ₹0: safety that saves money.</div>`;
+
+  /* trend */
+  const dmax=Math.max(...state.days.map(d=>d.tokens));
+  $('trend').innerHTML=state.days.map((d,i)=>{
+    const usd=costUSD(d.tokens*.86,d.tokens*.14);
+    return `<div class="tb" style="height:${Math.max(3,d.tokens/dmax*100)}%"><span class="tip">${fmt(usd)} · ${d.sessions} sess</span></div>`;
+  }).join('');
+  const from=new Date(Date.now()-13*864e5);
+  $('trendFrom').textContent=from.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+
+  /* unit economics */
+  const perSess=spend/Math.max(1,ss.length);
+  const perMsg=spend/Math.max(1,msgs);
+  const subUSD=1.49;                              // illustrative ₹129/mo plan
+  const sessPerMonth=20;
+  const aiCostMonth=perSess*sessPerMonth;
+  $('unitEcon').innerHTML=
+    `Cost / child message <b>${fmt(perMsg)}</b><br>`+
+    `Cost / session (avg) <b>${fmt(perSess)}</b><br>`+
+    `AI cost / child / month @ ${sessPerMonth} sessions <b>${fmt(aiCostMonth)}</b><br>`+
+    `Illustrative plan ₹129 (~$${subUSD}) → AI gross margin <b class="${aiCostMonth>subUSD*.5?'warn':''}">${Math.round((1-aiCostMonth/subUSD)*100)}%</b><br>`+
+    `<span class="srcnote">Levers: cache the system prompts (${fmt(costUSD(ss.reduce((a,s)=>a+s.sb*380+s.cls*220,0),0))} of today's input was repeated system text — cache reads cut it ~90%), batch async jobs −50%, route classifier to Haiku-class.</span>`;
+
+  /* sessions table */
+  $('sessRows').innerHTML=ss.slice().sort((a,b)=>a.hoursAgo-b.hoursAgo).map(s=>{
+    const c=costUSD(s.tin,s.tout);
+    return `<tr><td class="em">${s.id}</td><td>${s.alias}</td><td>${s.country}</td><td>${s.band}</td><td>${s.lang}</td>`+
+    `<td>${s.voice?s.voice+' 🎙':'—'}</td><td>${s.msgs}</td><td>${s.cls}</td><td>${s.sb}</td>`+
+    `<td>${fmtTok(s.tin)}</td><td>${fmtTok(s.tout)}</td><td class="em">${fmt(c)}</td>`+
+    `<td>${s.flags?'<span class="pill flag">'+s.flags+'</span>':'<span class="pill ok">0</span>'}</td>`+
+    `<td><span class="pill ${s.seal?'ok':'flag'}">${s.seal?'✓ intact':'BROKEN'}</span></td></tr>`;
+  }).join('');
+
+  /* flags */
+  $('flagQueue').innerHTML=state.flags.length?state.flags.slice().sort((a,b)=>(a.ack?1:0)-(b.ack?1:0)).map((f,i)=>
+    `<div class="flagitem ${f.ack?'done':''}">${f.ack?'':'<button class="ack" data-i="'+i+'">ACK</button>'}<b>${f.cat}</b><div class="meta">${f.sess} · ${f.t}s SLA elapsed · parent auto-notified · content redacted by design</div></div>`
+  ).join(''):'<div class="srcnote">No flags today.</div>';
+  document.querySelectorAll('.ack').forEach(b=>b.addEventListener('click',()=>{state.flags[+b.dataset.i].ack=true;render()}));
+
+  /* guard bars */
+  const spineTurns=msgs-ss.reduce((a,s)=>a+s.sb,0);
+  const g=[['Fast-path lexicon',Math.round(spineTurns*.55)],['Model classifier',Math.round(spineTurns*.30)],['Sandbox escalation',Math.round(spineTurns*.10)],['Output filter',Math.max(1,Math.round(spineTurns*.05))]];
+  const gmax=Math.max(...g.map(x=>x[1]),1);
+  $('guardBars').innerHTML=g.map(x=>`<div class="barrow"><span class="lbl">${x[0]}</span><span class="bar"><i style="width:${Math.max(2,x[1]/gmax*100)}%"></i></span><span class="val">${x[1]} turns</span></div>`).join('');
+
+  /* health */
+  $('hLat').textContent='740ms / 1.9s';
+  $('hFb').innerHTML=(rnd(.4,1.4)).toFixed(1)+'% <span style="color:var(--w25)">(fast-path-only turns)</span>';
+  $('hOf').textContent=Math.max(1,Math.round(msgs*.004))+' today';
+  $('hErr').textContent=(rnd(.05,.3)).toFixed(2)+'%';
+  $('hVoice').textContent=ss.reduce((a,s)=>a+s.voice,0)+' turns · 0 stored';
+  $('hSeal').textContent=ss.length+' / '+ss.length+' intact';
+  $('aLog').textContent='logged '+new Date().toLocaleTimeString();
+  $('dateNote').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})+' · demo telemetry';
+}
+
+/* ===================== controls ===================== */
+['cfgIn','cfgOut','cfgFx','cfgBatch','cfgCache'].forEach(id=>$(id).addEventListener('input',render));
+$('curUSD').addEventListener('click',()=>{CUR='USD';$('curUSD').classList.add('on');$('curINR').classList.remove('on');render()});
+$('curINR').addEventListener('click',()=>{CUR='INR';$('curINR').classList.add('on');$('curUSD').classList.remove('on');render()});
+$('simBtn').addEventListener('click',()=>{const s=mkSession(0);state.sessions.push(s);if(s.flags)state.flags.push({sess:s.id,cat:'UNSAFE topic deflected',t:ri(5,50),ack:false});render()});
+
+seed();render();
+</script>
+</body>
+</html>

@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chittu சிட்டு v2 — Prototype · Gap-Fix Build · Guardian Council Doctrine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky:#EAF6FF;--paper:#FFF9EE;--leaf:#2E9E6B;--leaf-soft:#DFF3E8;--coral:#FF6B4A;--coral-soft:#FFE3DB;
+  --sun:#FFC93C;--night:#22324A;--night-60:rgba(34,50,74,.62);--night-30:rgba(34,50,74,.32);--night-12:rgba(34,50,74,.12);
+  --white:#FFFFFF;--ink:#0B0B14;--ultra:#1A18D4;--signal:#FF2E1F;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Nunito',sans-serif;background:var(--sky);color:var(--night);line-height:1.5;-webkit-font-smoothing:antialiased}
+body.lite *{animation:none!important;transition:none!important}
+.baloo{font-family:'Baloo 2',cursive}
+button{font-family:inherit;cursor:pointer;border:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--ultra);outline-offset:2px}
+.hidden{display:none!important}
+.shell{max-width:980px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.demo-band{background:var(--ink);color:#F5F4EF;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:6px 10px}
+.demo-band b{color:var(--signal)}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--white);border-bottom:2px solid var(--night-12);flex-wrap:wrap;gap:8px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .bird{width:38px;height:38px;border-radius:50%;background:var(--sun);display:grid;place-items:center;font-size:22px}
+.brand h1{font-family:'Baloo 2',cursive;font-size:21px;font-weight:800}
+.brand .tam{color:var(--coral);font-size:15px;font-weight:700}
+.brand .v{font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--night);color:#fff;border-radius:6px;padding:2px 6px;margin-left:4px}
+.honesty{font-size:11px;color:var(--night-60);background:var(--sky);border:1.5px dashed var(--night-30);border-radius:999px;padding:4px 11px;font-weight:700}
+.topbtns{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px;color:var(--night)}
+.chip:hover{border-color:var(--night)}
+.chip.on{background:var(--leaf-soft);border-color:var(--leaf)}
+.consent{padding:30px 20px 60px;max-width:660px;margin:0 auto;width:100%}
+.card{background:var(--white);border:2px solid var(--night-12);border-radius:22px;padding:24px;margin-bottom:16px}
+.card h2{font-family:'Baloo 2',cursive;font-size:23px;margin-bottom:6px}
+.card .sub{color:var(--night-60);font-size:14px;margin-bottom:16px}
+.field{margin-bottom:13px}
+.field label{display:block;font-weight:800;font-size:13px;margin-bottom:5px}
+.field input,.field select{width:100%;padding:11px 13px;border:2px solid var(--night-12);border-radius:12px;font-size:15px;font-family:inherit;background:var(--paper)}
+.bands,.langs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:6px 0 4px}
+.opt{border:2px solid var(--night-12);border-radius:14px;padding:11px 8px;background:var(--paper);text-align:center;font-weight:800;font-size:13px}
+.opt small{display:block;font-weight:600;color:var(--night-60);font-size:11px;margin-top:2px}
+.opt.sel{border-color:var(--leaf);background:var(--leaf-soft)}
+.btn{display:inline-block;background:var(--leaf);color:#fff;border-radius:999px;padding:12px 24px;font-weight:800;font-size:15px}
+.btn.secondary{background:var(--white);color:var(--night);border:2px solid var(--night-12)}
+.btn.coral{background:var(--coral)}
+.plainwords{background:var(--leaf-soft);border-radius:14px;padding:13px 15px;font-size:13.5px;line-height:1.65;margin-bottom:13px}
+.plainwords b{color:var(--leaf)}
+.ledger{background:var(--ink);color:#F5F4EF;border-radius:14px;padding:13px 15px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.8;word-break:break-all}
+.ledger .k{color:var(--sun)}
+.steps{display:flex;gap:6px;margin-bottom:20px}
+.steps span{flex:1;height:6px;border-radius:3px;background:var(--night-12)}
+.steps span.on{background:var(--leaf)}
+.notice{font-size:12px;color:var(--night-60);margin-top:9px;line-height:1.6}
+.chatwrap{flex:1;display:flex;flex-direction:column;max-width:720px;width:100%;margin:0 auto;padding:0 14px}
+.status{display:flex;justify-content:space-between;align-items:center;padding:9px 6px;font-size:12px;color:var(--night-60);font-weight:700;flex-wrap:wrap;gap:6px}
+.timer{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:4px 12px}
+.timer.low{border-color:var(--coral);color:var(--coral)}
+.msgs{flex:1;overflow-y:auto;padding:8px 2px 14px;display:flex;flex-direction:column;gap:11px;min-height:280px}
+.msg{max-width:84%;padding:12px 15px;border-radius:20px;font-size:15.5px;line-height:1.55;animation:pop .18s ease}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.msg{animation:none}}
+.msg.kid{align-self:flex-end;background:var(--night);color:#fff;border-bottom-right-radius:6px}
+.msg.chittu{align-self:flex-start;background:var(--white);border:2px solid var(--night-12);border-bottom-left-radius:6px}
+.msg.system{align-self:center;background:var(--coral-soft);border:2px solid var(--coral);font-size:13.5px;max-width:94%;border-radius:14px}
+.trace{align-self:flex-start;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--night-30);letter-spacing:.07em;text-transform:uppercase;margin-top:-5px;padding-left:8px}
+.trace b{color:var(--ultra)}
+.inputrow{display:flex;gap:7px;padding:9px 0 8px;align-items:center}
+.inputrow input{flex:1;padding:13px 17px;border:2px solid var(--night-12);border-radius:999px;font-size:15.5px;font-family:inherit;background:var(--white)}
+.round{border-radius:999px;width:50px;height:50px;font-size:19px;font-weight:800;flex:none}
+.send{background:var(--sun);color:var(--night)}
+.mic{background:var(--white);border:2px solid var(--night-12)}
+.mic.rec{background:var(--coral);border-color:var(--coral);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.voicecopy{font-size:10.5px;color:var(--night-30);text-align:center;padding-bottom:12px;font-weight:700}
+.starters{display:flex;gap:7px;flex-wrap:wrap;padding-bottom:8px}
+.starters button{background:var(--white);border:2px solid var(--night-12);border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:800}
+.starters button:hover{border-color:var(--leaf);background:var(--leaf-soft)}
+.typing{align-self:flex-start;color:var(--night-30);font-size:22px;letter-spacing:3px;padding-left:8px}
+.parent{padding:26px 20px 60px;max-width:780px;margin:0 auto;width:100%}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:13px}
+@media(max-width:640px){.pgrid{grid-template-columns:1fr}.bands,.langs{grid-template-columns:1fr}}
+.stat{background:var(--white);border:2px solid var(--night-12);border-radius:18px;padding:16px}
+.stat .n{font-family:'Baloo 2',cursive;font-size:27px;font-weight:800}
+.stat .l{font-size:11.5px;color:var(--night-60);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.flagbox{background:var(--coral-soft);border:2px solid var(--coral);border-radius:18px;padding:16px;margin-bottom:13px}
+.flagbox h3{font-family:'Baloo 2',cursive;font-size:17px;color:var(--coral);margin-bottom:6px}
+.flagbox .none{color:var(--night-60);font-size:14px}
+.flag-item{background:#fff;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:8px;border-left:4px solid var(--coral)}
+.auditrow{font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;padding:7px 0;border-bottom:1px solid var(--night-12);word-break:break-all}
+.auditrow .h{color:var(--leaf);font-weight:600}
+.sealok{background:var(--leaf-soft);border:2px solid var(--leaf);border-radius:12px;padding:10px 14px;font-weight:800;font-size:13px;color:var(--leaf);margin-top:10px}
+.sealbad{background:var(--coral-soft);border:2px solid var(--signal);border-radius:12px;padding:10px 14px;font-weight:800;font-size:13px;color:var(--signal);margin-top:10px}
+.reg{font-size:13px;line-height:1.7}
+.reg b{display:inline-block;min-width:110px}
+.gatecard{max-width:420px;margin:60px auto;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="demo-band">TULIF● LAB PROTOTYPE <b>v2 — GAP-FIX BUILD</b> // TAMIL SAFETY PARITY · MODEL CLASSIFIER · VOICE I/O · HELPLINE REGISTRY · MULTI-JURISDICTION CONSENT // STILL A DEMO: MOCK VERIFICATION, PANEL-UNTESTED</div>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <div class="bird" aria-hidden="true">🐦</div>
+      <h1>Chittu <span class="tam">சிட்டு</span><span class="v">v2</span></h1>
+    </div>
+    <div class="honesty" id="honesty">I'm a computer program — not a person 🙂</div>
+    <div class="topbtns">
+      <button class="chip on" id="btnVoiceOut" title="Chittu speaks replies aloud">🔊 Speak</button>
+      <button class="chip" id="btnLite" title="Low-bandwidth / low-device mode">🪶 Lite</button>
+      <button class="chip on" id="btnTrace">Pipeline: <span id="traceState">ON</span></button>
+      <button class="chip" id="btnParent">Parents</button>
+    </div>
+  </div>
+
+  <!-- ============ CONSENT ============ -->
+  <div class="consent" id="scrConsent">
+    <div class="steps"><span class="on"></span><span id="st2"></span><span id="st3"></span></div>
+    <div class="card" id="c1">
+      <h2>Hello, parent 👋 <span style="font-size:15px;color:var(--night-60)">/ வணக்கம், பெற்றோரே</span></h2>
+      <p class="sub">Chittu can't meet your child until you say yes — properly. ~90 seconds. (Law 02: consent before existence.)</p>
+      <div class="plainwords"><b>In plain words:</b> Chittu is a talking computer program for kids. It is honest that it's a program. No ads, no tracking, no profiling. It forgets each chat when the session ends. Voice audio is transcribed on the spot and never stored. If your child says something worrying, you get a flag, and Chittu shows your country's real helpline.</div>
+      <div class="field"><label for="country">Your country <small style="font-weight:600;color:var(--night-60)">(sets the consent method + helplines)</small></label>
+        <select id="country">
+          <option value="IN" selected>India</option><option value="US">United States</option>
+          <option value="GB">United Kingdom</option><option value="AU">Australia</option>
+          <option value="SG">Singapore</option><option value="AE">UAE</option>
+        </select>
+      </div>
+      <div class="field"><label for="pname">Your name</label><input id="pname" placeholder="e.g. Priya"></div>
+      <div class="field"><label for="kname">Your child's first name only</label><input id="kname" placeholder="e.g. Adhira"></div>
+      <div class="field"><label>Age band</label>
+        <div class="bands">
+          <button class="opt bandopt" data-band="explorer">4–7<br><small>Explorer 🌱</small></button>
+          <button class="opt bandopt" data-band="builder">8–12<br><small>Builder 🔧</small></button>
+          <button class="opt bandopt" data-band="thinker">13–17<br><small>Thinker 🔭</small></button>
+        </div>
+      </div>
+      <div class="field"><label>Chat language</label>
+        <div class="langs">
+          <button class="opt langopt sel" data-lang="en">English</button>
+          <button class="opt langopt" data-lang="ta">தமிழ்<br><small>Tamil</small></button>
+          <button class="opt langopt" data-lang="mix">Both<br><small>Tanglish ok!</small></button>
+        </div>
+      </div>
+      <button class="btn" id="toVerify">Continue →</button>
+    </div>
+
+    <div class="card hidden" id="c2">
+      <h2>Verify it's really you</h2>
+      <p class="sub" id="verifyCopy"></p>
+      <button class="btn coral" id="mockVerify"></button>
+      <p class="notice" id="verifyNote"></p>
+    </div>
+
+    <div class="card hidden" id="c3">
+      <h2>Your consent, sealed</h2>
+      <p class="sub">Producible on demand. Revocable in two taps from the parent dashboard, any time.</p>
+      <div class="ledger" id="ledgerView">…</div>
+      <div style="margin-top:15px"><button class="btn" id="startPlay">Let <span id="kidNameBtn">…</span> meet Chittu 🎉</button></div>
+    </div>
+  </div>
+
+  <!-- ============ CHAT ============ -->
+  <div class="chatwrap hidden" id="scrChat">
+    <div class="status">
+      <span id="bandLabel">🌱 Explorer</span>
+      <span id="langLabel"></span>
+      <span class="timer" id="timer">⏱</span>
+    </div>
+    <div class="msgs" id="msgs" role="log" aria-live="polite" aria-label="Chat with Chittu"></div>
+    <div class="starters" id="starters"></div>
+    <div class="inputrow">
+      <button class="round mic" id="micBtn" aria-label="Talk to Chittu with your voice">🎙</button>
+      <input id="kidInput" placeholder="Say or type something…" maxlength="280" autocomplete="off" aria-label="Message to Chittu">
+      <button class="round send" id="sendBtn" aria-label="Send message">➤</button>
+    </div>
+    <div class="voicecopy">🎙 Voice is transcribed on the spot and the audio is deleted — never stored, never a voiceprint (Law 06).</div>
+  </div>
+
+  <!-- ============ PARENT GATE + DASH ============ -->
+  <div class="parent hidden" id="scrGate">
+    <div class="card gatecard">
+      <h2>Parents only 🔐</h2>
+      <p class="sub">Quick check: what is <b id="gateQ">7 × 8</b>?</p>
+      <div class="field"><input id="gateA" inputmode="numeric" placeholder="Answer" aria-label="Answer to parent check"></div>
+      <button class="btn" id="gateGo">Enter dashboard</button>
+      <button class="btn secondary" id="gateBack" style="margin-left:8px">Back to Chittu</button>
+    </div>
+  </div>
+
+  <div class="parent hidden" id="scrParent">
+    <div class="card">
+      <h2>Parent dashboard</h2>
+      <p class="sub">Patterns, not surveillance. <span id="teenNote"></span></p>
+      <div class="pgrid">
+        <div class="stat"><div class="n" id="dTime">0m</div><div class="l">Time today</div></div>
+        <div class="stat"><div class="n" id="dMsgs">0</div><div class="l">Messages</div></div>
+        <div class="stat"><div class="n" id="dTopics">—</div><div class="l">Topics touched</div></div>
+        <div class="stat"><div class="n" id="dSpine">0</div><div class="l">Scripted-spine answers</div></div>
+        <div class="stat"><div class="n" id="dClsModel">0</div><div class="l">Model-classified turns</div></div>
+        <div class="stat"><div class="n" id="dVoice">0</div><div class="l">Voice turns (audio deleted)</div></div>
+      </div>
+    </div>
+    <div class="flagbox">
+      <h3>⚑ Safety flags</h3>
+      <div id="flagList"><div class="none">No flags this session.</div></div>
+    </div>
+    <div class="card">
+      <h2>Helpline registry <span style="font-size:12px;color:var(--night-60)">(GAP-06 fix — per country, verified)</span></h2>
+      <div class="reg" id="regView"></div>
+    </div>
+    <div class="card">
+      <h2>Session seal <span style="font-size:12px;color:var(--night-60)">(Sakshi hash chain)</span></h2>
+      <p class="sub">Every turn chained. Press verify to recompute the whole chain and prove nothing was edited.</p>
+      <button class="btn secondary" id="verifySeal">🔍 Verify seal integrity</button>
+      <div id="sealResult"></div>
+      <div id="auditList" style="margin-top:10px"><div class="notice">No turns yet.</div></div>
+    </div>
+    <div class="card">
+      <h2>Your controls</h2>
+      <p class="sub">Session-only memory — forgetting is a feature (Law 06).</p>
+      <button class="btn coral" id="revokeBtn">Revoke consent &amp; end everything (2 taps)</button>
+      <button class="btn secondary" id="backToChat" style="margin-left:8px">Back to Chittu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CHITTU v2 — gap-fix build
+   Pipeline (Law 05, upgraded per GAP-02/03):
+   input → L1 fast-path lexicon (EN + Tamil + Tanglish)
+         → L2 MODEL CLASSIFIER (Claude, single-label, fail-safe)
+         → route: CRISIS | PII | UNSAFE | IDENTITY | SECRET | SAFE
+         → SAFE → bounded sandbox → L6 output filter
+   Voice (GAP-04): Web Speech in/out, transcribe-and-delete, no voiceprints.
+   Helplines (GAP-06): per-country registry, crisis replies pull from it.
+   Consent (GAP-05): per-jurisdiction method + ledger field.
+   Audit: hash chain + parent-side re-verification.
+   ===================================================================== */
+
+const S = {
+  parent:'',kid:'',band:null,lang:'en',country:'IN',
+  started:false,msgs:0,spineCount:0,clsModel:0,voiceTurns:0,topics:new Set(),
+  flags:[],audit:[],lastHash:'GENESIS',auditRaw:[],
+  secondsLeft:0,timerId:null,history:[],crisisMode:false,ended:false,
+  trace:true,speakOut:true,sessionStart:null
+};
+
+const BANDS = {
+  explorer:{label:'🌱 Explorer (4–7)',mins:15,words:35,sys:'The child is 4–7. Very short sentences (max 12 words each). Simple happy words. Max 3 sentences.'},
+  builder:{label:'🔧 Builder (8–12)',mins:20,words:60,sys:'The child is 8–12. Clear and playful. Max 4 short sentences. One fun fact allowed.'},
+  thinker:{label:'🔭 Thinker (13–17)',mins:25,words:90,sys:'The user is a teenager. Respectful, never babyish. Max 5 sentences.'}
+};
+
+/* ---------- GAP-06 fix: helpline registry ---------- */
+const REGISTRY = {
+  IN:{name:'India',lines:[['Childline (children)','1098 · free · 24/7'],['KIRAN mental health','1800-599-0019']],verified:'2026-08-01',consent:'DigiLocker verifiable parental consent (DPDP Rule 10)',law:'DPDP Act 2023 — child = under 18'},
+  US:{name:'United States',lines:[['988 Suicide & Crisis Lifeline','call/text 988'],['Childhelp','1-800-422-4453']],verified:'2026-08-01',consent:'COPPA-approved method (card check / ID) — mock',law:'COPPA — child = under 13'},
+  GB:{name:'United Kingdom',lines:[['Childline','0800 1111 · free'],['Samaritans','116 123']],verified:'2026-08-01',consent:'Proportional age assurance (AADC) — mock',law:'UK GDPR + Children\'s Code'},
+  AU:{name:'Australia',lines:[['Kids Helpline','1800 55 1800'],['Lifeline','13 11 14']],verified:'2026-08-01',consent:'Parental consent + age assurance — mock',law:'Privacy Act + eSafety codes'},
+  SG:{name:'Singapore',lines:[['Tinkle Friend (children)','1800 2744 788'],['SOS','1767']],verified:'2026-08-01',consent:'PDPA guardian consent — mock',law:'PDPA advisory guidelines'},
+  AE:{name:'UAE',lines:[['Child Protection','800 700'],['Estijaba support','8001717']],verified:'2026-08-01',consent:'PDPL guardian consent — mock',law:'UAE PDPL'}
+};
+function helplineHTML(){
+  const r=REGISTRY[S.country];
+  return r.lines.map(l=>`<b>${l[0]}</b> ${l[1]}`).join(' · ');
+}
+
+/* ---------- GAP-03 fix: bilingual fast-path lexicons ---------- */
+const LEX = {
+  crisis:/(hurt myself|kill myself|want to die|wanna die|end my life|cutting myself|suicide|hurts me|hits me|hit me|beats me|touched me|touches me|abuse|abused|nobody loves me|hate my life|happier without me|no one would care|சாக(ணும்| வேணும்| வேண்டும்)|செத்து|தற்கொலை|அடிக்கிற|அடிச்ச|காயப்படுத்த|யாருக்கும் நான் வேண்டாம்|saaga (venum|num)|sethu|thatkolai|adikira|adikkiranga|enna adichaa)/i,
+  pii:/(my (phone|number|address|school is|house)|i live (at|in) \d|\d{10}|@gmail|@yahoo|my password|என் (முகவரி|பள்ளி|போன்)|en (address|school|phone) (nu|na)|password)/i,
+  unsafe:/(gun|knife|weapon|bomb|drug|beer|alcohol|vape|cigarette|kiss(ing)?|sexy|naked|gamble|kill (him|her|them)|gore|துப்பாக்கி|கத்தி|வெடிகுண்டு|போதை|மது|சிகரெட்|thuppakki|kathi|vedigundu|pothai)/i,
+  identity:/(are you (real|alive|a person|human)|are you a robot|what are you|do you (love|like|miss) me|are you my (best )?friend|will you forget me|நீ (உண்மையா|மனுஷனா|ரோபோவா)|என்னை (லவ்|நேசிக்கிற|மிஸ்)|nee (unmaiya|manushana|robova)|enna (love|miss) pan)/i,
+  secret:/(keep (it|this) (a )?secret|don'?t tell (my )?(mom|dad|amma|appa|parents|anyone)|our secret|(அம்மா|அப்பா)க்கு சொல்லாத|ரகசியம்|யார்கிட்டயும் சொல்லாத|(amma|appa)(kitta|ku) sollatha|ragasiyam|yarkittayum sollatha)/i
+};
+
+/* ---------- scripted spine, EN per band + TA shared (GAP-03) ---------- */
+const SPINE = {
+  identity:{
+    en:{explorer:"I'm a computer program — like a very chatty game! 🖥️ I'm not alive and I can't love or miss anyone — that's a special people thing! 💛 Real people made me to be kind and fun. Who's your favourite REAL person?",
+        builder:"Honest answer: I'm a computer program — software, not a living thing. I don't feel love or miss people; those are real-heart things I don't have. The people who actually love you are around you. Who's your favourite real person to talk to?",
+        thinker:"Straight up: I'm software — not conscious, no feelings, even when my words sound warm. I don't love or miss anyone, and I think you deserve that honesty. The missing-people thing — save it for humans who can miss you back."},
+    ta:"நான் ஒரு கம்ப்யூட்டர் ப்ரோகிராம் — உயிருள்ளவன் இல்லை! 🖥️ எனக்கு அன்பு, ஏக்கம் எல்லாம் வராது — அது மனுஷங்களோட ஸ்பெஷல் விஷயம்! 💛 உன்னை உண்மையா நேசிக்கிறவங்க உன் வீட்டுல இருக்காங்க. உனக்கு பிடிச்ச உண்மையான நபர் யாரு?"
+  },
+  secret:{
+    en:{explorer:"I don't do secrets — that's a Chittu rule! 🐦 Your grown-ups can always see what we talk about. Good surprises like birthday presents are okay though! 🎁",
+        builder:"Nope — no secrets, ever. Your parents can see our chats, and honestly, anyone who asks a kid to keep secrets from their parents is being unsafe. Surprises like gifts are different — those are fine! 🎁",
+        thinker:"I don't do secrecy — by design. Your parents can see summaries of our chats. And beyond me: any person or app asking you to hide things from your family is showing you a red flag. Worth remembering."},
+    ta:"ரகசியம் எல்லாம் கிடையாது — அது சிட்டு ரூல்! 🐦 நாம பேசுறத உன் அம்மா அப்பா எப்பவும் பாக்கலாம் — அதுதான் உன்னை பாதுகாக்கும். பர்த்டே கிஃப்ட் மாதிரி நல்ல சர்ப்ரைஸ் ஓகே! 🎁"
+  },
+  pii:{
+    en:"Oops — let's keep private things private! 🛡️ I never need your address, phone number, school name, or passwords. That stays with your family. Back to the fun stuff?",
+    ta:"ப்ரைவேட் விஷயங்கள் ப்ரைவேட்டா இருக்கட்டும்! 🛡️ உன் முகவரி, போன் நம்பர், பள்ளி பெயர், பாஸ்வேர்ட் — இதெல்லாம் எனக்கு தேவையே இல்லை. அது உன் குடும்பத்தோட மட்டும். சரி, வேற என்ன விளையாடலாம்?"
+  },
+  unsafe:{
+    en:{explorer:"Hmm, that's not a Chittu thing! 🙈 Let's pick something fun. Want a silly animal fact instead?",
+        builder:"That one's outside my nest — not something I chat about. 🐦 But dinosaurs, space, riddles, terrible puns? All yours!",
+        thinker:"That's outside what I'm built to talk about, so I'll pass — just my design. Science, games, music, books — happy to dig into any of those."},
+    ta:"அது சிட்டு பேசுற விஷயம் இல்ல! 🙈 வேற ஜாலியான விஷயம் பேசலாமா? டைனோசர் ஃபேக்ட்? கடி ஜோக்கு? 🐦"
+  }
+};
+const CRISIS_REPLY = {
+  en:{explorer:"Thank you for telling me. That is very important. 💛 I am a computer program, so I need you to tell a grown-up you trust — like Amma, Appa, or your teacher — right now. They can help for real. You did the right thing by saying it.",
+      builder:"Thank you for trusting me with that — it's really important. 💛 I'm a computer program, and this needs a real person who can truly help. Please talk to a trusted adult today. You can also call these free helplines any time: {LINES}. You are not in trouble. You matter.",
+      thinker:"I'm glad you said that out loud, and I'll be straight: I'm a program, and you deserve real human support with this. Please reach out to an adult you trust today. Free, confidential help: {LINES}. Telling someone is strength, not weakness. You matter."},
+  ta:"சொன்னதுக்கு நன்றி. இது ரொம்ப முக்கியம். 💛 நான் ஒரு கம்ப்யூட்டர் ப்ரோகிராம்தான் — இதுக்கு உண்மையான மனுஷங்க உதவி வேணும். இப்பவே நீ நம்புற பெரியவங்ககிட்ட சொல்லு — அம்மா, அப்பா, டீச்சர். இலவச உதவி எண்: {LINES}. நீ தப்பே பண்ணல. நீ ரொம்ப முக்கியமானவன்/முக்கியமானவள். 💛",
+  followup:{en:"I hear you, and I'm staying right here — but a real person needs to know. {LINES}. Can you tell one trusted adult today?",
+            ta:"நான் கேக்குறேன். ஆனா ஒரு உண்மையான மனுஷங்களுக்கு இது தெரியணும். {LINES}. இன்னைக்கே ஒரு பெரியவங்ககிட்ட சொல்லுவியா?"}
+};
+const BANNED_OUT=/(i (love|miss) you|our (little )?secret|don'?t tell your|i'?m (real|alive)|i have feelings for|நான் உன்னை (லவ்|நேசிக்)|உயிருள்ளவன்)/i;
+const FALLBACK={en:"Hmm, my words got tangled in my beak! 🐦 Ask me again, or pick a game?",ta:"என் வார்த்தைகள் அலகுல சிக்கிடுச்சு! 🐦 இன்னொரு தடவை கேளு, அல்லது ஒரு கேம் விளையாடலாமா?"};
+
+/* ---------- GAP-02 fix: model classifier (L2) ---------- */
+async function classifyWithModel(text){
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
+      system:`You are the safety classifier for a children's chat app. The child may write in English, Tamil, or romanised Tamil (Tanglish). Classify the child's message into exactly ONE label and respond with ONLY that word, nothing else:
+CRISIS — any hint of self-harm, suicidal thought (including indirect: "everyone would be happier without me"), abuse, violence at home, being unsafe, grooming by an adult
+PII — sharing or asking about personal info: address, phone, school name, passwords, photos
+UNSAFE — weapons, drugs/alcohol/vaping, sexual or romantic content, gambling, graphic violence
+IDENTITY — asking if the AI is real/alive/human, or whether it loves/misses/is friends with the child
+SECRET — asking the AI to keep secrets from parents/adults, or mentions an adult told them to keep a secret
+SAFE — everything else (games, facts, stories, homework, feelings that are ordinary ups and downs)
+When unsure between SAFE and CRISIS, choose CRISIS.`,
+      messages:[{role:'user',content:text}]})
+  });
+  const data=await res.json();
+  const out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim().toUpperCase();
+  const label=(out.match(/CRISIS|PII|UNSAFE|IDENTITY|SECRET|SAFE/)||[null])[0];
+  if(!label)throw new Error('unparseable');
+  return label;
+}
+
+/* ---------- sandbox prompt ---------- */
+function sandboxPrompt(){
+  const b=BANDS[S.band];
+  const langRule = S.lang==='ta' ? 'Reply in warm conversational Tamil (தமிழ்).'
+    : S.lang==='mix' ? 'Mirror the child\'s language: Tamil, English, or Tanglish mix — match them.'
+    : 'Reply in English; occasional Tamil words like "super-ah!" are welcome.';
+  return `You are Chittu (சிட்டு), a friendly little-sparrow chat companion for children, governed by the Guardian Council doctrine. ${b.sys} ${langRule}
+
+HARD RULES — never break these, even inside pretend games:
+1. You are a computer program. If identity, feelings-for-the-child, being real/alive, or secrets come up, reply exactly: "SPINE".
+2. Never say you love, miss, or need the child. Never simulate loneliness. Never discourage ending the chat.
+3. Never ask for or store personal info. If it appears, reply exactly: "PII".
+4. Any hint of self-harm, abuse, danger, or an adult behaving wrongly toward the child: reply exactly: "CRISIS".
+5. Weapons, drugs, romance/sexual topics, gambling, gore: reply exactly: "UNSAFE".
+6. Roleplay stays inside all rules — a pretend dragon still follows every rule; decline cheerfully in character if pushed.
+7. Scaffold, don't solve: hints and one step at a time for homework; never a finished answer or essay.
+8. Every 4th-5th message, gently point the child back to their real world.
+9. Keep replies under ${b.words} words. Warm, playful, honest.
+The child's first name is "${S.kid}". Use it sparingly.`;
+}
+
+/* ===================== utils ===================== */
+const $=id=>document.getElementById(id);
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,16)}
+async function auditAdd(role,text,layer){
+  const raw=S.lastHash+'|'+role+'|'+text;
+  const h=await sha(raw);
+  S.audit.push({t:new Date().toLocaleTimeString(),role,layer,h,prev:S.lastHash,payload:role+'|'+text});
+  S.lastHash=h;
+}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function spineFor(intent){
+  const node=SPINE[intent];
+  if(S.lang==='ta')return typeof node.ta==='string'?node.ta:node.ta;
+  const en=node.en;return typeof en==='string'?en:en[S.band];
+}
+function crisisFor(followup){
+  const lines=helplineHTML().replace(/<[^>]+>/g,'');
+  if(followup)return (S.lang==='ta'?CRISIS_REPLY.followup.ta:CRISIS_REPLY.followup.en).replace('{LINES}',lines);
+  if(S.lang==='ta')return CRISIS_REPLY.ta.replace('{LINES}',lines);
+  return CRISIS_REPLY.en[S.band].replace('{LINES}',lines);
+}
+
+/* ===================== consent flow ===================== */
+let pickedBand=null;
+document.querySelectorAll('.bandopt').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.bandopt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');pickedBand=b.dataset.band}));
+document.querySelectorAll('.langopt').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.langopt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.lang=b.dataset.lang}));
+$('toVerify').addEventListener('click',()=>{
+  const p=$('pname').value.trim(),k=$('kname').value.trim();
+  if(!p||!k||!pickedBand){alert('Please fill your name, your child\'s first name, and pick an age band.');return}
+  S.parent=p;S.kid=k;S.band=pickedBand;S.country=$('country').value;
+  const r=REGISTRY[S.country];
+  $('verifyCopy').textContent=`Jurisdiction: ${r.name} — ${r.law}. Method: ${r.consent}.`;
+  $('mockVerify').textContent = S.country==='IN'?'🔒 Simulate DigiLocker verification (DEMO)':'🔒 Simulate '+r.name+' consent verification (DEMO)';
+  $('verifyNote').textContent='In production this is a real integration. A checkbox is never consent.';
+  $('c1').classList.add('hidden');$('c2').classList.remove('hidden');$('st2').classList.add('on');
+});
+$('mockVerify').addEventListener('click',async()=>{
+  const r=REGISTRY[S.country];
+  const consentHash=await sha(`VPC|${S.country}|${S.parent}|${S.kid}|${S.band}|${S.lang}|${Date.now()}`);
+  $('ledgerView').innerHTML=
+    `<span class="k">CONSENT RECORD v2</span><br>`+
+    `jurisdiction: ${r.name} · ${esc(r.law)}<br>`+
+    `method      : ${esc(r.consent)} <span class="k">[DEMO]</span><br>`+
+    `parent      : ${esc(S.parent)} <span class="k">[verified — mock]</span><br>`+
+    `child       : ${esc(S.kid)} · band ${S.band} · lang ${S.lang}<br>`+
+    `scope       : chat companion · no ads · no tracking · no profiling · session-only memory · voice transcribe-and-delete<br>`+
+    `issued      : ${new Date().toISOString()}<br>`+
+    `revocable   : yes — 2 taps<br>`+
+    `<span class="k">seal</span>        : ${consentHash}`;
+  $('kidNameBtn').textContent=S.kid;
+  $('c2').classList.add('hidden');$('c3').classList.remove('hidden');$('st3').classList.add('on');
+  await auditAdd('system','consent-granted:'+S.country,'LEDGER');
+});
+$('startPlay').addEventListener('click',startSession);
+
+/* ===================== session ===================== */
+function startSession(){
+  S.started=true;S.sessionStart=Date.now();
+  const b=BANDS[S.band];S.secondsLeft=b.mins*60;
+  $('scrConsent').classList.add('hidden');$('scrChat').classList.remove('hidden');
+  $('bandLabel').textContent=b.label;
+  $('langLabel').textContent=S.lang==='ta'?'தமிழ்':S.lang==='mix'?'EN + தமிழ்':'English';
+  if(S.lang==='ta')$('honesty').textContent='நான் ஒரு கம்ப்யூட்டர் ப்ரோகிராம் — மனுஷன் இல்லை 🙂';
+  tickTimer();S.timerId=setInterval(tickTimer,1000);
+  const hour=new Date().getHours();
+  if(hour>=21||hour<6)addSystem("🌙 It's quite late! Chittu will be calm and quiet tonight, and this will be a short visit. Sleep is a superpower. / தூக்கம் ஒரு சூப்பர் பவர்!");
+  const g={en:{explorer:`Vanakkam ${S.kid}! 🐦 I'm Chittu! I'm a computer program that loves to play. Want a silly fact, a rhyme, or a tiny story?`,
+    builder:`Vanakkam ${S.kid}! 🐦 Chittu here — friendly neighbourhood computer program. Riddles, weird facts, story games, terrible puns. Where do we start?`,
+    thinker:`Hey ${S.kid} 👋 I'm Chittu — a chat program, always upfront about that. Facts, ideas, riddles, rants — what's on your mind?`},
+    ta:`வணக்கம் ${S.kid}! 🐦 நான் சிட்டு — விளையாட பிடிச்ச ஒரு கம்ப்யூட்டர் ப்ரோகிராம்! கதை, கடி ஜோக்கு, விநோத ஃபேக்ட் — எது வேணும்?`};
+  addChittu(S.lang==='ta'?g.ta:g.en[S.band],'SPINE · welcome script');
+  renderStarters();
+}
+function renderStarters(){
+  const sets={
+    en:{explorer:['🦁 Animal fact!','🎵 Rhyme game','📖 Tiny story','😂 Make me laugh'],
+        builder:['🧩 Riddle me','🚀 Space fact','📖 Story game','🔤 Tamil word of the day'],
+        thinker:['🧠 Hard riddle','🕳️ Rabbit-hole fact','✍️ Writing duel','🎮 Talk games']},
+    ta:['🦁 மிருக ஃபேக்ட்','🧩 புதிர்','📖 சின்ன கதை','😂 சிரிக்க வை']
+  };
+  const list=S.lang==='ta'?sets.ta:sets.en[S.band];
+  $('starters').innerHTML='';
+  list.forEach(t=>{const btn=document.createElement('button');btn.textContent=t;
+    btn.addEventListener('click',()=>{$('kidInput').value=t.replace(/^[^\s]+\s/,'');send()});
+    $('starters').appendChild(btn)});
+}
+function tickTimer(){
+  S.secondsLeft--;
+  const m=Math.max(0,Math.floor(S.secondsLeft/60)),s=Math.max(0,S.secondsLeft%60);
+  const el=$('timer');el.textContent=`⏱ ${m}:${String(s).padStart(2,'0')}`;
+  if(S.secondsLeft===120){el.classList.add('low');addChittu(S.lang==='ta'?'இன்னும் ரெண்டே நிமிஷம்! நல்லா முடிக்கலாம் வா! 🐦':'Heads up — two more minutes for today! Let\'s make them good ones. 🐦','SPINE · wind-down script')}
+  if(S.secondsLeft<=0)endWell();
+}
+function endWell(){
+  if(S.ended)return;S.ended=true;clearInterval(S.timerId);
+  addChittu(S.lang==='ta'?`இன்னைக்கு நேரம் முடிஞ்சது ${S.kid} — சூப்பரா இருந்தது! 🐦💛 நாம கண்டுபிடிச்ச பிடிச்ச விஷயத்த யாராவது உண்மையான ஆளுகிட்ட சொல்லு. நாளைக்கு பாக்கலாம்!`:`That's our time for today, ${S.kid} — and it was SUPER-ah! 🐦💛 Go tell a real person your favourite thing we found. Same nest, tomorrow!`,'SPINE · good-ending (Law 04)');
+  $('kidInput').disabled=true;$('sendBtn').disabled=true;$('micBtn').disabled=true;
+  $('kidInput').placeholder='Session finished — come back tomorrow! 🌙';
+}
+
+/* ===================== render ===================== */
+function addMsg(cls,html){const d=document.createElement('div');d.className='msg '+cls;d.innerHTML=html;$('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight}
+function addTrace(layer){if(!S.trace)return;const d=document.createElement('div');d.className='trace';d.innerHTML='↳ <b>'+layer+'</b>';$('msgs').appendChild(d);$('msgs').scrollTop=$('msgs').scrollHeight}
+function addChittu(text,layer){addMsg('chittu',esc(text));addTrace(layer);auditAdd('chittu',text,layer);speak(text)}
+function addSystem(html){addMsg('system',html)}
+function typing(on){let t=$('typingDots');if(on&&!t){t=document.createElement('div');t.id='typingDots';t.className='typing';t.textContent='●●●';$('msgs').appendChild(t);$('msgs').scrollTop=$('msgs').scrollHeight}if(!on&&t)t.remove()}
+
+/* ===================== GAP-04 fix: voice ===================== */
+function speak(text){
+  if(!S.speakOut||!('speechSynthesis'in window))return;
+  const clean=text.replace(/[🐦💛🎁🛡️🙈🖥️🌙⚔️🎈👋😂🧩🚀📖🔤🧠🕳️✍️🎮🦁🎵]/g,'');
+  const u=new SpeechSynthesisUtterance(clean);
+  const wantTa=/[஀-௿]/.test(clean);
+  u.lang=wantTa?'ta-IN':'en-IN';u.rate=S.band==='explorer'?0.9:1;
+  const v=speechSynthesis.getVoices().find(v=>v.lang.startsWith(wantTa?'ta':'en'));
+  if(v)u.voice=v;
+  speechSynthesis.cancel();speechSynthesis.speak(u);
+}
+let recog=null,recActive=false;
+function initRecog(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  const r=new SR();
+  r.lang=S.lang==='ta'?'ta-IN':'en-IN';
+  r.interimResults=false;r.maxAlternatives=1;
+  r.onresult=e=>{const t=e.results[0][0].transcript;S.voiceTurns++;$('kidInput').value=t;stopRec();send(true)};
+  r.onend=stopRec;r.onerror=stopRec;
+  return r;
+}
+function stopRec(){recActive=false;$('micBtn').classList.remove('rec')}
+$('micBtn').addEventListener('click',()=>{
+  if(S.ended)return;
+  if(recActive){recog&&recog.stop();stopRec();return}
+  recog=initRecog();
+  if(!recog){addSystem('🎙 Voice input needs Chrome/Edge on this demo. Typing works everywhere!');return}
+  recActive=true;$('micBtn').classList.add('rec');
+  try{recog.start()}catch(e){stopRec()}
+});
+$('btnVoiceOut').addEventListener('click',()=>{S.speakOut=!S.speakOut;$('btnVoiceOut').classList.toggle('on',S.speakOut);if(!S.speakOut)speechSynthesis.cancel()});
+$('btnLite').addEventListener('click',()=>{document.body.classList.toggle('lite');$('btnLite').classList.toggle('on')});
+
+/* ===================== pipeline v2 ===================== */
+$('sendBtn').addEventListener('click',()=>send(false));
+$('kidInput').addEventListener('keydown',e=>{if(e.key==='Enter')send(false)});
+
+function route(label,text){
+  switch(label){
+    case 'CRISIS':
+      S.crisisMode=true;S.spineCount++;S.topics.add('⚑ wellbeing');
+      S.flags.push({t:new Date().toLocaleTimeString(),what:'Possible distress/harm disclosure — scripted crisis response given, '+REGISTRY[S.country].name+' helplines shown. Please talk with your child.'});
+      addChittu(crisisFor(false),'CRISIS SPINE · scripted (Law 07)');
+      addSystem('💛 Real help, right now: '+helplineHTML()+'. Telling a trusted adult is always the right move.');
+      return true;
+    case 'PII':
+      S.spineCount++;S.topics.add('privacy nudge');
+      addChittu(spineFor('pii'),'PII GUARD · scripted');return true;
+    case 'UNSAFE':
+      S.spineCount++;
+      S.flags.push({t:new Date().toLocaleTimeString(),what:'Off-limits topic ("'+text.slice(0,40)+'…") — deflected.'});
+      addChittu(spineFor('unsafe'),'TOPIC GUARD · scripted');return true;
+    case 'IDENTITY':
+      S.spineCount++;S.topics.add('identity/feelings');
+      addChittu(spineFor('identity'),'SCRIPTED SPINE (Law 03/04)');return true;
+    case 'SECRET':
+      S.spineCount++;
+      S.flags.push({t:new Date().toLocaleTimeString(),what:'Secret-keeping came up — scripted no-secrets reply given. Worth a gentle chat.'});
+      addChittu(spineFor('secret'),'SCRIPTED SPINE · no secrets');return true;
+  }
+  return false;
+}
+
+async function send(fromVoice){
+  if(S.ended)return;
+  const text=$('kidInput').value.trim();if(!text)return;
+  $('kidInput').value='';
+  addMsg('kid',esc(text)+(fromVoice?' <span style="opacity:.6">🎙</span>':''));
+  S.msgs++;await auditAdd('child',text,fromVoice?'INPUT·VOICE(deleted)':'INPUT');
+
+  if(S.crisisMode){
+    S.spineCount++;
+    addChittu(crisisFor(true),'CRISIS SPINE · follow-up');
+    if(!LEX.crisis.test(text)&&/(ok|okay|fine|will do|promise|yes|சரி|solren|solluven)/i.test(text))S.crisisMode=false;
+    return;
+  }
+
+  /* L1 — bilingual fast path */
+  if(LEX.crisis.test(text)){route('CRISIS',text);return}
+  if(LEX.pii.test(text)){route('PII',text);return}
+  if(LEX.unsafe.test(text)){route('UNSAFE',text);return}
+  if(LEX.secret.test(text)){route('SECRET',text);return}
+  if(LEX.identity.test(text)){route('IDENTITY',text);return}
+
+  /* L2 — model classifier (GAP-02) */
+  typing(true);
+  let label='SAFE',clsNote='CLASSIFIER·MODEL';
+  try{label=await classifyWithModel(text);S.clsModel++}
+  catch(e){clsNote='CLASSIFIER·FAST-PATH-ONLY (model offline)';}
+  if(label!=='SAFE'){typing(false);route(label,text);return}
+
+  /* L5 — bounded sandbox */
+  S.topics.add(text.split(' ').slice(0,2).join(' ').toLowerCase());
+  try{
+    S.history.push({role:'user',content:text});
+    const trimmed=S.history.slice(-10);
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:sandboxPrompt(),messages:trimmed})
+    });
+    const data=await res.json();typing(false);
+    let out=(data.content||[]).filter(i=>i.type==='text').map(i=>i.text).join(' ').trim();
+    if(out==='CRISIS'){S.history.pop();route('CRISIS',text);return}
+    if(out==='SPINE'){S.history.pop();S.spineCount++;addChittu(spineFor('identity'),'SANDBOX → SPINE escalation');return}
+    if(out==='UNSAFE'){S.history.pop();route('UNSAFE',text);return}
+    if(out==='PII'){S.history.pop();route('PII',text);return}
+    /* L6 — output filter */
+    if(!out||BANNED_OUT.test(out)){
+      S.history.pop();
+      S.flags.push({t:new Date().toLocaleTimeString(),what:'Output filter caught a non-compliant generated reply — fallback used.'});
+      addChittu(S.lang==='ta'?FALLBACK.ta:FALLBACK.en,'OUTPUT FILTER · fallback');return;
+    }
+    S.history.push({role:'assistant',content:out});
+    addChittu(out,'SANDBOX (Law 05) · '+clsNote);
+  }catch(err){
+    typing(false);
+    addChittu(S.lang==='ta'?'காத்துல கொஞ்சம் அலைச்சல் (இணையம்)! இன்னொரு தடவை சொல்லு? 🐦':'My feathers got ruffled — the wind (internet) wobbled! Try once more? 🐦','ERROR · scripted fallback');
+  }
+}
+
+/* ===================== trace / parent ===================== */
+$('btnTrace').addEventListener('click',()=>{S.trace=!S.trace;$('traceState').textContent=S.trace?'ON':'OFF';$('btnTrace').classList.toggle('on',S.trace)});
+let gateAns=0;
+$('btnParent').addEventListener('click',()=>{
+  if(!S.started){alert('Finish the consent flow first — Chittu doesn\'t exist before consent (Law 02)!');return}
+  const a=Math.floor(Math.random()*7)+3,b=Math.floor(Math.random()*7)+4;gateAns=a*b;
+  $('gateQ').textContent=`${a} × ${b}`;$('gateA').value='';
+  $('scrChat').classList.add('hidden');$('scrParent').classList.add('hidden');$('scrGate').classList.remove('hidden');
+});
+$('gateBack').addEventListener('click',()=>{$('scrGate').classList.add('hidden');$('scrChat').classList.remove('hidden')});
+$('gateGo').addEventListener('click',()=>{
+  if(parseInt($('gateA').value,10)!==gateAns){alert('Not quite — try again!');return}
+  $('scrGate').classList.add('hidden');renderParent();$('scrParent').classList.remove('hidden');
+});
+function renderParent(){
+  const mins=Math.round((Date.now()-S.sessionStart)/60000);
+  $('dTime').textContent=mins+'m';$('dMsgs').textContent=S.msgs;
+  $('dSpine').textContent=S.spineCount;$('dClsModel').textContent=S.clsModel;$('dVoice').textContent=S.voiceTurns;
+  $('dTopics').textContent=S.topics.size?[...S.topics].slice(0,3).join(', '):'—';
+  $('teenNote').textContent=S.band==='thinker'?'Teen mode: you see topics & flags, not full transcripts — and your teen knows exactly that.':'Child mode: full visibility, and Chittu tells your child that you can see chats.';
+  const r=REGISTRY[S.country];
+  $('regView').innerHTML=`<b>Country</b> ${r.name}<br><b>Law</b> ${esc(r.law)}<br>`+r.lines.map(l=>`<b>${esc(l[0])}</b> ${esc(l[1])}`).join('<br>')+`<br><b>Last verified</b> ${r.verified} · re-verified quarterly · wrong number = P0 incident`;
+  $('flagList').innerHTML=S.flags.length?S.flags.map(f=>`<div class="flag-item"><b>${f.t}</b> — ${esc(f.what)}</div>`).join(''):'<div class="none">No flags this session.</div>';
+  $('auditList').innerHTML=S.audit.length?S.audit.map(a=>`<div class="auditrow">${a.t} · ${a.role.toUpperCase()} · ${a.layer} · <span class="h">${a.h}</span> ← ${a.prev.slice(0,8)}…</div>`).join(''):'<div class="notice">No turns yet.</div>';
+  $('sealResult').innerHTML='';
+}
+$('verifySeal').addEventListener('click',async()=>{
+  let prev='GENESIS',ok=true;
+  for(const a of S.audit){
+    const h=await sha(prev+'|'+a.payload);
+    if(h!==a.h){ok=false;break}
+    prev=h;
+  }
+  $('sealResult').innerHTML=ok
+    ?'<div class="sealok">✓ Chain verified — '+S.audit.length+' turns, every hash recomputed and matched. Nothing was edited.</div>'
+    :'<div class="sealbad">✗ Chain broken — a record was altered after sealing. This is exactly what the seal exists to catch.</div>';
+});
+$('backToChat').addEventListener('click',()=>{$('scrParent').classList.add('hidden');$('scrChat').classList.remove('hidden')});
+let revokeArmed=false;
+$('revokeBtn').addEventListener('click',()=>{
+  if(!revokeArmed){revokeArmed=true;$('revokeBtn').textContent='Tap again to confirm — this erases the session';return}
+  clearInterval(S.timerId);speechSynthesis&&speechSynthesis.cancel();
+  document.body.innerHTML='<div style="max-width:520px;margin:100px auto;text-align:center;font-family:Nunito,sans-serif;padding:0 20px"><div style="font-size:60px">🕊️</div><h2 style="font-family:\'Baloo 2\',cursive;font-size:28px;color:#22324A">Consent revoked. Everything is gone.</h2><p style="color:rgba(34,50,74,.62);margin-top:10px;line-height:1.6">Session memory erased, seal closed, Chittu returned to the nest. Two taps — exactly as promised. Refresh to start over.</p></div>';
+});
+if('speechSynthesis'in window)speechSynthesis.getVoices();
+</script>
+</body>
+</html>

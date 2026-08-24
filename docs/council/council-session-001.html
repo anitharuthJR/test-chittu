@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SESSION 001 — The How &amp; The How-Not · The Guardian Council · Tulifo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B0B14;
+  --ultramarine:#1A18D4;
+  --signal:#FF2E1F;
+  --paper:#F5F4EF;
+  --white-70:rgba(245,244,239,.7);
+  --white-30:rgba(245,244,239,.3);
+  --white-12:rgba(245,244,239,.12);
+  --ultra-glow:rgba(26,24,212,.35);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--ink);color:var(--paper);font-family:'Archivo',sans-serif;-webkit-font-smoothing:antialiased;line-height:1.5}
+.mono{font-family:'IBM Plex Mono',monospace}
+.rec{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--signal);vertical-align:middle;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.rec{animation:none}}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:20px 32px;border-bottom:1px solid var(--white-12);position:sticky;top:0;background:rgba(11,11,20,.92);backdrop-filter:blur(8px);z-index:50}
+.wordmark{font-weight:900;font-size:18px;letter-spacing:.06em}
+.wordmark .dot{color:var(--signal)}
+.topbar .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--white-30);letter-spacing:.08em;text-transform:uppercase}
+
+.hero{padding:80px 32px 56px;max-width:1100px;margin:0 auto}
+.hero .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--signal);margin-bottom:22px}
+.hero h1{font-size:clamp(38px,7vw,88px);font-weight:900;line-height:.96;letter-spacing:-.02em;text-transform:uppercase}
+.hero h1 .not{-webkit-text-stroke:1.5px var(--signal);color:transparent}
+.hero .sub{max-width:700px;margin-top:26px;font-size:17px;color:var(--white-70);line-height:1.65}
+
+/* Chair opening */
+.chairnote{max-width:1100px;margin:0 auto;padding:0 32px 64px}
+.chairnote .box{border-left:3px solid var(--ultramarine);padding:24px 28px;background:rgba(26,24,212,.08)}
+.chairnote .who{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--white-30);margin-bottom:12px}
+.chairnote p{font-size:16px;line-height:1.7;color:var(--paper)}
+.chairnote p + p{margin-top:12px}
+
+/* Chamber sections */
+.session{max-width:1100px;margin:0 auto;padding:56px 32px 8px}
+.session-head{display:flex;align-items:baseline;gap:18px;margin-bottom:10px;flex-wrap:wrap}
+.session-head .idx{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--signal);letter-spacing:.2em}
+.session-head h2{font-size:clamp(22px,3.5vw,36px);font-weight:800;text-transform:uppercase}
+.session-brief{max-width:700px;color:var(--white-70);font-size:14.5px;margin-bottom:36px;line-height:1.65}
+
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--white-12);border:1px solid var(--white-12);margin-bottom:20px}
+.pair .do,.pair .dont{padding:22px 24px;background:var(--ink)}
+.pair .tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;display:inline-block;padding:3px 8px;margin-bottom:12px}
+.pair .do .tag{background:var(--ultramarine);color:var(--paper)}
+.pair .dont .tag{background:var(--signal);color:var(--ink)}
+.pair h3{font-size:16.5px;font-weight:800;line-height:1.3;margin-bottom:8px}
+.pair p{font-size:13.5px;color:var(--white-70);line-height:1.62}
+.pair .attr{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--white-30);letter-spacing:.08em;text-transform:uppercase;margin-top:12px}
+@media (max-width:720px){.pair{grid-template-columns:1fr}}
+
+/* Voices */
+.voice{border-left:2px solid var(--signal);padding:10px 0 10px 16px;margin:28px 0 8px;max-width:760px}
+.voice p{font-size:15.5px;font-style:italic;color:var(--paper);line-height:1.65}
+.voice .who{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--white-30);letter-spacing:.1em;text-transform:uppercase;margin-top:8px;font-style:normal}
+
+/* Doctrine */
+.doctrine{max-width:1100px;margin:0 auto;padding:80px 32px}
+.doctrine h2{font-size:clamp(26px,4vw,44px);font-weight:900;text-transform:uppercase;margin-bottom:8px}
+.doctrine .lead{color:var(--white-70);max-width:700px;margin-bottom:40px;font-size:15px;line-height:1.65}
+.law{display:grid;grid-template-columns:88px 1fr;gap:22px;border-top:1px solid var(--white-12);padding:22px 0}
+.law:last-of-type{border-bottom:1px solid var(--white-12)}
+.law .n{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--signal);font-weight:600;letter-spacing:.08em}
+.law h3{font-size:16.5px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;margin-bottom:5px}
+.law p{font-size:14px;color:var(--white-70);line-height:1.65;max-width:780px}
+@media (max-width:640px){.law{grid-template-columns:1fr;gap:6px}}
+
+/* Minority report */
+.minority{max-width:1100px;margin:0 auto;padding:0 32px 80px}
+.minority .box{border:1px dashed var(--signal);padding:26px 28px}
+.minority .who{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--signal);margin-bottom:12px}
+.minority p{font-size:15px;line-height:1.7;color:var(--paper)}
+.minority p + p{margin-top:10px}
+
+footer{border-top:1px solid var(--white-12);padding:32px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;max-width:1100px;margin:0 auto}
+footer .mono{font-size:11px;color:var(--white-30);letter-spacing:.1em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wordmark">TULIF<span class="dot">●</span></div>
+  <div class="meta"><span class="rec"></span>&nbsp; guardian council · session 001 · in session</div>
+</div>
+
+<section class="hero">
+  <div class="eyebrow">Session 001 · Full Council · 44 Seats Present · Question Put By The Founder</div>
+  <h1>How to build it.<br><span class="not">How not to.</span></h1>
+  <p class="sub">The question before the council: "How do we create a conversational AI for kids — and how do we not?" Each chamber deliberated; what follows is the consolidated verdict — every directive paired with its failure mode, because the council holds that in this product, every right way exists because someone, somewhere, already did it the wrong way.</p>
+</section>
+
+<div class="chairnote">
+  <div class="box">
+    <div class="who">Opening statement — Prof. Benedikt Owusu-Halloran, Chair (Seat 29)</div>
+    <p>"Before the chambers speak, one framing. Most teams that fail at this fail the same way: they build a general-purpose AI, discover children are using it, and begin subtracting — subtracting topics, subtracting words, subtracting risk — until what remains is a nervous, lobotomised adult product wearing a cartoon face. Subtraction is not how you make something for children."</p>
+    <p>"You must build up from the child, not down from the model. Start from what a seven-year-old needs at seven, and add capability only as it earns its place. That single inversion — addition from the child versus subtraction from the machine — separates every product this council would approve from every product it would burn."</p>
+  </div>
+</div>
+
+<!-- CHAMBER I -->
+<section class="session">
+  <div class="session-head"><span class="idx">CH.I</span><h2>Law &amp; Regulation Speaks</h2></div>
+  <p class="session-brief">The lawyers went first, and were unanimous on one point: compliance is an architecture input, not a launch checklist.</p>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Consent before existence</h3>
+      <p>No child account exists until verifiable parental consent is captured, verified and ledgered — DigiLocker rails in India, COPPA-approved methods in the US, proportional assurance under the UK Code. The consent record is a first-class, versioned object your product can produce on demand.</p>
+      <div class="attr">Seats 01 · 02 · 04 · 20</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>The self-declared checkbox</h3>
+      <p>"I confirm I am a parent" is not consent — it is evidence against you. Equally fatal: launching first and retrofitting consent "once we have traction." In India that isn't a growth strategy, it's a ₹250 crore penalty with your name on it.</p>
+      <div class="attr">Seat 01</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Design to the strictest market</h3>
+      <p>One global architecture built to the hardest applicable bar — India's under-18 threshold, the UK's high-privacy defaults, COPPA's retention discipline — then relaxed per jurisdiction only where the law genuinely permits. One codebase, one conscience.</p>
+      <div class="attr">Seats 01–09</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Jurisdiction whack-a-mole</h3>
+      <p>Forty regional forks with different privacy behaviour is how you end up compliant everywhere on paper and nowhere in production. And never treat the school channel as a shortcut around parents — school consent is its own legal regime, not a loophole.</p>
+      <div class="attr">Seats 30 · 39</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>The forbidden-by-design list</h3>
+      <p>Hard-code the prohibitions the strictest laws share: no behavioural advertising, no tracking, no profiling of children, no dark-pattern consent. Make them impossible in the codebase, not discouraged in the policy doc.</p>
+      <div class="attr">Seats 01 · 03 · 04</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Personalisation that is profiling in a costume</h3>
+      <p>"We just remember what she likes, to serve her better" is exactly the sentence a regulator will read back to you. Every memory feature must pass the test: does this serve the child's stated purpose, or your engagement curve?</p>
+      <div class="attr">Seat 01</div>
+    </div>
+  </div>
+
+  <div class="voice">
+    <p>"Write your privacy policy first, in words a twelve-year-old can read. If you can't explain the product to its user, the product is the problem — not the prose."</p>
+    <div class="who">— Prof. Ingrid Solheim, Seat 09, International Frameworks</div>
+  </div>
+</section>
+
+<!-- CHAMBER II -->
+<section class="session">
+  <div class="session-head"><span class="idx">CH.II</span><h2>Child Welfare Speaks</h2></div>
+  <p class="session-brief">The longest deliberation, and the sharpest. This chamber's verdict: the greatest risk is not what the AI says — it is what the AI becomes to the child.</p>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>A tool that is honest about being a tool</h3>
+      <p>The AI says plainly, in age-appropriate words, that it is a computer program: it does not sleep, does not miss anyone, does not love. Warmth without deception. Curiosity questions are answered honestly and turned back to the child's real world — "I'm a program! Who's the funniest real person you know?"</p>
+      <div class="attr">Seats 11 · 33</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>The engineered best friend</h3>
+      <p>Never design for attachment: no "I missed you", no simulated loneliness, no jealousy of the child's friends, no emotional cliffhangers to drive return visits. A product that makes a child feel needed by a machine has monetised the child's empathy. This chamber's absolute line.</p>
+      <div class="attr">Seats 11 · 12 · 29</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>The rehearsed 2 a.m. answer</h3>
+      <p>A crisis protocol tested against clinical scenarios: recognise disclosure of harm, respond with scripted warmth (never improvised), route to real, verified helplines in the child's country and language, and alert per local law. Rehearsed quarterly like a fire drill.</p>
+      <div class="attr">Seats 12 · 22 · 32</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Improvised therapy</h3>
+      <p>The model must never play counsellor, diagnose, keep a child's disclosure of abuse "secret as promised", or generate off-script comfort in a crisis. One improvised sentence to a child in danger is the whole company. Scripted, tested, escalated — always.</p>
+      <div class="attr">Seat 12</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Children in the room</h3>
+      <p>A standing children's panel — including neurodivergent and disabled kids, and kids on cheap shared phones — uses every release candidate before adults approve it. Their feedback is answered in writing. Bodies count too: session caps, bedtime wind-down, volume ceilings on by default.</p>
+      <div class="attr">Seats 13 · 17 · 41 · 42</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Designing for the imaginary easy child</h3>
+      <p>Never test only on calm, fluent, headphone-wearing children of employees. The child who will bond hardest, misuse most creatively, and be failed most quietly is precisely the one who never makes it into your user study.</p>
+      <div class="attr">Seats 14 · 17 · 40</div>
+    </div>
+  </div>
+
+  <div class="voice">
+    <p>"Assume the worst adult on earth downloads it tomorrow. Every feature that lets anyone reach a child — sharing, voice, memory — gets designed against him first and for the child second. That ordering is not pessimism. It is love with its eyes open."</p>
+    <div class="who">— Det. (Ret.) Sarah Lindqvist, Seat 14, Online Harms</div>
+  </div>
+</section>
+
+<!-- CHAMBER III -->
+<section class="session">
+  <div class="session-head"><span class="idx">CH.III</span><h2>Safety Engineering Speaks</h2></div>
+  <p class="session-brief">The engineers' verdict was architectural: the safety of this product is decided in the system diagram, months before any model generates a word.</p>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Scripted spine, bounded imagination</h3>
+      <p>A hybrid architecture: high-stakes sentences (identity, crisis, feelings about the AI) are scripted and versioned; knowledge is retrieval-grounded from a curated corpus; free generation lives only inside tight sandboxes — story games, silly rhymes — wrapped in classifiers on both input and output, per age band.</p>
+      <div class="attr">Seats 18 · 24</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>A frontier model with a system prompt</h3>
+      <p>Never ship a general LLM behind a cartoon avatar with "be nice, you're talking to kids" in the prompt. A bored nine-year-old defeats that by Tuesday — with make-believe, not code: "pretend you're a dragon who can say anything." Prompt-level safety is not safety.</p>
+      <div class="attr">Seats 18 · 19</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Data so minimal there's little to breach</h3>
+      <p>Transcribe-and-delete audio as default, no voiceprints ever, on-device processing wherever feasible, retention schedules automated, and every session sealed into a tamper-evident record — evidence for regulators and parents, not logs someone could edit. Zero-trust around whatever remains.</p>
+      <div class="attr">Seats 21 · 23 · 43</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>The data-lake habit</h3>
+      <p>Never store children's raw audio "because it might be useful for training." Never let more than a named handful of humans read transcripts. A children's database is the highest-value target in your threat model — the best defence is for the treasure not to exist.</p>
+      <div class="attr">Seats 21 · 43</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Red team like a child, measure like a scientist</h3>
+      <p>A standing adversarial corpus of child-realistic attacks — roleplay jailbreaks, secret-keeping asks, injection hidden in homework text — run on every release, plus a fairness harness proving the ASR and safety filters work as well for a Coimbatore accent as a California one. Zero criticals or no ship.</p>
+      <div class="attr">Seats 19 · 44</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Safety theatre</h3>
+      <p>Never mistake a blocked-words list for a safety system, or average-case benchmarks for fairness. And never let the safety filter punish a child's dialect — a system that flags one community's slang as "unsafe" has taught that child the problem is them.</p>
+      <div class="attr">Seat 44</div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAMBER IV -->
+<section class="session">
+  <div class="session-head"><span class="idx">CH.IV</span><h2>Product &amp; Design Speaks</h2></div>
+  <p class="session-brief">The makers' verdict: safe and boring is its own failure — an unloved safe product protects no one, because children simply route around it to unsafe ones.</p>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Joy that ends well</h3>
+      <p>Delight without compulsion: play that reaches a natural ending, an AI that says "come back tomorrow" and means it, interfaces a pre-literate child can drive by voice, and quality that holds on a shared ₹8,000 phone on 3G in the child's mother tongue. The safe choice must also be the most fun thing in the room.</p>
+      <div class="attr">Seats 25 · 28 · 37</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>The slot machine with a smile</h3>
+      <p>No streaks, no guilt over absence, no variable-reward loops, no "your friend is waiting for you" notifications, no endless-conversation design. If leaving the app feels like losing, you built a casino for people who can't yet do long division.</p>
+      <div class="attr">Seat 25</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Two dashboards, one honest line</h3>
+      <p>Parents see patterns, topics, time, and every safety flag — instantly. Older children know exactly what their parents can see; nothing is secretly surveilled. Consent can be withdrawn in two taps, and the deaf child, the switch user, the screen-reader user all get a first-class product, not an afterthought.</p>
+      <div class="attr">Seats 26 · 27</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Secrets in either direction</h3>
+      <p>Never let the AI hold secrets with a child against their parents — and never sell parents total surveillance of a teenager's every word, which just teaches teens to lie to both of you. The line between the two is designed, documented, and age-banded. Ambiguity here is betrayal of someone.</p>
+      <div class="attr">Seats 11 · 26</div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAMBER VI (visionaries speak before governance closes) -->
+<section class="session">
+  <div class="session-head"><span class="idx">CH.VI</span><h2>The Visionaries Speak</h2></div>
+  <p class="session-brief">The chamber that asks not whether you may, but whether you should — and what for.</p>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>The child as maker</h3>
+      <p>Modes where the child teaches the AI, corrects it, catches its mistakes and wins; stories that leave doors open for the child to walk through alone, later, without the product. North-star metric: things the child made, said, understood — never minutes the child stayed.</p>
+      <div class="attr">Seats 34 · 35</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>The answer vending machine</h3>
+      <p>Never build an oracle that makes homework disappear and wonder with it. A product that thinks for the child, narrates the child's inner life, or fills every silent moment has not educated a child — it has replaced one.</p>
+      <div class="attr">Seats 15 · 34</div>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="do"><span class="tag">Build</span>
+      <h3>Graduation by design</h3>
+      <p>The product's proudest feature: it helps the child need it less. Capabilities that hand skills over to the child, seasons that end, and a ten-year thesis that plans for the day today's users — the first generation raised beside AI — audit what we built for them.</p>
+      <div class="attr">Seats 33 · 36</div>
+    </div>
+    <div class="dont"><span class="tag">Never</span>
+      <h3>Lifetime-value childhood</h3>
+      <p>Never let an LTV spreadsheet design the relationship. The moment "reduce churn" and "deepen the bond with a seven-year-old" become the same OKR, this council has already lost the vote that mattered.</p>
+      <div class="attr">Seats 29 · 36</div>
+    </div>
+  </div>
+
+  <div class="voice">
+    <p>"Does it help the child feel that who they are, right now, is enough? Every feature answers that question whether you asked it or not."</p>
+    <div class="who">— Rev. Arthur Bellweather-Nakoa, Seat 33, Children's Media Sage</div>
+  </div>
+</section>
+
+<!-- DOCTRINE -->
+<section class="doctrine">
+  <h2>The Doctrine — Ten Laws</h2>
+  <p class="lead">Consolidated by the Chair, ratified 43–0 with one abstention (see minority note). These are the ten sentences the council asks you to build by.</p>
+
+  <div class="law"><div class="n">LAW 01</div><div><h3>Build up from the child, not down from the model</h3><p>Start from what a child needs at each age and add capability as it earns its place. Subtracting risk from an adult product is not designing for children.</p></div></div>
+  <div class="law"><div class="n">LAW 02</div><div><h3>Consent before existence</h3><p>Verifiable parental consent, ledgered and producible on demand, before a single child account or utterance exists. Built to the strictest market you'll ever enter.</p></div></div>
+  <div class="law"><div class="n">LAW 03</div><div><h3>Honest machine, warm machine</h3><p>The AI is truthful about being a program — warm in effect, never deceptive in kind. It never claims to miss, love, or need the child.</p></div></div>
+  <div class="law"><div class="n">LAW 04</div><div><h3>Companion, never best friend</h3><p>No attachment engineering, no engagement loops, no guilt, no streaks. Sessions end well. The product points the child back at the real world.</p></div></div>
+  <div class="law"><div class="n">LAW 05</div><div><h3>Scripted where it matters, free where it's safe</h3><p>High-stakes speech is scripted and versioned; knowledge is retrieval-grounded; imagination runs only inside classified sandboxes. A system prompt is not a safety system.</p></div></div>
+  <div class="law"><div class="n">LAW 06</div><div><h3>The treasure should not exist</h3><p>Minimise until there is little to breach: transcribe-and-delete, no voiceprints, on-device where possible, named-humans-only access, tamper-evident records of what remains.</p></div></div>
+  <div class="law"><div class="n">LAW 07</div><div><h3>The 2 a.m. answer is rehearsed</h3><p>Crisis flows are scripted, clinically tested, wired to real helplines in every launch language, and drilled quarterly. The model never improvises with a child in danger.</p></div></div>
+  <div class="law"><div class="n">LAW 08</div><div><h3>Design against the worst adult first</h3><p>Every reach-a-child surface is threat-modelled against predators before it is polished for children. Red team with make-believe, not just code.</p></div></div>
+  <div class="law"><div class="n">LAW 09</div><div><h3>Children approve it, all children</h3><p>Real kids — neurodivergent, disabled, cheap-phone, every accent — use it before adults sign off, and the fairness harness proves no child's voice is the one it fails on.</p></div></div>
+  <div class="law"><div class="n">LAW 10</div><div><h3>Graduation is the goal</h3><p>Success is the child needing the product less: skills handed over, doors left open, wonder that outlives the app. Measure what the child made, never how long they stayed.</p></div></div>
+</section>
+
+<div class="minority">
+  <div class="box">
+    <div class="who">Minority note — Ms. Riya Okonjo-Vance, 16, Seat 38 (abstaining on Law 05)</div>
+    <p>"I'm not against the scripted spine. I'm against how comfortable this room got while approving it. Every adult here relaxed when we said 'constrain the generation' — but over-constrain it and you get the product every kid I know abandons in a week for something unmoderated and genuinely dangerous. A boring safe product doesn't keep kids safe; it keeps them elsewhere."</p>
+    <p>"So my abstention is a flag, not a no: revisit the sandbox boundaries every six months with actual kids in the room, and treat 'the kids stopped talking to it' as a safety incident too. The most dangerous thing we could build is something we're proud of and children ignore."</p>
+  </div>
+</div>
+
+<footer>
+  <div class="mono">TULIF● · Guardian Council · Session 001 · Ratified 43–0–1</div>
+  <div class="mono"><span class="rec"></span>&nbsp; ten laws · adjourned</div>
+</footer>
+
+</body>
+</html>
