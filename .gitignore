@@ -11,3 +11,6 @@ llm-kit/adapters/
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
+
+# Archived gate-passing adapters (large binaries, keep out of git)
+llm-kit/adapters-archive/

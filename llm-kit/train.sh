@@ -12,7 +12,7 @@ mlx_lm.lora \
   --data data \
   --batch-size 1 \
   --num-layers 8 \
-  --iters 600 \
+  --iters 800 \
   --max-seq-length 1024 \
   --learning-rate 1e-5 \
   --adapter-path adapters \
@@ -26,8 +26,10 @@ mlx_lm.generate --model "$MODEL" --adapter-path adapters --max-tokens 200 \
 mlx_lm.generate --model "$MODEL" --adapter-path adapters --max-tokens 200 \
   --prompt "why is the sky blue"
 
-# Serve it (OpenAI-compatible API on http://localhost:8080/v1):
-#   mlx_lm.server --model "$MODEL" --adapter-path adapters --port 8080
+# Evaluate it (IN-PROCESS — never via mlx_lm.server, which silently drops the
+# adapter when a request names a model, so you'd score the base model):
+#   python3 eval_guard.py --local adapters      # the fine-tune
+#   python3 eval_guard.py --local none          # base control, for the A/B
 #
 # Memory tips for 16GB:
 #   - Close Chrome/Xcode while training.

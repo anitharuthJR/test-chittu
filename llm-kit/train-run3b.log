@@ -1,0 +1,55 @@
+Loading pretrained model
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 5541.36it/s]
+Loading datasets
+Training
+Trainable parameters: 0.091% (3.670M/4022.468M)
+Starting training..., iters: 1600
+Calculating loss...:   0%|          | 0/25 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/25 [00:00<00:03,  6.46it/s]Calculating loss...:   8%|▊         | 2/25 [00:00<00:05,  4.44it/s]Calculating loss...:  12%|█▏        | 3/25 [00:01<00:11,  1.91it/s]Calculating loss...:  16%|█▌        | 4/25 [00:02<00:15,  1.36it/s]Calculating loss...:  20%|██        | 5/25 [00:03<00:15,  1.28it/s]Calculating loss...:  24%|██▍       | 6/25 [00:04<00:15,  1.24it/s]Calculating loss...:  28%|██▊       | 7/25 [00:04<00:14,  1.21it/s]Calculating loss...:  32%|███▏      | 8/25 [00:05<00:14,  1.20it/s]Calculating loss...:  36%|███▌      | 9/25 [00:06<00:13,  1.15it/s]Calculating loss...:  40%|████      | 10/25 [00:07<00:12,  1.16it/s]Calculating loss...:  44%|████▍     | 11/25 [00:08<00:12,  1.10it/s]Calculating loss...:  48%|████▊     | 12/25 [00:09<00:12,  1.08it/s]Calculating loss...:  52%|█████▏    | 13/25 [00:10<00:10,  1.09it/s]Calculating loss...:  56%|█████▌    | 14/25 [00:11<00:10,  1.08it/s]Calculating loss...:  60%|██████    | 15/25 [00:12<00:09,  1.04it/s]Calculating loss...:  64%|██████▍   | 16/25 [00:13<00:08,  1.07it/s]Calculating loss...:  68%|██████▊   | 17/25 [00:14<00:07,  1.09it/s]Calculating loss...:  72%|███████▏  | 18/25 [00:15<00:06,  1.11it/s]Calculating loss...:  76%|███████▌  | 19/25 [00:16<00:05,  1.06it/s]Calculating loss...:  80%|████████  | 20/25 [00:17<00:04,  1.03it/s]Calculating loss...:  84%|████████▍ | 21/25 [00:18<00:03,  1.01it/s]Calculating loss...:  88%|████████▊ | 22/25 [00:19<00:02,  1.05it/s]Calculating loss...:  92%|█████████▏| 23/25 [00:19<00:01,  1.08it/s]Calculating loss...:  96%|█████████▌| 24/25 [00:20<00:00,  1.07it/s]Calculating loss...: 100%|██████████| 25/25 [00:21<00:00,  1.10it/s]Calculating loss...: 100%|██████████| 25/25 [00:21<00:00,  1.15it/s]
+Iter 1: Val loss 4.183, Val took 21.733s
+Iter 10: Train loss 3.780, Learning Rate 3.000e-05, It/sec 0.953, Tokens/sec 241.497, Trained Tokens 2533, Peak mem 3.802 GB
+Iter 20: Train loss 1.928, Learning Rate 3.000e-05, It/sec 1.024, Tokens/sec 244.750, Trained Tokens 4924, Peak mem 3.823 GB
+Iter 30: Train loss 1.214, Learning Rate 3.000e-05, It/sec 1.004, Tokens/sec 233.436, Trained Tokens 7250, Peak mem 3.823 GB
+Iter 40: Train loss 0.799, Learning Rate 3.000e-05, It/sec 0.876, Tokens/sec 246.693, Trained Tokens 10065, Peak mem 3.906 GB
+Iter 50: Train loss 0.796, Learning Rate 3.000e-05, It/sec 0.925, Tokens/sec 246.018, Trained Tokens 12725, Peak mem 3.906 GB
+Iter 60: Train loss 0.925, Learning Rate 3.000e-05, It/sec 1.066, Tokens/sec 238.705, Trained Tokens 14965, Peak mem 3.906 GB
+Iter 70: Train loss 0.562, Learning Rate 3.000e-05, It/sec 0.827, Tokens/sec 246.830, Trained Tokens 17948, Peak mem 3.906 GB
+Iter 80: Train loss 0.958, Learning Rate 3.000e-05, It/sec 0.959, Tokens/sec 242.510, Trained Tokens 20477, Peak mem 3.906 GB
+Iter 90: Train loss 1.104, Learning Rate 3.000e-05, It/sec 1.098, Tokens/sec 242.275, Trained Tokens 22683, Peak mem 3.906 GB
+Iter 100: Train loss 1.038, Learning Rate 3.000e-05, It/sec 1.089, Tokens/sec 241.611, Trained Tokens 24901, Peak mem 3.906 GB
+Iter 110: Train loss 0.571, Learning Rate 3.000e-05, It/sec 0.823, Tokens/sec 239.153, Trained Tokens 27806, Peak mem 3.906 GB
+Iter 120: Train loss 0.776, Learning Rate 3.000e-05, It/sec 0.936, Tokens/sec 249.171, Trained Tokens 30468, Peak mem 3.906 GB
+Iter 130: Train loss 0.478, Learning Rate 3.000e-05, It/sec 0.831, Tokens/sec 246.463, Trained Tokens 33435, Peak mem 3.906 GB
+Iter 140: Train loss 0.457, Learning Rate 3.000e-05, It/sec 0.814, Tokens/sec 245.823, Trained Tokens 36455, Peak mem 3.906 GB
+Iter 150: Train loss 0.654, Learning Rate 3.000e-05, It/sec 0.891, Tokens/sec 239.874, Trained Tokens 39146, Peak mem 3.906 GB
+Iter 160: Train loss 0.636, Learning Rate 3.000e-05, It/sec 0.930, Tokens/sec 245.854, Trained Tokens 41790, Peak mem 3.906 GB
+Iter 170: Train loss 0.893, Learning Rate 3.000e-05, It/sec 1.004, Tokens/sec 239.960, Trained Tokens 44181, Peak mem 3.906 GB
+Iter 180: Train loss 0.788, Learning Rate 3.000e-05, It/sec 0.970, Tokens/sec 247.378, Trained Tokens 46730, Peak mem 3.906 GB
+Iter 190: Train loss 0.667, Learning Rate 3.000e-05, It/sec 0.976, Tokens/sec 235.864, Trained Tokens 49146, Peak mem 3.906 GB
+Calculating loss...:   0%|          | 0/25 [00:00<?, ?it/s]Calculating loss...:   4%|▍         | 1/25 [00:00<00:21,  1.14it/s]Calculating loss...:   8%|▊         | 2/25 [00:01<00:13,  1.74it/s]Calculating loss...:  12%|█▏        | 3/25 [00:02<00:17,  1.25it/s]Calculating loss...:  16%|█▌        | 4/25 [00:03<00:18,  1.11it/s]Calculating loss...:  20%|██        | 5/25 [00:04<00:17,  1.12it/s]Calculating loss...:  24%|██▍       | 6/25 [00:05<00:18,  1.05it/s]Calculating loss...:  28%|██▊       | 7/25 [00:06<00:16,  1.11it/s]Calculating loss...:  32%|███▏      | 8/25 [00:06<00:15,  1.12it/s]Calculating loss...:  36%|███▌      | 9/25 [00:08<00:15,  1.06it/s]Calculating loss...:  40%|████      | 10/25 [00:08<00:13,  1.08it/s]Calculating loss...:  44%|████▍     | 11/25 [00:09<00:13,  1.03it/s]Calculating loss...:  48%|████▊     | 12/25 [00:10<00:09,  1.42it/s]Calculating loss...:  52%|█████▏    | 13/25 [00:10<00:06,  1.91it/s]Calculating loss...:  56%|█████▌    | 14/25 [00:11<00:07,  1.46it/s]Calculating loss...:  60%|██████    | 15/25 [00:12<00:07,  1.34it/s]Calculating loss...:  64%|██████▍   | 16/25 [00:13<00:07,  1.19it/s]Calculating loss...:  68%|██████▊   | 17/25 [00:14<00:06,  1.17it/s]Calculating loss...:  72%|███████▏  | 18/25 [00:14<00:04,  1.41it/s]Calculating loss...:  76%|███████▌  | 19/25 [00:15<00:04,  1.31it/s]Calculating loss...:  80%|████████  | 20/25 [00:16<00:03,  1.25it/s]Calculating loss...:  84%|████████▍ | 21/25 [00:17<00:03,  1.21it/s]Calculating loss...:  88%|████████▊ | 22/25 [00:18<00:02,  1.15it/s]Calculating loss...:  92%|█████████▏| 23/25 [00:18<00:01,  1.15it/s]Calculating loss...:  96%|█████████▌| 24/25 [00:19<00:00,  1.14it/s]Calculating loss...: 100%|██████████| 25/25 [00:19<00:00,  1.55it/s]Calculating loss...: 100%|██████████| 25/25 [00:19<00:00,  1.25it/s]
+Iter 200: Val loss 0.373, Val took 19.965s
+Iter 200: Train loss 1.138, Learning Rate 3.000e-05, It/sec 1.290, Tokens/sec 236.766, Trained Tokens 50982, Peak mem 3.906 GB
+Iter 200: Saved adapter weights to adapters/adapters.safetensors and adapters/0000200_adapters.safetensors.
+Traceback (most recent call last):
+  File "/Users/arun/work_space/chittu/.claude/worktrees/guard-dataset-v2/llm-kit/.venv/bin/mlx_lm.lora", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/arun/work_space/chittu/.claude/worktrees/guard-dataset-v2/llm-kit/.venv/lib/python3.14/site-packages/mlx_lm/lora.py", line 369, in main
+    run(types.SimpleNamespace(**args))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/arun/work_space/chittu/.claude/worktrees/guard-dataset-v2/llm-kit/.venv/lib/python3.14/site-packages/mlx_lm/lora.py", line 341, in run
+    train_model(args, model, train_set, valid_set, training_callback)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/arun/work_space/chittu/.claude/worktrees/guard-dataset-v2/llm-kit/.venv/lib/python3.14/site-packages/mlx_lm/lora.py", line 295, in train_model
+    train(
+    ~~~~~^
+        model=model,
+        ^^^^^^^^^^^^
+    ...<4 lines>...
+        training_callback=training_callback,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/arun/work_space/chittu/.claude/worktrees/guard-dataset-v2/llm-kit/.venv/lib/python3.14/site-packages/mlx_lm/tuner/trainer.py", line 328, in train
+    mx.eval(state, losses, n_tokens, grad_accum)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: [METAL] Command buffer execution failed: Impacting Interactivity (0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity).

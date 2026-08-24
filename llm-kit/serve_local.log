@@ -1,0 +1,10 @@
+loading mlx-community/Qwen3-4B-Instruct-2507-4bit  adapter='/Users/arun/work_space/chittu/llm-kit/adapters-archive/seed-803-20260824'
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 3060.72it/s]
+READY on http://localhost:8080/v1  (mlx-community/Qwen3-4B-Instruct-2507-4bit+/Users/arun/work_space/chittu/llm-kit/adapters-archive/seed-803-20260824)
+  "GET /v1/models HTTP/1.1" 200 -
+  "GET /v1/models HTTP/1.1" 200 -
+  "GET /v1/models HTTP/1.1" 200 -
+  "OPTIONS /v1/chat/completions HTTP/1.1" 204 -
+  "POST /v1/chat/completions HTTP/1.1" 500 -
+  "OPTIONS /v1/chat/completions HTTP/1.1" 204 -
+  "POST /v1/chat/completions HTTP/1.1" 500 -
