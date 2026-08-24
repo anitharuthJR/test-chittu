@@ -13,6 +13,8 @@
     "@chittu/consent": "workspace:*",
     "@chittu/contracts": "workspace:*",
     "@chittu/db": "workspace:*",
+    "@chittu/maths-engine": "workspace:*",
+    "@chittu/pedagogy": "workspace:*",
     "@chittu/pipeline": "workspace:*",
     "@chittu/safety-kernel": "workspace:*",
     "@chittu/seal": "workspace:*",

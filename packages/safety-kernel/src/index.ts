@@ -18,4 +18,9 @@ export { REGISTRY, helplineText } from './helplines';
 
 export { passesOutputFilter, stripControlTokens } from './output-filter';
 
+export {
+  CLASSIFIER_SYSTEM, CLASSIFIER_PROMPT_VERSION, parseClassifier, ClassifierParseError,
+} from './classifier';
+export type { RawClassification } from './classifier';
+
 export { parseBlocks, stripBlocks, flatten, ITEM_SEPARATOR } from './blocks';

@@ -122,3 +122,47 @@ export function detectSubject(text: string): Subject | null {
 export function subjectPedagogyLine(subject: Subject | null): string {
   return subject ? SUBJECT_PED[subject].line : NO_SUBJECT_LINE;
 }
+
+// ---------------------------------------------------------------------------
+// Curriculum boards (prototype `BOARDS`)
+// ---------------------------------------------------------------------------
+
+/**
+ * What "align to this board" means, in the words the model is given.
+ *
+ * 23 boards plus General. These are pedagogy, not decoration: a Tamil Nadu
+ * child says "4th standard" and a CBSE child says "class 4", and a model that
+ * uses the wrong one has already told the child it is not really from here.
+ */
+export const BOARDS: Readonly<Record<string, string>> = Object.freeze({
+  'General': "Use clear, universal terms and examples any child in the world understands.",
+  'CBSE': "Align to CBSE/NCERT terminology for the child's class (\"class 4\", not \"grade 4\"); Indian examples (rupees, cricket, monsoon, Indian festivals) welcome; follow NCERT topic sequencing.",
+  'ICSE': "Align to ICSE/CISCE style: slightly richer vocabulary and detail than CBSE, strong English-language emphasis, thorough concept coverage; use \"class\", Indian examples.",
+  'NIOS': "Align to NIOS open-schooling style: self-paced, encouraging, assume the learner may study independently without a classroom; plain step-wise explanations.",
+  'TN': "Align to Tamil Nadu Samacheer Kalvi terminology and sequencing; use \"standard\" (e.g. 4th standard); Tamil Nadu examples (Chennai, Kaveri river, Pongal, rupees) welcome; English answers may include a familiar Tamil word in brackets for key terms.",
+  'MH': "Align to Maharashtra State Board (SSC) terminology; use \"standard\"; Maharashtra examples (Mumbai, Pune, Ganpati festival, rupees) welcome.",
+  'KA': "Align to Karnataka KSEEB terminology; use \"standard\"; Karnataka examples (Bengaluru, Mysuru, Kaveri, rupees) welcome.",
+  'KL': "Align to Kerala SCERT style: activity-and-discussion oriented; use \"standard\"; Kerala examples (backwaters, Onam, monsoon, rupees) welcome.",
+  'AP-TS': "Align to Andhra Pradesh / Telangana SSC terminology; use \"class\"; Telugu-region examples (Hyderabad, Godavari, Sankranti, rupees) welcome.",
+  'WB': "Align to West Bengal WBBSE terminology; use \"class\"; Bengal examples (Kolkata, Hooghly, Durga Puja, rupees) welcome.",
+  'GJ': "Align to Gujarat GSEB terminology; use \"standard\"; Gujarat examples (Ahmedabad, Navratri, rupees) welcome.",
+  'UP': "Align to Uttar Pradesh UPMSP terminology; use \"class\"; UP examples (Lucknow, Ganga, rupees) welcome; keep vocabulary simple and clear.",
+  'IB': "Align to IB PYP/MYP/DP style: inquiry-led and concept-first - open with a wondering question, connect to the transdisciplinary themes and real life, invite reflection (\"what do YOU think happens if...?\"), use learner-profile spirit (curious, caring, thinker).",
+  'Cambridge': "Align to Cambridge International (Primary/Lower Secondary/IGCSE) terminology and staged objectives; use \"stage/grade\"; international examples; precise, structured explanations.",
+  'Montessori': "Align to Montessori spirit: concrete before abstract - start from something the child can touch, see or count in the real world, then name the idea; follow the child's interest; never rush.",
+  'Common Core': "Align to US Common Core terminology for the child's grade (\"grade 4\"); US measurement (feet, pounds) and money (dollars, cents) examples; math uses CC methods (number bonds, area models).",
+  'UK': "Align to the English National Curriculum (Key Stages, Years - e.g. \"Year 4, KS2\"); UK spellings (colour, maths); UK examples (pounds and pence, London, football).",
+  'AU': "Align to the Australian Curriculum (ACARA) terminology (\"Year 4\"); Australian examples (dollars, cricket, the outback, native animals); Australian spellings.",
+  'CA-ON': "Align to the Ontario curriculum terminology (\"Grade 4\"); Canadian examples (dollars, hockey, provinces); Canadian spellings.",
+  'SG': "Align to Singapore MOE style: mastery-focused with the CPA approach (Concrete-Pictorial-Abstract) and Singapore bar-model method for maths (\"Primary 4\"); Singapore examples (dollars, hawker food, MRT).",
+  'FI': "Align to the Finnish National Core Curriculum spirit: phenomenon-based, low-pressure, playful - connect topics across subjects and to the child's daily life; short focused explanations, plenty of encouragement.",
+  'ZA': "Align to South Africa CAPS terminology (\"Grade 4\"); South African examples (rand, Table Mountain, soccer/rugby); simple clear English.",
+  'AE-UK': "Align to UK-pattern international schools in the Gulf (\"Year 4\"); UK spellings; Gulf-friendly examples (dirhams, desert, falcons) alongside international ones.",
+});
+
+/** Unknown board falls back to General rather than throwing at turn time. */
+export const boardGuidance = (board: string): string =>
+  BOARDS[board] ?? BOARDS['General']!;
+
+export { sandboxSystemPrompt, SANDBOX_PROMPT_VERSION } from './sandbox-prompt';
+export type { SandboxPromptContext } from './sandbox-prompt';

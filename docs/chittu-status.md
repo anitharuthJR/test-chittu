@@ -78,10 +78,13 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
 | **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels | `apps/web` |
-| **Tests** | **848**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Tests** | **942**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
-**What this does not mean.** No gate has moved. The provider router is still a stub that
-classifies every turn SAFE, so the API refuses to start with `NODE_ENV=production`. Four parent
+**What this does not mean.** No gate has moved. The provider router is now real — Anthropic
+adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never
+made a live call: there is no key in this environment, so it is verified against a local
+stand-in over real HTTP. The L2 classifier cell points at Haiku 4.5 as a placeholder for the
+self-hosted `chittu-local` that §12.2 says nobody sells. Four parent
 Every open question is in `PORT-REVIEW.md`,
 which is the companion to this file for Phase 1 and should be read with it.
 
