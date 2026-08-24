@@ -40,7 +40,13 @@ export interface BuildOptions {
   readonly keys: KeyProvider;
   /** Injected so tests can count model calls and CI needs no provider key. */
   readonly router?: ProviderRouter;
-  readonly logger?: boolean;
+  /**
+   * `true` for pino defaults, `false` for silence, or a pino options object.
+   * Typed as `object` rather than `Record<string, unknown>` so a precise
+   * interface (logging.ts's `LoggerOptions`) is assignable without an index
+   * signature it has no reason to carry.
+   */
+  readonly logger?: boolean | object;
   /** Gates dev-only consent methods. Mirrors `deployment.env` in the schema. */
   readonly env?: 'dev' | 'staging' | 'prod';
   /**
