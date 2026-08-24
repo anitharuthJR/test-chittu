@@ -21,3 +21,6 @@ test-results/
 playwright-report/
 live-harness.log
 apps/web/dist/
+
+# Application logs (dev). Production ships stdout to a log group — see architecture §14.
+logs/

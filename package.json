@@ -2,7 +2,7 @@
   "name": "chittu",
   "private": true,
   "version": "0.1.0",
-  "description": "Chittu — safety-first conversational AI for children. Phase 1 backend + the prototype regression harness.",
+  "description": "Chittu \u2014 safety-first conversational AI for children. Phase 1 backend + the prototype regression harness.",
   "scripts": {
     "build": "pnpm -r --filter './packages/**' --filter './apps/**' run build",
     "typecheck": "pnpm -r --filter './packages/**' --filter './apps/**' exec tsc --noEmit",
@@ -12,7 +12,8 @@
     "dev": "pnpm --filter @chittu/api run dev",
     "test:pg": "DATABASE_URL=postgres://chittu:chittu@localhost:55432/chittu_test vitest run",
     "db:up": "docker compose up -d --wait",
-    "db:down": "docker compose down -v"
+    "db:down": "docker compose down -v",
+    "start": "bash scripts/dev.sh"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",

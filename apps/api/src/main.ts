@@ -5,6 +5,7 @@ import { createRouter } from './providers/router.js';
 import { readClearance, enabledMarkets } from './providers/clearance.js';
 import { bootstrapDb } from './db-bootstrap.js';
 import { startSweepTimer } from './helplines/sweep.js';
+import { buildLoggerOptions, resolveLogDir } from './logging.js';
 
 const port = Number(process.env['PORT'] ?? 8080);
 const isProd = process.env['NODE_ENV'] === 'production';
@@ -95,8 +96,24 @@ async function chooseRouter() {
 const stopSweep = startSweepTimer(pool, 60 * 60_000);
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, stopSweep);
 
+/**
+ * Logging destination, announced rather than assumed — "where are the logs" had
+ * no answer before this, and the honest one is not the same in every mode.
+ *
+ * The redaction that comes with it is the point (§2.2: message bodies never
+ * enter a log line). In production `LOG_DIR` is unset, stdout is the transport,
+ * and §14's log group carries the same filter.
+ */
+const logDir = resolveLogDir();
+const loggerOptions = buildLoggerOptions({ dir: logDir });
+console.warn(
+  logDir === null
+    ? '[chittu] logs -> stdout only (set LOG_DIR to also write a file)'
+    : `[chittu] logs -> stdout and ${logDir}/api.log (message bodies redacted)`,
+);
+
 const app = await buildServer({
-  pool, keys, router: await chooseRouter(), logger: true,
+  pool, keys, router: await chooseRouter(), logger: loggerOptions,
   ...(isProd ? { env: 'prod' as const } : {}),
 });
 await app.listen({ port, host: '127.0.0.1' });

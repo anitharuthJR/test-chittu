@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "pino": "^10.3.1"
   }
 }

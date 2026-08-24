@@ -51,6 +51,37 @@ curl 'localhost:8080/v1/consent/methods?country=IN'
 a real adapter completes; see `packages/consent/src/adapters.ts` for what each one
 is blocked on.
 
+### Where the logs are
+
+```
+logs/api.log          # JSON, one object per line — always at the REPO ROOT
+```
+
+Created on boot and announced in the first lines of output. It is the same
+stream as the console, not a subset. Configure with:
+
+| | |
+|---|---|
+| `LOG_DIR=/some/path` | write there instead |
+| `LOG_DIR=` (empty) | stdout only — what containers want |
+| `LOG_LEVEL=debug` | default is `info` |
+
+`logs/` is gitignored, and **it is not the audit trail** — that is the seal
+chain, in Postgres. A file on a task that can be replaced at any moment is not a
+record anyone can rely on; §14 ships stdout to a log group in production.
+
+**Message bodies are redacted, and that is enforced rather than hoped for.**
+Architecture §2.2 says a child's words never enter a log line. Until 2026-08-24
+that held only by accident — Fastify's default serialisers happen to omit
+bodies, so the first person to log `req.body`, or an error object carrying the
+turn that caused it, would have written a child's words to disk with nothing
+objecting. `apps/api/src/logging.ts` now names the fields that can carry them
+and `logging.test.ts` drives real pino to prove they are censored.
+
+```bash
+tail -f logs/api.log | pnpm exec pino-pretty   # if you want it readable
+```
+
 ### With real Postgres instead of PGlite
 
 Only needed for pgvector, genuine concurrency, or pooling behaviour — see
