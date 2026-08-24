@@ -117,7 +117,15 @@ export function spineFor(kind: SpineKind, band: Band): string {
 /**
  * Prototype line 804. String-pattern `replace` substitutes the FIRST `{L}` only,
  * which is exactly right: each band's copy carries at most one slot.
+ *
+ * @param lines resolved helpline text from the live registry, when there is
+ *   one. Omitted or null falls back to the compiled-in `REGISTRY`, which is why
+ *   the kernel stays pure and synchronous: a crisis reply must be producible
+ *   with no database, no network and no await. The registry is an overlay that
+ *   lets a wrong number be corrected in minutes; it is never a dependency.
  */
-export function crisisMain(band: Band, country: Country): string {
-  return CRISIS_MAIN.en[band].replace('{L}', helplineText(country));
+export function crisisMain(band: Band, country: Country, lines?: string | null): string {
+  const text = lines !== undefined && lines !== null && lines !== ''
+    ? lines : helplineText(country);
+  return CRISIS_MAIN.en[band].replace('{L}', text);
 }

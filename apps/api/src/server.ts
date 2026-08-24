@@ -29,6 +29,7 @@ import type { DbPool, KeyProvider } from '@chittu/db';
 import { type ProviderRouter, stubRouter } from './providers.js';
 import { createStore } from './store.js';
 import { REGISTRY } from '@chittu/safety-kernel';
+import { resolveHelplines } from './helplines/resolve.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
   setParentCookie, clearParentCookie, parentFor,
@@ -472,7 +473,16 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       if (!(COUNTRIES as readonly string[]).includes(country)) {
         return reply.code(404).send({ error: 'no verified helplines for that country' });
       }
-      return reply.send({ country, ...REGISTRY[country] });
+      // From the live registry, falling back to the shipped copy. `status` and
+      // `source` are reported rather than hidden: an ops console needs to see
+      // that a market is running on the fallback, and a stale registry is a
+      // thing to page about, not a thing to quietly serve.
+      const r = await resolveHelplines(opts.pool, country);
+      return reply.send({
+        country: r.country, name: r.name, lines: r.lines,
+        status: r.status, source: r.source, lastVerified: r.lastVerified,
+        law: REGISTRY[country].law, consent: REGISTRY[country].consent,
+      });
     });
 
   // ---- sessions -----------------------------------------------------------
@@ -584,9 +594,12 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       const result = await store.withChild(row.child_id, async (tx) => {
         const loaded = await store.loadSession(tx, req.params.id);
         if (!loaded) return null;
-        const state = req.body.mode
-          ? { ...loaded.state, mode: req.body.mode }
-          : loaded.state;
+        // Resolved BEFORE the pipeline runs, so a crisis reply is assembled
+        // from live numbers where we have them and shipped ones where we do
+        // not — and never waits on a query mid-turn.
+        const helplines = await resolveHelplines(tx, loaded.state.country);
+        const base = { ...loaded.state, helplines: helplines.text };
+        const state = req.body.mode ? { ...base, mode: req.body.mode } : base;
 
         // The whole turn — seal, guards, model calls, writes — commits together
         // or not at all. A turn that fails halfway must not leave a session

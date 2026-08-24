@@ -4,6 +4,7 @@ import { anthropicAdapter } from './providers/anthropic.js';
 import { createRouter } from './providers/router.js';
 import { readClearance, enabledMarkets } from './providers/clearance.js';
 import { bootstrapDb } from './db-bootstrap.js';
+import { startSweepTimer } from './helplines/sweep.js';
 
 const port = Number(process.env['PORT'] ?? 8080);
 const isProd = process.env['NODE_ENV'] === 'production';
@@ -81,6 +82,18 @@ async function chooseRouter() {
   }
   return createRouter({ adapters, cleared });
 }
+
+/**
+ * The helpline sweep (GAP-06). Hourly is far more often than a 30-day re-check
+ * needs, and that is the point: the cost is one query, and the alternative is a
+ * job that only notices at the end of whatever interval it happened to pick.
+ *
+ * In-process, and that is a stopgap the log admits to. A job that runs only
+ * while one API process is up is a job that stops when that process does; the
+ * production shape is a scheduled task (§14).
+ */
+const stopSweep = startSweepTimer(pool, 60 * 60_000);
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, stopSweep);
 
 const app = await buildServer({
   pool, keys, router: await chooseRouter(), logger: true,

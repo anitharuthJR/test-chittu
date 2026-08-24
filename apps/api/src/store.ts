@@ -75,8 +75,14 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
       };
     },
 
-    /** Rebuild the pipeline's view of a session from what is stored. */
-    async loadSession(tx: Db, sessionId: string): Promise<{
+    /**
+     * Rebuild the pipeline's view of a session from what is stored.
+     *
+     * @param helplines resolved for this turn by the caller. The pipeline never
+     *   reads the registry itself — a turn stays a pure function of its inputs,
+     *   and the crisis reply is producible with no database at all.
+     */
+    async loadSession(tx: Db, sessionId: string, helplines?: string | null): Promise<{
       state: SessionState; childId: string; consentId: string;
     } | null> {
       const s = await child.getSession(tx, sessionId);
@@ -91,6 +97,7 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
           kid: stored.record.childFirstName,
           band: s.band,
           country: stored.record.country,
+          helplines: helplines ?? null,
           board: stored.record.board,
           mode: 'chat',
           crisisLock: s.crisisLock,
