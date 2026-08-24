@@ -1,0 +1,12 @@
+{
+  "name": "Chittu",
+  "short_name": "Chittu",
+  "description": "A safety-first companion for children, by Tulifo.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF6FF",
+  "theme_color": "#EAF6FF",
+  "categories": ["education", "kids"],
+  "icons": []
+}

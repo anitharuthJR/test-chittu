@@ -45,6 +45,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  # The client's size budget, as a gate rather than a paragraph. The device
+  # floor is a ₹8,000 Android on 3G, and a budget that only lives in a document
+  # gets exceeded 20 KB at a time until the phone is in a child's hand.
+  #
+  # Transfer size only. LCP on the target hardware is still unmeasured — GAP-08
+  # is open and the fix is to buy the phone, not to add a job here.
+  web-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @chittu/web build
+      - run: pnpm --filter @chittu/web size
+
   # The prototype is still the reference implementation of the pipeline, so its
   # harness keeps running alongside the backend's.
   prototype:

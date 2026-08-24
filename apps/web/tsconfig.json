@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "//": "vitest.config.ts is excluded on purpose. Vitest 2.1 bundles Vite 5's types while this app builds on Vite 6 (architecture §2.1), and the two Plugin types are structurally incompatible under exactOptionalPropertyTypes. The combination works at runtime — the suite runs — but the config file cannot be typechecked until Vitest is upgraded repo-wide. Recorded in PORT-REVIEW §13.",
+  "include": ["src", "vite.config.ts"]
+}
