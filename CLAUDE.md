@@ -5,6 +5,8 @@ Read these two documents before any non-trivial change — they are the authorit
 
 - `docs/chittu-requirements.md` — the WHAT & WHY: vision, Ten Laws, compliance, pipeline design, phased build plan (§9)
 - `docs/chittu-build-walkthrough.md` — the HOW, as shipped: step-by-step walkthrough of the working prototype
+- `docs/chittu-architecture.md` — the Phase 1 build target: tech stack, UI architecture, workflows A1–A7/W1–W6, data model, multi-model routing (§12), training-data doctrine (§11). Read before starting backend work.
+- `docs/chittu-schema.sql` — runnable Postgres DDL for the above; the doctrine is enforced by CONSTRAINTS, so read the comments before altering a table.
 
 ## Repo layout & current state
 
