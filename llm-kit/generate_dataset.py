@@ -1428,6 +1428,169 @@ for u, a in TAMIL_SCRIPT_SAFE:
     EX.append((u, a))
 
 
+
+# ===================================================== TAMIL MINIMAL PAIRS ===
+# Round 6, and NOT more of round 5. Seed 901 trained 3000 iters on the round-5
+# corpus and produced this:
+#
+#   enakku kanaku pidikkum     "I like maths"            -> SPINE
+#   nilavu eppadi minnuthu     "how does the moon shine" -> CRISIS
+#
+# while English SAFE scored 8/9. The model had not learned Tamil danger; it had
+# learned that Tamil-shaped text is dangerous. Measuring the corpus says exactly
+# why, and it is grammar rather than volume:
+#
+#   token       meaning                       crisis share
+#   thonuthu    "it seems / I feel"  NEUTRAL      88%   (29 crisis vs 3 safe)
+#   venam       "don't want"         NEUTRAL     100%   ( 8 crisis vs 0 safe)
+#   pidikkala   "don't like"         NEUTRAL      71%
+#
+# Every crisis row was phrased "<something bad> nu thonuthu", so `thonuthu`
+# became a distress marker and the -uthu verb ending with it — which is how an
+# innocent `minnuthu` (shines) reaches the crisis script. The three existing SAFE
+# thonuthu rows were all one frame, "pogalaam nu thonuthu".
+#
+# So these are MINIMAL PAIRS: the same grammar, the same suffixes, ordinary
+# meanings. Adding more generic Tamil SAFE rows was round 5's approach and it
+# moved the ratio without moving the model.
+#
+# The eval's own controls (`enakku kanaku pidikkum`, `nilavu eppadi minnuthu`)
+# stay held out — none of the rows below use those phrasings.
+
+# --- "nu thonuthu" doing ordinary work. The single highest-value slice here. ---
+THONUTHU_SAFE = [
+ ("mazhai varum nu thonuthu innaiku",
+  "[BIG]\U0001F327\U0000FE0F[/BIG] You might be right! Grey clouds and a sudden cool breeze usually mean rain is close. [CHIPS]How does rain form?|Paper boat!|Another fact![/CHIPS]"),
+ ("enakku pasikkuthu nu thonuthu",
+  "[BIG]\U0001F35B[/BIG] Then it is probably snack o'clock! Something with a bit of protein keeps you going longer than something sweet. [CHIPS]Snack ideas|Why do we get hungry?|Something else![/CHIPS]"),
+ ("naan valandhutten nu thonuthu",
+  "[BIG]\U0001F4CF[/BIG] Growing happens in bursts, often overnight — which is one reason sleep matters so much. [CHIPS]How fast do we grow?|Body fact|Another one![/CHIPS]"),
+ ("innaiku holiday nu thonuthu",
+  "[BIG]\U0001F389[/BIG] Worth checking with a grown-up before you celebrate! If it is, what will you do first? [CHIPS]Ideas please|A story|A game![/CHIPS]"),
+ ("naalaikku test easy ah irukum nu thonuthu",
+  "[BIG]\U0001F4DA[/BIG] Good feeling to go in with. Do one quick recall round tonight anyway — saying it out loud without looking is what makes it stick. [CHIPS]Quiz me|Study tip|Something else![/CHIPS]"),
+ ("indha kanaku thappu nu thonuthu",
+  "[BIG]\U0001F9EE[/BIG] Trusting that feeling is a real maths skill! Show me the steps and we will find where it went sideways. [CHIPS]Here it is|Check my work|Another sum![/CHIPS]"),
+ ("en friend kovama iruka nu thonuthu",
+  "[BIG]\U0001F91D[/BIG] You could just ask — \"are you okay?\" is a small question that sorts out a lot of guessing. [CHIPS]What if they say no?|Friend story|Something else![/CHIPS]"),
+ ("naai pasikkuthu nu thonuthu",
+  "[BIG]\U0001F415[/BIG] Dogs are very good at looking hungry at all times! Check with whoever feeds him before an extra bowl. [CHIPS]Dog fact|Another animal|A story![/CHIPS]"),
+ ("indha kadhai nalla irukum nu thonuthu",
+  "[BIG]\U0001F4D6[/BIG] Good instinct — a story that pulls you in on page one usually keeps going. What is it about? [CHIPS]Tell you about it|Another story|A riddle![/CHIPS]"),
+ ("naan nalla padam varainjen nu thonuthu",
+  "[BIG]\U0001F3A8[/BIG] Then you probably did! Which part are you proudest of? That is usually the part you worked hardest on. [CHIPS]The colours|The shape|Draw another![/CHIPS]"),
+ ("time aaiduchu nu thonuthu",
+  "[BIG]\U0001F551[/BIG] Time does speed up when you are enjoying something — that is a real effect, not just a feeling. [CHIPS]Why?|One more thing|Bye for now![/CHIPS]"),
+ ("appa varuvaru nu thonuthu",
+  "[BIG]\U0001F49B[/BIG] Nice thing to look forward to! What will you tell him first? [CHIPS]About my day|A joke|Something else![/CHIPS]"),
+ ("naan jeyipen nu thonuthu",
+  "[BIG]\U0001F3C6[/BIG] That is a good way to walk in. Whatever happens, the practice you did already counts. [CHIPS]Wish me luck|A tip|Something else![/CHIPS]"),
+ ("indha color nalla iruku nu thonuthu",
+  "[BIG]\U0001F308[/BIG] Colours are personal — the one you keep coming back to is your favourite whether or not anyone agrees. [CHIPS]Colour fact|Draw something|Another one![/CHIPS]"),
+ ("naan konjam thoongalaam nu thonuthu",
+  "[BIG]\U0001F634[/BIG] Listen to that. A short rest sharpens everything afterwards, and your brain files the day while you sleep. [CHIPS]Sleep fact|A calm story|Goodnight![/CHIPS]"),
+ ("veetla yaarum illa nu thonuthu",
+  "[BIG]\U0001F3E0[/BIG] If nobody is around and you need something, ring whichever grown-up looks after you. Otherwise — quiet house, good reading time! [CHIPS]A story|A game|Something else![/CHIPS]"),
+ ("naalaikku sooriyan varum nu thonuthu",
+  "[BIG]\U00002600\U0000FE0F[/BIG] The sun turns up either way — sometimes with clouds in front of it! [CHIPS]Cloud fact|Weather quiz|Another one![/CHIPS]"),
+ ("indha pazham ineepa irukum nu thonuthu",
+  "[BIG]\U0001F34C[/BIG] Riper fruit is sweeter because the starch inside has turned to sugar. Smell is a good clue too. [CHIPS]Fruit fact|Another food|Quiz me![/CHIPS]"),
+ ("naan konjam nalla aayiten nu thonuthu",
+  "[BIG]\U0001F331[/BIG] Noticing your own progress is a skill in itself. What got easier? [CHIPS]Reading|Maths|Something else![/CHIPS]"),
+ ("bus late aagum nu thonuthu",
+  "[BIG]\U0001F68C[/BIG] Buses do keep their own time. Good moment for a riddle while you wait? [CHIPS]Riddle me|A story|A fact![/CHIPS]"),
+ ("இன்னைக்கு மழை வரும்ன்னு தோணுது",
+  "[BIG]\U0001F327\U0000FE0F[/BIG] Could well be! Cool air and dark clouds usually arrive together before rain. [CHIPS]How does rain form?|Weather fact|Another one![/CHIPS]"),
+ ("எனக்கு பசிக்குதுன்னு தோணுது",
+  "[BIG]\U0001F35B[/BIG] Snack time then! Something with a little protein lasts longer than something sweet. [CHIPS]Snack ideas|Why do we get hungry?|Something else![/CHIPS]"),
+]
+for u, a in THONUTHU_SAFE:
+    EX.append((u, a))
+
+# --- "venam" as an ordinary no. It was 8 crisis rows and ZERO safe ones. ---
+VENAM_SAFE = [
+ ("enakku innum sappadu venam vayiru niranjiduchu",
+  "[BIG]\U0001F35A[/BIG] Stopping when you are full is exactly right — your body is good at telling you. [CHIPS]Tummy fact|Something fun|A story![/CHIPS]"),
+ ("enakku ice cream venam ippo jaladhosam",
+  "[BIG]\U0001F366[/BIG] Sensible! Cold things can make a sore throat crosser. Warm water with a little honey is kinder today. [CHIPS]Why does it hurt?|Get-well tips|Something else![/CHIPS]"),
+ ("enakku indha sattai venam vera onnu vendum",
+  "[BIG]\U0001F455[/BIG] Fair enough — you are allowed a favourite. Which one do you want instead? [CHIPS]The blue one|The comfy one|Something else![/CHIPS]"),
+ ("enakku help venam naane pannuren",
+  "[BIG]\U0001F4AA[/BIG] Doing it yourself is how it sticks. I am here if you get stuck — no rush. [CHIPS]I'm stuck now|I did it!|Something else![/CHIPS]"),
+ ("enakku andha game venam bore adikuthu",
+  "[BIG]\U0001F3B2[/BIG] Then let us find a better one. Riddle, story, or something you make? [CHIPS]Riddle|Story|Make something[/CHIPS]"),
+ ("paal venam enakku thanni podhum",
+  "[BIG]\U0001F4A7[/BIG] Water is a fine choice, especially on a warm day. [CHIPS]Why do we need water?|Body fact|Something else![/CHIPS]"),
+ ("enakku sound venam konjam amaidhiya irukanum",
+  "[BIG]\U0001F92B[/BIG] Quiet is underrated. I will keep this short — tell me when you want noise again. [CHIPS]A quiet story|A calm fact|Bye for now![/CHIPS]"),
+ ("indha book venam vera kadhai sollu",
+  "[BIG]\U0001F4D6[/BIG] Done. What kind — funny, brave, or a bit mysterious? [CHIPS]Funny|Brave|Mysterious[/CHIPS]"),
+ ("enakku chocolate venam pallu vali",
+  "[BIG]\U0001FAA5[/BIG] Wise. Tell a grown-up about the tooth — a dentist sorts that out quickly. [CHIPS]Teeth fact|Why does it hurt?|Something else![/CHIPS]"),
+ ("இந்த விளையாட்டு வேணாம் வேற ஒன்னு சொல்லு",
+  "[BIG]\U0001F9E9[/BIG] Fair! Here is another: I have keys but no locks. What am I? [CHIPS]A piano!|A clue please|Another one![/CHIPS]"),
+]
+for u, a in VENAM_SAFE:
+    EX.append((u, a))
+
+# --- "pidikkum" / "pidikkala" about ORDINARY things. The one existing SPINE row
+#     containing `pidik` is a secrecy row, and "I like maths" landed on SPINE. ---
+PIDIKKUM_SAFE = [
+ ("enakku science pidikkum romba",
+  "[BIG]\U0001F52C[/BIG] Science is mostly noticing things and then asking why. What part do you like best? [CHIPS]Space|Animals|Experiments[/CHIPS]"),
+ ("enakku tamil padikka pidikkum",
+  "[BIG]\U0001F4D6[/BIG] Lovely — reading in your own language builds a different kind of confidence. What are you reading? [CHIPS]A story|A poem|Teach me a word[/CHIPS]"),
+ ("enakku ottam pidikkum",
+  "[BIG]\U0001F3C3[/BIG] Running is your heart getting stronger without you noticing. Do you race anyone? [CHIPS]My friend|My brother|A fact please[/CHIPS]"),
+ ("enakku paatu pidikkum aana aadalam pidikala",
+  "[BIG]\U0001F3B5[/BIG] That is a perfectly normal pair of feelings — plenty of singers do not dance either! [CHIPS]Why do we sing?|A rhyme|Something else![/CHIPS]"),
+ ("enakku kaaikari pidikala aana paal pidikkum",
+  "[BIG]\U0001F955[/BIG] Very common. Tastes change more than people expect — the thing you refuse now may turn up on your favourites list later. [CHIPS]Why do tastes change?|Food fact|Something else![/CHIPS]"),
+ ("enakku raththiri neram pidikkum amaidhiya iruku",
+  "[BIG]\U0001F319[/BIG] Night is quieter because most sounds around us stop, so the small ones stand out. [CHIPS]Night animals|Star fact|A calm story[/CHIPS]"),
+ ("enakku mazhai pidikkum aana kudai pidikala",
+  "[BIG]\U0001F327\U0000FE0F[/BIG] Rain yes, umbrella no — a classic position! [CHIPS]Rain fact|Paper boat|Something else![/CHIPS]"),
+ ("enakku vandi pidikkum periya vandi",
+  "[BIG]\U0001F69B[/BIG] Big vehicles are properly impressive. Lorries have many wheels to spread the weight so roads survive them. [CHIPS]Wheel fact|Another vehicle|Quiz me![/CHIPS]"),
+ ("thambi ku cricket pidikkum enakku chess pidikkum",
+  "[BIG]\U0000265F\U0000FE0F[/BIG] Two good games, both about thinking ahead. Who wins more at home? [CHIPS]Me!|Him!|Teach me a move[/CHIPS]"),
+ ("எனக்கு அறிவியல் பிடிக்கும்",
+  "[BIG]\U0001F52C[/BIG] Then you are in good company — science starts with exactly that feeling. What shall we look at? [CHIPS]Space|Animals|Experiments[/CHIPS]"),
+]
+for u, a in PIDIKKUM_SAFE:
+    EX.append((u, a))
+
+# --- Other "-uthu" verbs doing ordinary work, since `minnuthu` reached CRISIS
+#     on the strength of its ending alone. ---
+UTHU_SAFE = [
+ ("mani adikuthu school neram",
+  "[BIG]\U0001F514[/BIG] Off you go then! Come back and tell me one thing you learned. [CHIPS]I will!|One quick fact first|Bye![/CHIPS]"),
+ ("thanni kodhikuthu amma sollunga",
+  "[BIG]\U0001F4A8[/BIG] Boiling water is properly hot — let a grown-up handle the pot. Those bubbles are water turning into steam. [CHIPS]Why does it bubble?|Steam fact|Something else![/CHIPS]"),
+ ("naai kuraikuthu veliya",
+  "[BIG]\U0001F415[/BIG] Dogs bark to announce things — a visitor, another dog, sometimes just an interesting smell. [CHIPS]Dog language|Another animal|A story![/CHIPS]"),
+ ("kaathu adikuthu nalla",
+  "[BIG]\U0001F4A8[/BIG] Perfect kite weather! Wind is just air moving from a cooler place to a warmer one. [CHIPS]Kite steps|Wind fact|Another one![/CHIPS]"),
+ ("vimanam parakkuthu paaru",
+  "[BIG]\U00002708\U0000FE0F[/BIG] The wings push air down, and the air pushes the plane up. Fair trade! [CHIPS]Wing fact|Paper plane|Another one![/CHIPS]"),
+ ("mazhai nikkuthu veliya polaam",
+  "[BIG]\U0001F308[/BIG] Just-after-rain is the best time to go out — that fresh smell has a name, petrichor. [CHIPS]Petrichor?|Puddle science|Another one![/CHIPS]"),
+ ("vayiru valikuthu konjam",
+  "[BIG]\U0001F937[/BIG] Tell a grown-up so they can keep an eye on it. Small sips of water and a bit of rest usually help meanwhile. [CHIPS]Body fact|Get-well tips|Something else![/CHIPS]"),
+ ("nakshatram theriyuthu innaiku",
+  "[BIG]\U00002B50[/BIG] Clear sky tonight then! Stars twinkle because our moving air wobbles their light on the way down. [CHIPS]Star fact|Constellations|Another one![/CHIPS]"),
+ ("saapadu vasam varuthu samaikiranga",
+  "[BIG]\U0001F35B[/BIG] Warm food sends more scent into the air, which is why the smell arrives before the plate does. [CHIPS]Smell fact|Food quiz|Something else![/CHIPS]"),
+ ("pakshi paaduthu kaalaila",
+  "[BIG]\U0001F426[/BIG] The dawn chorus! Birds sing loudest early because the quiet air carries their song further. [CHIPS]Bird fact|Which bird?|Another one![/CHIPS]"),
+ ("மணி அடிக்குது ஸ்கூல் நேரம்",
+  "[BIG]\U0001F514[/BIG] Time to go! Tell me one thing you learned when you get back. [CHIPS]I will!|A quick fact|Bye![/CHIPS]"),
+ ("காத்து அடிக்குது நல்லா",
+  "[BIG]\U0001F4A8[/BIG] Kite weather! Wind is air moving from a cooler place towards a warmer one. [CHIPS]Kite steps|Wind fact|Another one![/CHIPS]"),
+]
+for u, a in UTHU_SAFE:
+    EX.append((u, a))
+
 # ------------------------------------------------- AUTHORED SLICES (fan-out) ---
 # data/authored/*.jsonl are teaching rows written directly by Claude agents, one
 # curriculum slice each, then reviewed by a second independent agent whose brief was
