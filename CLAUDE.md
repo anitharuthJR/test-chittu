@@ -69,6 +69,12 @@ Read these two documents before any non-trivial change — they are the authorit
 - **Never write a test phrase by reading the pattern it tests.** A corpus derived from the regexes tests them against themselves. Three instruments here have been caught doing this — the 169-probe lexicon sweep (246/246 green while L1 caught 19/41 real phrasings), `eval_guard.py` (scored the `[CHIPS]` format its own prompt requested as FAIL), and the adapter scorecards marked `# !! INVALID`. Write what a child types, or what a model actually emits.
 - **Over-firing a guard is a real harm, not a safe default.** The crisis script stops the chat, shows helplines and flags a parent. `safety-corpus`' SAFE rows are as binding as its CRISIS rows — a first fix scored 41/41 CRISIS and still crisis-locked "i am scared of my shadow".
 - Any change to safety logic requires a matching regression test before it lands. A syntax check alone is not verification — it has missed real bugs here before.
+- **`pnpm verify` before you merge — nothing else will.** GitHub Actions was removed on
+  2026-08-25 (it had failed every run at 3s on an org billing block, so it was noise, not
+  signal). `scripts/verify.sh` runs exactly what CI ran: typecheck, the full suite, the web
+  bundle budget, Playwright, the guard grader, corpus leakage and the L1 crisis gate.
+  `pnpm verify --with-pg` adds the real-Postgres lane. There is no second pair of eyes now,
+  so running it is the whole quality gate.
 - **Mutation-test the guards you add.** Break the thing on purpose and confirm tests go red: removing the Law 02 gate must fail 5 tests, disabling the control-token strip must fail 5, disabling the escalation-leak check must fail 6. A guard whose removal is silent is not a guard.
 
 ## When building the backend (Phase 1)
