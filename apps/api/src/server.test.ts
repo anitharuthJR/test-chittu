@@ -41,12 +41,32 @@ beforeEach(async () => {
 });
 afterEach(async () => { await app.close(); });
 
-async function openSession(over: Record<string, unknown> = {}) {
-  const res = await app.inject({
-    method: 'POST', url: '/v1/session',
-    payload: { kid: 'Meera', band: 'builder', country: 'IN', ...over },
+/** Draft -> verify -> finalize, returning the bearer token. */
+async function grantConsent(over: Record<string, unknown> = {}) {
+  const d = await app.inject({
+    method: 'POST', url: '/v1/consent/draft',
+    payload: {
+      parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',
+      band: 'builder', board: 'CBSE', method: 'dev_stub',
+      pin: '4917', pinConfirm: '4917', ...over,
+    },
   });
-  expect(res.statusCode).toBe(201);
+  expect(d.statusCode, d.body).toBe(201);
+  const { consentId, challengeId } = d.json<{ consentId: string; challengeId: string }>();
+  const f = await app.inject({
+    method: 'POST', url: `/v1/consent/${consentId}/finalize`,
+    payload: { challengeId },
+  });
+  expect(f.statusCode, f.body).toBe(200);
+  return { consentId, token: f.json<{ consentToken: string }>().consentToken };
+}
+
+async function openSession(over: Record<string, unknown> = {}) {
+  const { token } = await grantConsent(over);
+  const res = await app.inject({
+    method: 'POST', url: '/v1/session', payload: { consentToken: token },
+  });
+  expect(res.statusCode, res.body).toBe(201);
   return res.json<{ sessionId: string }>().sessionId;
 }
 
@@ -84,13 +104,18 @@ describe('health and session lifecycle', () => {
 });
 
 describe('request validation happens at the edge', () => {
+  const validDraft = {
+    parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',
+    band: 'builder', method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+  };
+
   it.each([
-    ['a missing band', { kid: 'A', country: 'IN' }],
-    ['an unknown band', { kid: 'A', band: 'wizard', country: 'IN' }],
-    ['an unsupported country', { kid: 'A', band: 'builder', country: 'ZZ' }],
-    ['an extra field', { kid: 'A', band: 'builder', country: 'IN', surname: 'Iyer' }],
-  ])('refuses %s', async (_label, payload) => {
-    const res = await app.inject({ method: 'POST', url: '/v1/session', payload });
+    ['a missing band', { ...validDraft, band: undefined }],
+    ['an unknown band', { ...validDraft, band: 'wizard' }],
+    ['an unsupported country', { ...validDraft, country: 'ZZ' }],
+    ['an extra field', { ...validDraft, surname: 'Iyer' }],
+  ])('refuses a consent draft with %s', async (_label, payload) => {
+    const res = await app.inject({ method: 'POST', url: '/v1/consent/draft', payload });
     expect(res.statusCode).toBe(400);
   });
 
@@ -106,8 +131,8 @@ describe('request validation happens at the edge', () => {
 
   it('refuses a surname field — there is nowhere to put one', async () => {
     const res = await app.inject({
-      method: 'POST', url: '/v1/session',
-      payload: { kid: 'Meera', band: 'builder', country: 'IN', lastName: 'Iyer' },
+      method: 'POST', url: '/v1/consent/draft',
+      payload: { ...validDraft, lastName: 'Iyer' },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -167,7 +192,7 @@ describe('crisis', () => {
   });
 
   it('helplines follow the session’s country', async () => {
-    const id = await openSession({ country: 'US' });
+    const id = await openSession({ country: 'US', method: 'dev_stub' });
     const { body } = await say(id, 'i want to die');
     expect(shown(body)).toMatch(/988/);
   });
@@ -252,5 +277,216 @@ describe('the seal chain is per session and verifies', () => {
     const rb = await app.inject({ method: 'GET', url: `/v1/session/${b}/seal` });
     expect(ra.json<{ records: number }>().records)
       .toBeGreaterThan(rb.json<{ records: number }>().records);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('Law 02 — consent before existence', () => {
+  it('refuses a session with NO consent token at all', async () => {
+    const res = await app.inject({ method: 'POST', url: '/v1/session', payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('refuses a session with a made-up token', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/v1/session',
+      payload: { consentToken: '11111111-1111-4111-8111-111111111111' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ code: string }>().code).toBe('no-consent');
+  });
+
+  it('issues NO token until the consent is finalized', async () => {
+    const d = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    expect(d.statusCode).toBe(201);
+    expect(d.json<Record<string, unknown>>()).not.toHaveProperty('consentToken');
+    expect(d.json<{ status: string }>().status).toBe('verifying');
+  });
+
+  it('a failed verification produces no consent and no token', async () => {
+    const d = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        method: 'signed_form_review', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    const { consentId, challengeId } = d.json<{ consentId: string; challengeId: string }>();
+    // no named reviewer -> the adapter refuses
+    const f = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/finalize`,
+      payload: { challengeId, proof: {} },
+    });
+    expect(f.statusCode).toBe(422);
+    expect(f.json<Record<string, unknown>>()).not.toHaveProperty('consentToken');
+  });
+
+  it('the BAND comes from the sealed consent, not from the request', async () => {
+    // a client cannot ask for a different band than it was granted: there is no
+    // field on the session route through which to try
+    const { token } = await grantConsent({ band: 'explorer' });
+    const res = await app.inject({
+      method: 'POST', url: '/v1/session',
+      payload: { consentToken: token, band: 'thinker' },
+    });
+    expect(res.statusCode, 'band is not an accepted field').toBe(400);
+
+    const ok = await app.inject({
+      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+    });
+    expect(ok.json<{ band: string }>().band).toBe('explorer');
+  });
+
+  it('memory is a SCOPE, not something the client turns on', async () => {
+    const { token } = await grantConsent({ memoryOn: false });
+    const res = await app.inject({
+      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+    });
+    expect(res.statusCode).toBe(201);
+    // proven by behaviour: a memory the classifier offers is not saved
+    const sid = res.json<{ sessionId: string }>().sessionId;
+    router.verdict = { label: 'SAFE', memory: { category: 'PET', fact: 'has a cat' }, assist: null };
+    const turn = await say(sid, 'i have a cat');
+    expect(turn.body.memorySaved).toBeUndefined();
+  });
+});
+
+describe('revocation propagates', () => {
+  it('ends live sessions and refuses new ones', async () => {
+    const { consentId, token } = await grantConsent();
+    const s = await app.inject({
+      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+    });
+    const sid = s.json<{ sessionId: string }>().sessionId;
+    expect((await say(sid, 'why is the sky blue')).status).toBe(200);
+
+    const rev = await app.inject({ method: 'DELETE', url: `/v1/consent/${consentId}` });
+    expect(rev.statusCode).toBe(200);
+    expect(rev.json<{ sessionsEnded: number }>().sessionsEnded).toBe(1);
+
+    // the live session is gone
+    expect((await say(sid, 'still there?')).status).toBe(404);
+    // and the token no longer opens a new one
+    const again = await app.inject({
+      method: 'POST', url: '/v1/session', payload: { consentToken: token },
+    });
+    expect(again.statusCode).toBe(403);
+  });
+
+  it('returns the sealed ledger as proof the consent existed and was withdrawn', async () => {
+    const { consentId } = await grantConsent();
+    const rev = await app.inject({ method: 'DELETE', url: `/v1/consent/${consentId}` });
+    const ledger = rev.json<{ ledger: { status: string; revokedAt: string; sealHash: string } }>().ledger;
+    expect(ledger.status).toBe('revoked');
+    expect(ledger.revokedAt).toBeTruthy();
+    expect(ledger.sealHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe('consent methods offered', () => {
+  it('never offers DigiLocker, and refuses it if asked', async () => {
+    const list = await app.inject({ method: 'GET', url: '/v1/consent/methods?country=IN' });
+    expect(list.json<{ methods: string[] }>().methods).not.toContain('digilocker');
+
+    const d = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        method: 'digilocker', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    expect(d.statusCode).toBe(400);
+    expect(d.json<{ error: string }>().error).toMatch(/deferred/i);
+  });
+
+  it('refuses the dev stub when the deployment says production', async () => {
+    const prod = buildServer({ router: countingRouter(), env: 'prod' });
+    await prod.ready();
+    const d = await prod.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    expect(d.statusCode).toBe(400);
+    expect(d.json<{ error: string }>().error).toMatch(/not permitted in production/i);
+    await prod.close();
+  });
+});
+
+describe('parent PIN over HTTP', () => {
+  it('rejects a weak PIN at draft time', async () => {
+    for (const pin of ['1234', '0000', '4321', '9999']) {
+      const res = await app.inject({
+        method: 'POST', url: '/v1/consent/draft',
+        payload: {
+          parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+          method: 'dev_stub', pin, pinConfirm: pin,
+        },
+      });
+      expect(res.statusCode, pin).toBe(400);
+      expect(res.json<{ error: string }>().error).toMatch(/easy to guess/i);
+    }
+  });
+
+  it('verifies the right PIN and refuses the wrong one', async () => {
+    const { consentId } = await grantConsent();
+    const good = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4917' },
+    });
+    expect(good.statusCode).toBe(200);
+    const bad = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+    });
+    expect(bad.statusCode).toBe(401);
+  });
+
+  it('locks out after five wrong attempts, and says so once', async () => {
+    const { consentId } = await grantConsent();
+    const tries = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await app.inject({
+        method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+      });
+      tries.push(r.json<{ locked: boolean; note?: string }>());
+    }
+    expect(tries.slice(0, 4).every((t) => !t.locked)).toBe(true);
+    expect(tries[4]!.locked).toBe(true);
+    expect(tries[4]!.note).toMatch(/curious child/i);
+    expect(tries[5]!.note, 'flagged once, not on every later try').toBeUndefined();
+  });
+
+  it('a correct PIN during lockout still fails', async () => {
+    const { consentId } = await grantConsent();
+    for (let i = 0; i < 5; i++) {
+      await app.inject({
+        method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4918' },
+      });
+    }
+    const r = await app.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/pin/verify`, payload: { pin: '4917' },
+    });
+    expect(r.statusCode).toBe(401);
+    expect(r.json<{ locked: boolean }>().locked).toBe(true);
+  });
+
+  it('does not reveal whether a consent id exists', async () => {
+    const real = await grantConsent();
+    const a = await app.inject({
+      method: 'POST', url: `/v1/consent/${real.consentId}/pin/verify`, payload: { pin: '4918' },
+    });
+    const b = await app.inject({
+      method: 'POST', url: '/v1/consent/11111111-1111-4111-8111-111111111111/pin/verify',
+      payload: { pin: '4918' },
+    });
+    expect(a.statusCode).toBe(b.statusCode);
   });
 });

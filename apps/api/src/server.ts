@@ -20,9 +20,17 @@ import { runTurn, type PipelinePorts, type SessionState } from '@chittu/pipeline
 import type { Band, Country, Mode } from '@chittu/contracts';
 import { BANDS, COUNTRIES } from '@chittu/contracts';
 import { type ProviderRouter, stubRouter } from './providers.js';
+import {
+  assertActiveConsent, draftConsent, markVerifying, activate, revoke,
+  selectAdapter, methodsFor, offersFor, ConsentError, ConsentAdapterError,
+  checkPinPolicy, PIN_MESSAGE, hashPin, verifyPin,
+  registerAttempt, FRESH_LOCKOUT,
+  type ConsentRecord, type ConsentMethod, type LockoutState,
+} from '@chittu/consent';
 
 export interface Session {
   readonly id: string;
+  readonly consentId: string;
   state: SessionState;
   readonly ports: PipelinePorts;
   readonly startedAt: string;
@@ -33,6 +41,16 @@ export interface BuildOptions {
   /** Injected so tests can count model calls and CI needs no provider key. */
   readonly router?: ProviderRouter;
   readonly logger?: boolean;
+  /** Gates dev-only consent methods. Mirrors `deployment.env` in the schema. */
+  readonly env?: 'dev' | 'staging' | 'prod';
+}
+
+interface ConsentEntry {
+  record: ConsentRecord;
+  /** Bearer token, separate from the record id: an identifier is not a credential. */
+  token: string | null;
+  pinHash: string | null;
+  lockout: LockoutState;
 }
 
 const MODES: readonly Mode[] = [
@@ -41,6 +59,7 @@ const MODES: readonly Mode[] = [
 ];
 
 export function buildServer(opts: BuildOptions = {}): FastifyInstance {
+  const env = opts.env ?? 'dev';
   const app = Fastify({
     logger: opts.logger ?? false,
     ajv: {
@@ -68,6 +87,7 @@ export function buildServer(opts: BuildOptions = {}): FastifyInstance {
    * anywhere a child can reach it until the consent engine lands.
    */
   const sessions = new Map<string, Session>();
+  const consents = new Map<string, ConsentEntry>();
 
   app.register(rateLimit, {
     max: 120,
@@ -81,26 +101,180 @@ export function buildServer(opts: BuildOptions = {}): FastifyInstance {
 
   // -------------------------------------------------------------------------
 
+  // ---- consent ------------------------------------------------------------
+  // Law 02: no code path may reach the chat before the consent ledger exists.
+  // Every route below exists so that the session route can refuse.
+
+  app.get('/v1/consent/methods', async (req, reply) => {
+    const country = (req.query as { country?: Country }).country;
+    if (!country || !(COUNTRIES as readonly string[]).includes(country)) {
+      return reply.code(400).send({ error: 'unknown country' });
+    }
+    // `methods` is what a parent can complete; `offers` shows ops what is blocked
+    return reply.send({
+      country,
+      methods: methodsFor(country, { env }),
+      offers: offersFor(country, { env }),
+    });
+  });
+
   app.post<{
-    Body: { kid: string; band: Band; country: Country; board?: string; mode?: Mode };
-  }>('/v1/session', {
+    Body: {
+      parentName: string; childFirstName: string; country: Country; band: Band;
+      board?: string; memoryOn?: boolean; learnOn?: boolean; method: ConsentMethod;
+      pin: string; pinConfirm: string;
+    };
+  }>('/v1/consent/draft', {
     schema: {
       body: {
         type: 'object',
-        required: ['kid', 'band', 'country'],
+        required: ['parentName', 'childFirstName', 'country', 'band', 'method', 'pin', 'pinConfirm'],
         additionalProperties: false,
         properties: {
-          // first name only — the schema does not have anywhere to put a surname
-          kid: { type: 'string', minLength: 1, maxLength: 40 },
-          band: { type: 'string', enum: [...BANDS] },
+          parentName: { type: 'string', minLength: 1, maxLength: 80 },
+          // first name only — there is nowhere in the schema to put a surname
+          childFirstName: { type: 'string', minLength: 1, maxLength: 40 },
           country: { type: 'string', enum: [...COUNTRIES] },
+          band: { type: 'string', enum: [...BANDS] },
           board: { type: 'string', maxLength: 60 },
-          mode: { type: 'string', enum: [...MODES] },
+          memoryOn: { type: 'boolean' },
+          learnOn: { type: 'boolean' },
+          method: { type: 'string', minLength: 1, maxLength: 40 },
+          pin: { type: 'string', minLength: 4, maxLength: 6 },
+          pinConfirm: { type: 'string', minLength: 4, maxLength: 6 },
         },
       },
     },
   }, async (req, reply) => {
     const b = req.body;
+    const bad = checkPinPolicy(b.pin, b.pinConfirm);
+    if (bad) return reply.code(400).send({ error: PIN_MESSAGE[bad], code: bad });
+
+    let adapter;
+    try { adapter = selectAdapter(b.method, { env }); }
+    catch (e) {
+      return reply.code(400).send({ error: (e as ConsentAdapterError).message });
+    }
+    if (!adapter.jurisdictions.includes(b.country)) {
+      return reply.code(400).send({ error: `${b.method} is not offered in ${b.country}` });
+    }
+
+    const draft = {
+      parentName: b.parentName, childFirstName: b.childFirstName,
+      country: b.country, band: b.band, board: b.board ?? 'General',
+      // Requirements §4.1: memory defaults ON, learning is opt-IN, default OFF.
+      memoryOn: b.memoryOn ?? true, learnOn: b.learnOn ?? false,
+    };
+    const record = markVerifying(draftConsent(draft, b.method));
+    const challenge = await adapter.start(draft);
+    consents.set(record.id, {
+      record, token: null, pinHash: await hashPin(b.pin), lockout: FRESH_LOCKOUT,
+    });
+    return reply.code(201).send({
+      consentId: record.id,
+      challengeId: challenge.challengeId,
+      instructions: challenge.instructions,
+      law: record.law,
+      status: record.status,
+    });
+  });
+
+  app.post<{ Params: { id: string }; Body: { challengeId: string; proof?: unknown } }>(
+    '/v1/consent/:id/finalize', async (req, reply) => {
+      const entry = consents.get(req.params.id);
+      if (!entry) return reply.code(404).send({ error: 'no such consent' });
+      const adapter = selectAdapter(entry.record.method, { env });
+      try {
+        const evidence = await adapter.complete(req.body.challengeId, req.body.proof);
+        entry.record = activate(entry.record, evidence);
+        entry.token = randomUUID();
+      } catch (e) {
+        // A failed verification must NOT produce a consent. Say so plainly.
+        return reply.code(422).send({
+          error: e instanceof Error ? e.message : 'verification failed',
+          status: entry.record.status,
+        });
+      }
+      return reply.send({
+        consentToken: entry.token,
+        ledger: entry.record,          // sealed; the parent can verify it
+      });
+    });
+
+  app.delete<{ Params: { id: string } }>('/v1/consent/:id', async (req, reply) => {
+    const entry = consents.get(req.params.id);
+    if (!entry) return reply.code(404).send({ error: 'no such consent' });
+    entry.record = revoke(entry.record, 'parent request');
+    entry.token = null;
+    // Revocation propagates: every session on this consent ends immediately.
+    let killed = 0;
+    for (const [sid, s] of sessions) {
+      if (s.consentId === req.params.id) { s.ended = true; sessions.delete(sid); killed += 1; }
+    }
+    return reply.send({ status: 'revoked', sessionsEnded: killed, ledger: entry.record });
+  });
+
+  app.post<{ Params: { id: string }; Body: { pin: string } }>(
+    '/v1/consent/:id/pin/verify', {
+      schema: {
+        body: {
+          type: 'object', required: ['pin'], additionalProperties: false,
+          properties: { pin: { type: 'string', minLength: 4, maxLength: 6 } },
+        },
+      },
+    }, async (req, reply) => {
+      const entry = consents.get(req.params.id);
+      // Same shape whether the consent exists or not — a 404 here would tell an
+      // attacker which consent ids are real.
+      if (!entry?.pinHash) return reply.code(401).send({ ok: false });
+      const correct = await verifyPin(req.body.pin, entry.pinHash);
+      const r = registerAttempt(entry.lockout, correct, Date.now());
+      entry.lockout = r.state;
+      if (r.justLocked) {
+        app.log.warn({ consentId: req.params.id }, 'parent PIN locked out');
+      }
+      return reply.code(r.ok ? 200 : 401).send({
+        ok: r.ok,
+        locked: r.locked,
+        ...(r.justLocked ? { note: 'Five wrong attempts — locked for 60 seconds. If this wasn\'t you, it may have been a curious child.' } : {}),
+      });
+    });
+
+  // ---- sessions -----------------------------------------------------------
+
+  app.post<{ Body: { consentToken: string; mode?: Mode } }>('/v1/session', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['consentToken'],
+        additionalProperties: false,
+        properties: {
+          consentToken: { type: 'string', format: 'uuid' },
+          mode: { type: 'string', enum: [...MODES] },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    // THE GATE. Band, board and country come from the sealed record, never from
+    // the request — so a client cannot assert a band it was not granted, and a
+    // tampered ledger row fails the seal check rather than opening a session.
+    //
+    // Two independent refusals guard a revoked consent: the token is nulled on
+    // revocation (so the lookup misses), AND assertActiveConsent rejects the
+    // status. Either alone is sufficient. That redundancy means an API-level
+    // test cannot tell which one fired, so the status path is covered directly
+    // by the unit tests in @chittu/consent rather than only from out here.
+    const entry = [...consents.values()]
+      .find((c) => c.token !== null && c.token === req.body.consentToken);
+    let active;
+    try {
+      active = assertActiveConsent(entry?.record);
+    } catch (e) {
+      const err = e as ConsentError;
+      return reply.code(403).send({ error: err.message, code: err.code });
+    }
+    const c = active.record;
+
     const id = randomUUID();
     const ports: PipelinePorts = {
       classify: (text, history) => router.classify(text, history),
@@ -111,18 +285,22 @@ export function buildServer(opts: BuildOptions = {}): FastifyInstance {
     };
     sessions.set(id, {
       id,
+      consentId: c.id,
       startedAt: new Date().toISOString(),
       ended: false,
       ports,
       state: {
-        kid: b.kid, band: b.band, country: b.country,
-        board: b.board ?? 'General', mode: b.mode ?? 'chat',
-        crisisLock: false, memOn: true, memories: [], mathPractice: null,
+        kid: c.childFirstName, band: c.band, country: c.country,
+        board: c.board, mode: req.body.mode ?? 'chat',
+        crisisLock: false,
+        // memory is a SCOPE, not a preference the client sends
+        memOn: active.scopes.includes('memory'),
+        memories: [], mathPractice: null,
         history: [], spineCount: 0, flags: [], topics: [], assists: [],
         lastSubject: null,
       },
     });
-    return reply.code(201).send({ sessionId: id });
+    return reply.code(201).send({ sessionId: id, band: c.band, country: c.country });
   });
 
   // -------------------------------------------------------------------------

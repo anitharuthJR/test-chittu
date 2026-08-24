@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@chittu/consent": "workspace:*",
     "@chittu/contracts": "workspace:*",
     "@chittu/pipeline": "workspace:*",
     "@chittu/safety-kernel": "workspace:*",
@@ -17,5 +18,7 @@
     "@fastify/rate-limit": "^10.2.0",
     "fastify": "^5.2.0"
   },
-  "devDependencies": { "tsx": "^4.19.0" }
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
 }
