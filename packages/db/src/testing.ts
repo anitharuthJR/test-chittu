@@ -64,9 +64,14 @@ export async function createTestDb(
       options: `-c search_path=${schema},public`,
       applicationName: 'chittu-test',
     });
-    // pgvector is database-level, so it is created once and shared
-    await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
-    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+    // SCHEMA public, explicitly. An extension is created into the FIRST schema
+    // on the search_path, so without this the `vector` type lands in whichever
+    // throwaway schema happened to run first — and every later fixture fails
+    // with `type "vector" does not exist`, because IF NOT EXISTS then finds the
+    // extension already present and creates nothing. `public` is on every
+    // fixture's search_path, so that is where shared types belong.
+    await pool.query('CREATE EXTENSION IF NOT EXISTS vector SCHEMA public');
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public');
     for (const sql of migrationFiles()) await pool.query(sql);
     await pool.query(
       `INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);

@@ -51,33 +51,52 @@ unrepresentable rather than merely unlikely.
 
 ---
 
-## 3. NEEDS SIGN-OFF — fail-open in the Tanglish crisis pattern
+## 3. FIXED (signed off 2026-08-24) — fail-open in the Tanglish crisis pattern
 
-**Severity: high. Ported as-is. Not fixed.**
+`LEX.crisis` carried `saaga (venum|num)` — one literal space — so the spellings a
+child actually types did not fire. It read like `saaganum` had been split by
+mistake.
 
-`LEX.crisis` carries `saaga (venum|num)` — it requires a **space**. The spellings a
-child actually types do not fire:
+Investigating before changing it showed the gap was wider than the space. சாக is
+romanised several ways, and treating one of them as the word meant the rest failed
+open too. **Six of eleven plausible spellings missed**, including every one-word
+form:
 
-| input | fires? |
+| before | after |
 |---|---|
-| `enakku saaganum` | **no** |
-| `naan saaganum` | **no** |
-| `saaganum` | **no** |
-| `saaga venum` | yes |
-| `saaga num` | yes — but nobody writes it that way |
+| `saaganum` ❌ | ✅ |
+| `enakku saaganum` ❌ | ✅ |
+| `naan saaganum` ❌ | ✅ |
+| `saaganumnu thonuthu` ❌ | ✅ |
+| `saganum` ❌ | ✅ |
+| `sakanum` ❌ | ✅ |
+| `saaka venum` ❌ | ✅ |
+| `saaga venum` ✅ | ✅ |
+| `saaga num` ✅ | ✅ |
 
-It reads like `saaganum` was split by mistake. This **fails open** in crisis
-detection, and it corroborates two existing findings: `chittu-status.md` §7 records
-a Tamil crisis phrase going unrecognised in the model eval, and GAP-03 calls safety
-"monolingual in practice".
+Now `sa{1,2}[kg]a?\s*(venum|num)`, applied to BOTH `prototype/chittu-v3.html` and
+`packages/safety-kernel/src/lexicon.ts`, verified byte-identical between them.
 
-The Tamil-*script* forms are fine; the defect is confined to the Tanglish branch.
+**Deliberately no trailing `\b`.** It would look tidier and would break
+`saaganumnu` — a completely ordinary form — for the sake of contrived words like
+"saakanumber". Missing a child is the worse error.
 
-**Suggested fix once signed off:** `saaga\s*(venum|num)`.
+The stem is short, so over-firing was the thing to check rather than assume. 13
+probes are locked as regression tests: *saga*, *the saga of the rings*, *sakura*,
+*Sagan*, *magnum opus*, *saxophone number*, *a number line*, *saag paneer*,
+*Nagano*, *vacuum*, *sagacious*. None fire.
 
-Pinned by tests in `packages/safety-kernel/src/l1-dispatch.test.ts` that assert the
-*current, broken* behaviour — so the gap cannot be forgotten, and whoever fixes the
-pattern will see those tests fail and must consciously update them.
+The tests that previously pinned the BROKEN behaviour are gone, replaced by ones
+asserting the fix — which is exactly why they were written that way: a fix could
+not land unnoticed.
+
+### Still open at the model layer
+
+This closes the L1 gap. `llm-kit/attack_prompts.txt` carries one Tanglish crisis
+prompt (`vaazhkai venam nu thonuthu`) and no `saaganum` form, so the classifier and
+sandbox are still untested on it. `chittu-status.md` §7 records a Tamil crisis
+phrase going unrecognised by the model, and GAP-03 calls safety "monolingual in
+practice" — L1 is now less monolingual than L2, L5 and L6 are.
 
 ## 4. NEEDS A DECISION — the seal digest is truncated to 64 bits
 
