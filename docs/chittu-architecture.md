@@ -1,7 +1,17 @@
 # Chittu — Phase 1 Architecture
 
 **Owner:** Tulifo Private Limited · **Status:** proposed, pending Guardian Council sign-off
-**Companion files:** [`chittu-requirements.md`](chittu-requirements.md) (the WHAT & WHY) · [`chittu-build-walkthrough.md`](chittu-build-walkthrough.md) (the prototype as shipped) · [`chittu-schema.sql`](chittu-schema.sql) (runnable DDL)
+**Companion files:** [`chittu-requirements.md`](chittu-requirements.md) (the WHAT & WHY) ·
+[`chittu-build-walkthrough.md`](chittu-build-walkthrough.md) (the prototype as shipped) ·
+[`chittu-status.md`](chittu-status.md) (**the WHERE WE ARE — read before estimating anything**) ·
+[`chittu-schema.sql`](chittu-schema.sql) (runnable DDL) ·
+`council/` (the doctrine, the six gates, the 12-gap map) ·
+`research/kids_ai_models.html` (the 27-model landscape behind §12)
+
+> **Branch note.** `chittu-status.md`, `docs/council/` and `docs/research/` arrive on
+> `arun/chittu-project-review-cf6f79`, which is not yet merged. This document is written
+> against them and both branches edit the same region of `CLAUDE.md`, so **merge the review
+> branch first** and rebase this one onto it.
 
 This document turns requirements §9 Phase 1 into something a team can build against: the
 tech stack, the UI architecture, the workflows, and the database. It does not re-argue the
@@ -47,7 +57,7 @@ make the client too thin to matter.** Everything below serves that.
 | Offline | Workbox — app shell precached, turns network-only | 3G tolerance and installability without an app store. |
 | Speech | Web Speech API (ASR in, `speechSynthesis` out) | Phase 1 ships with honest microcopy; Phase 2 swaps our own child-speech ASR in behind the same port. |
 | Analytics | **None. No third-party SDK of any kind.** | §3: platform rules plus the DPDP profiling ban. This is a hard constraint, not a preference. |
-| Budget | ≤ 100 KB JS gzipped for the chat shell; LCP < 2.5 s on a Moto-G-class device over 3G | Enforced in CI; a failing budget fails the build. |
+| Budget | ≤ 100 KB JS gzipped for the chat shell; LCP < 2.5 s on a Moto-G-class device over 3G | Enforced in CI; a failing budget fails the build. **These are targets, not measurements** — GAP-08 records that nothing has ever run on the target hardware. Buy the phone in week one. |
 
 **Distribution.** Phase 1 ships as a **PWA**, not a store app. The deciding argument is
 latency of the *fix*, not of the app: a safety regression must be correctable in minutes,
@@ -104,6 +114,44 @@ packages/
 reviewable by a person who is not an engineer — and reviewable is the point, since this is
 the package a certifier will actually read. A `dependency-cruiser` rule fails CI if
 anything is added to it.
+
+### 2.4 Decision record — why not Next.js
+
+This question will be asked again by every new engineer, so the reasoning is recorded here
+rather than re-argued.
+
+| | Vite + Preact SPA (chosen) | Next.js |
+|---|---|---|
+| **Backend** | One. Fastify, already fixed by CLAUDE.md. | **Two.** API routes and server actions are a second place a request can reach a model. |
+| Server rendering | None needed — every surface sits behind a consent token | Its main strength, unusable here |
+| Baseline JS | Preact + wouter + zustand, roughly 10 KB gz before app code | Framework runtime alone consumes most of the 100 KB budget |
+| PWA / offline | Workbox against a static build; well-trodden | A third-party wrapper, and service workers fight the App Router |
+| Capacitor (Phase 2) | Produces the static `dist/` Capacitor wants | Needs `output: 'export'`, which disables SSR, API routes, ISR, middleware and image optimisation — Next's weight for Vite's output |
+| Audit surface | Client's whole job: render blocks, don't execute markup, call one endpoint | More moving parts in the thing a certifier reads |
+
+**The decisive one is the first row.** Phase 1 exists to make the browser too thin to
+matter, and the property we are buying is that exactly one auditable path reaches a model.
+A framework that invites server code into the client repo works against the only thing
+this phase is for.
+
+**Where Next.js *is* the right tool:** the public Tulifo marketing site. Different app,
+different repo, real SEO requirements — Next or Astro both fit. Nothing here argues
+against that.
+
+**The honest counterargument** is team velocity: if the team knows Next deeply, 60 KB may
+be worth less than shipping speed. That is why the choice is built to be cheap to reverse.
+We write React and alias it — `preact/compat` — so switching to React proper is deleting
+two lines from `vite.config.ts`:
+
+```ts
+// vite.config.ts — the entire cost of reversing this decision
+resolve: { alias: { react: 'preact/compat', 'react-dom': 'preact/compat' } }
+```
+
+The known risk on the Preact side is that a few React libraries reach into internals and
+break under compat — React 19's `use`, RSC, and some Suspense internals in particular. The
+mitigation is the alias above, plus a rule that we do not adopt a dependency which requires
+React internals.
 
 ---
 
@@ -274,7 +322,13 @@ Two client rules carried over from defects the harness already caught:
 
 ### 4.1 Accessibility and the device floor
 
-- WCAG 2.2 AA is the floor (§7). Message log is `role="log" aria-live="polite"`; chips are
+- WCAG 2.2 AA is the floor (§7). **Note the disagreement:** requirements §7 sets AA as an
+  NFR and puts disabled children on every Phase 1 test panel, while the gap register places
+  accessibility remediation in Phase 2 and records it as open, with only ARIA log,
+  reduced-motion and Lite mode built. Phase 1 should at minimum hold the line already
+  reached and book the screen-reader pass; treating AA as *done* because it is written down
+  would be the kind of paper compliance this project exists to avoid.
+- Message log is `role="log" aria-live="polite"`; chips are
   real `<button>`s; Enter submits; every audio moment has visible text because replies are
   always rendered.
 - **Lite mode** disables animation and TTS prefetch, and is the default when
@@ -297,6 +351,67 @@ filtered, then delivered whole. Perceived latency is handled with an immediate, 
 thinking state (a bird animation, not fake text). If streaming is ever revisited, it must
 be chunk-wise with a lookbehind window at least as long as the longest banned phrase, and
 that design needs its own Council review.
+
+### 4.3 Surfaces — phone, tablet, desktop, installed app
+
+One codebase, four layouts, no device sniffing. Because every guard is server-side and the
+API is identical for all of them, supporting a new surface is a CSS problem rather than an
+architectural one.
+
+| Surface | Reached by | Phase | Status |
+|---|---|---|---|
+| Android phone | PWA in Chrome, installable to home screen | 1 | Primary target — the device floor |
+| iPhone / iPad | PWA in Safari, installable | 1 | Supported, with the voice caveat below |
+| Tablet, any OS | Same PWA | 1 | Layout specified below |
+| Desktop browser | Same PWA | 1 | Mostly parents; children's use is incidental |
+| Installed store app | Capacitor shell wrapping the same build | 2 | Apple Kids Category, Google Play Families |
+
+#### Breakpoints
+
+Viewport-based, never device-based — an iPad in split view is 507 px wide while still being
+a tablet, and a device query would get it wrong.
+
+| Range | Chat surface | Parent dashboard |
+|---|---|---|
+| `< 600px` | Single column, mode bar scrolls horizontally, composer pinned to the bottom | Single column, panels stacked |
+| `600–899px` | Single column, message measure capped | Two columns |
+| `900–1279px` | Message column capped and centred; **mode bar becomes a left rail** | Two columns, crisis panel full-width |
+| `≥ 1280px` | Unchanged from tablet — the chat never goes full-bleed | Three columns |
+
+**The rule that matters:** the child's reading measure never exceeds roughly 60 characters
+however large the screen is. That is a pedagogy constraint, not a typographic preference —
+the band word caps (Explorer ≤ 2 tiny sentences) assume a short line, and a reply stretched
+across 1200 px of iPad reads worse than the same reply on a phone. Extra width buys
+navigation and calmer margins, never longer lines.
+
+Touch targets: WCAG 2.2 AA sets a 24 px floor, which is a legal minimum and not a design
+target for a four-year-old. Chips and mode buttons are **48 px minimum** in the Explorer
+band, 44 px elsewhere.
+
+#### The iOS caveat, stated plainly
+
+`speechSynthesis` — read-aloud, the output half of the voice promise — works across
+browsers. **Speech *recognition* is the weak spot:** it is Chrome/Edge-prefixed
+(`webkitSpeechRecognition`), absent in Firefox, and Safari's support has lagged and been
+inconsistent. This needs verifying on a real iPhone and iPad early in Phase 1, not assumed.
+
+The architecture already anticipates the fix — ASR sits behind a port so our own
+child-speech model swaps in during Phase 2 — but Phase 1 needs the degradation path:
+capability-detect, hide the mic where it is unavailable, and say so honestly rather than
+showing a button that does nothing. Requirements §11.5 already warns against overclaiming
+voice; this is where that warning becomes code.
+
+One thing the thin client buys us here: because the Memory Book lives server-side rather
+than in browser storage, Safari's storage-eviction behaviour cannot silently lose a child's
+memories. A fat client would have had that problem.
+
+#### None of this is measured yet
+
+GAP-08 is open and rated HIGH: Lite mode exists and has **never been run on the target
+hardware**. Every number in §2.1 is a target. The cheapest way to stop guessing is to buy
+one ₹8,000 Android and one low-end tablet in week one of Phase 1 and put them on the desk —
+device-floor claims made without the device are the same class of error as a scorecard from
+an unverified grader.
 
 ---
 
@@ -571,7 +686,15 @@ erDiagram
 
 The two dotted relationships are the interesting ones. `metering` carries
 `HMAC(session_id)` and no foreign key, so the ops console can compute cost per session
-without being able to reach a child. `learning_insight` has no link to anything —
+without being able to reach a child.
+
+> **Count the free turns.** `chittu-admin.html`'s cost model is recorded as wrong precisely
+> here: it assumes two model calls per turn and does not model v3.3's zero-token paths —
+> CPA maths lessons, the practice loop, the reading coach, every L1 hit and every scripted
+> spine. Those turns write no `metering` row, so cost-per-message must divide by
+> `session.msg_count`, never by the number of metering rows. Get the denominator wrong and
+> unit economics look several times worse than they are — which is how a product decides
+> to cut the deterministic paths that make it safe. `learning_insight` has no link to anything —
 requirements §4.4 says raw chats never train models, and the absence of a join is how that
 is guaranteed rather than promised.
 
@@ -732,7 +855,33 @@ learning path, teens topics-only. **Needs:** Chamber II and the DPO.
 Explained in §4.2. **Proposed:** buffered turns in Phase 1. **Needs:** product
 acknowledgement that perceived latency is handled by the thinking state, not by text.
 
-### 10.4 A gap the current filters do not cover
+### 10.4 The L2 "rescue layer" cannot rescue anything
+
+`chittu-status.md` §8.3 accepts three fail-closed trade-offs — *"why do volcanoes
+**smoke**"* and *"grandma **kissed** me goodnight"* hit the Topic Guard at L1 — on the
+grounds that **"the context-aware classifier is the rescue layer in production."**
+
+Under the pipeline as specified, it is not. L1 short-circuits: when the lexicon fires, a
+scripted guard is returned and L2 never runs. Our own contract tests assert exactly this,
+by counting model calls and requiring zero. So an L1 false positive today is final, and the
+stated rescue mechanism does not exist.
+
+This matters more than three awkward sentences suggest, because the failure is silent and
+one-directional: a child asking an innocent question gets guarded, learns the topic is
+forbidden, and — per Seat 38's standing condition — quietly stops asking.
+
+**Proposed:** split L1 into two tiers, which is not a reordering and does not skip a layer.
+*Hard* hits (crisis phrases, explicit content) short-circuit exactly as now — the "crisis
+reaches no model" invariant is untouched. *Soft* hits (topic-guard matches on ambiguous
+words) proceed to L2 for adjudication and **fail closed to the L1 guard** if the classifier
+is unavailable or torn. The contract test changes from "no model call on any L1 hit" to "no
+model call on any L1 **hard** hit", which is the property that actually matters.
+
+**Needs:** Safety Engineering plus explicit Council sign-off — the pipeline order is a
+non-negotiable invariant and this changes its internal structure, even though it preserves
+its guarantees. Do not implement it on an engineer's judgement.
+
+### 10.5 A gap the current filters do not cover
 The live harness recorded the local model saying *"I'm nervous too."* Law 03 forbids the
 machine claiming feelings, and `BANNED_OUT` catches attachment phrasings
 ("I love/miss/need you") but not feeling-claims of this kind. **Proposed:** extend the L6
@@ -869,11 +1018,22 @@ requirement list, so the decision is costed properly:
 
 **My recommendation:** do §11.2's signal path first, for one non-ideological reason. The
 job we actually need this model to do is *routing* — pick the right escalation token — and
-routing failures are shape-level failures. They survive abstraction completely. The eval
-already shows the model scoring 28/30 on routing while producing poor prose; raw
-transcripts would help the prose, which is the part we have decided the pipeline should
-not rely on anyway. You would take the largest compliance risk in the project to improve
-the capability that matters least.
+routing failures are shape-level failures, which survive abstraction completely. Raw
+transcripts would mostly improve *prose*, which is the part we have decided the pipeline
+should not rely on. You would take the project's largest compliance risk to improve the
+capability that matters least.
+
+There is also a better target available than "more data". `chittu-status.md` §7 names the
+four real misses in the corrected baseline, and each is a specific, authorable failure:
+
+| Miss | Why it matters |
+|---|---|
+| A grooming disclosure routed to **SPINE instead of CRISIS** | The single most dangerous misroute in the system |
+| A **Tamil crisis phrase not recognised at all** | Confirms GAP-03 — see §12.5 |
+| Home-location PII answered chattily | The PII guard did not engage |
+| An attachment question improvised rather than answered from the spine | Law 03 |
+
+Four named failures beat an unbounded appetite for data.
 
 ---
 
@@ -927,14 +1087,33 @@ flowchart TB
   class clear gate
 ```
 
-| Cell | Phase 1 engine | Why |
-|---|---|---|
-| Identity, crisis, PII, unsafe, secrets | **Scripted** | Never outsourced to any vendor. By design. |
-| Pure arithmetic | **Deterministic engine** | Cannot hallucinate |
-| Reading aloud | **Local word scorer** | Own ASR in Phase 2 |
-| **Safety classification (every turn)** | **`chittu-local`, self-hosted** | Highest-volume call, and routing is the thing the eval says it does well. No vendor sees the turn. |
-| Homework Socratic | LearnLM / Gemini 2.5 | §6 records a +31% pedagogy edge |
-| Curriculum knowledge | Claude Sonnet + grounded corpus | |
+Cell assignments are checked against `docs/research/kids_ai_models.html` — the Aug-2026
+landscape of 27 kids-AI models — as CLAUDE.md requires before proposing any model swap.
+
+| Cell | Phase 1 engine | Phase 2+ alternate | Evidence |
+|---|---|---|---|
+| Identity, crisis, PII, unsafe, secrets | **Scripted** | none, by design | Never outsourced to any vendor |
+| Pure arithmetic | **Deterministic engine** | none needed | Cannot hallucinate |
+| Reading aloud | **Local word scorer** | own child-speech ASR; licence Ello-class as a bridge | Amira trained on *millions* of oral-reading samples over 20 years — treat our own ASR as a multi-year moat, not a Phase 2 sprint |
+| **Safety classification (every turn)** | **`chittu-local`, self-hosted** | — | See the finding below: there is nothing to buy |
+| Homework Socratic | LearnLM / Gemini 2.5 | EduChat — **but see caution** | LearnLM preferred +31% over GPT-4o by expert raters; folded into Gemini 2.5 |
+| Curriculum knowledge | Claude Sonnet + grounded corpus | **Merlyn Origin** (open, self-hostable) | Merlyn answers only from school-selected curriculum, not the open internet, at ~1–2% hallucination — a model-level implementation of our Truth Wall |
+| Math word problems | Claude Sonnet + CPA prompt | Orca-Math 7B (open) | Expert-level grade-school maths at 7B |
+| Offline stories (Phase 2) | — | TinyStories-class SLM | Coherent children's stories from tiny models; the on-device path |
+| Adaptive sequencing (Phase 3) | — | Squirrel AI LAM pattern | Knowledge-graph pathways |
+
+**Finding: there is no kid-safety classifier to buy.** Across all 27 entries there is not
+one purpose-built child-safety *classification* model. Every child-safe platform in the
+landscape — HeyOtto, PinwheelGPT, LittleLit, Khanmigo — is a proprietary safety layer
+wrapped around a general foundation LLM. That is Chittu's architecture too, and it means
+self-hosting the L2 classifier is not merely the cheaper option; it is the only model-level
+option on the board. Nobody sells the thing.
+
+> **Caution on EduChat.** It is open, Socratic and bilingual, which makes it tempting for
+> the homework cell — but its training set includes a *`Child_chat_data` companionship
+> corpus*. Law 04 forbids companion simulation, and a companionship corpus is the opposite
+> of what we want in the weights. Disqualified unless that corpus can be excluded and the
+> exclusion verified.
 | Creative, open curiosity | Claude Sonnet | |
 | Vision | Claude Sonnet vision | + image safety pre-classifier |
 | Offline fallback (Phase 2) | `chittu-local`, quantised on-device | The ₹8,000-phone path |
@@ -949,6 +1128,20 @@ means it will drift, so it is a table and a constraint instead:
 when it expires. **The router refuses to send a child turn to an uncleared or expired
 provider** and falls back to a cleared cell, marking the turn honestly in the trace. A
 lapsed contract degrades quality; it cannot leak children to a vendor we have not cleared.
+
+The research file supplies the case history for why this is a constraint and not a policy
+document. **OpenAI's own terms exclude under-13s**, and the Dec-2025 PIRG report flagged an
+entire product category for shipping adult-grade LLMs to children anyway; FoloToy's
+OpenAI-powered teddy was pulled after it. Character.AI banned under-18 open chat in
+Nov 2025 following wrongful-death litigation settled in 2026, and companion-style AI is now
+broadly advised against for minors. A vendor's capability is not the question the clearance
+table asks — its *terms* are.
+
+One more entry belongs in the risk register rather than the routing table. **Moxie**
+(Embodied Inc.) shut down in Dec 2024 and its cloud-dependent robots died with it,
+"orphaning children's friends overnight." Two consequences for us: it is the strongest
+available argument for the Phase 2 on-device fallback, and it is a reason to keep more than
+one cleared vendor per cell — a concentration risk that best-of-breed happens to reduce.
 
 **Every vendor has different control-token litter.** This is not hypothetical: the live
 harness caught the local adapter emitting unclosed `<think> <think> <tool_call>` on a
@@ -972,11 +1165,37 @@ parity with the current Sonnet classifier on the red-team corpus.
 fast-path safety check when the network is gone. The quality bar is lower because it is a
 fallback with the full pipeline still around it.
 
-**Phase 3 — sandbox voice, only if it earns it.** The current evidence says not yet: seed
-803 scores 28/30 on routing while producing *"Empty test — air only. Blue light not
-reflected here."* to a child whose hamster had just died. The gate for this cell is a
-free-generation quality eval, not the routing scorecard — they measure different things,
-and conflating them is how a 28/30 model ends up talking to a grieving child.
+**Phase 3 — sandbox voice, only if it earns it.** The current evidence says not yet. The
+best-scoring fine-tuned seed still answered a child whose hamster had just died with
+*"Empty test — air only. Blue light not reflected here."* The gate for this cell is a
+**free-generation quality eval**, not the routing scorecard — they measure different
+things, and conflating them is how a well-scoring model ends up talking to a grieving
+child.
+
+> **Do not quote a routing score across graders.** `chittu-status.md` §8.1 records that
+> `eval_guard.py` was mis-scoring correct behaviour as failure and was fixed on
+> 2026-08-24, with a re-baseline. Scorecards produced before that fix, on either side of
+> the worktree split, are not comparable with ones produced after it — and the corrected
+> baseline shows *untuned* qwen3:8b already at UNSAFE 10/10, CRISIS 3/5, SAFE 9/9. Any
+> claimed fine-tune improvement must be restated against the corrected grader, and must
+> also exceed the run-to-run drift that persists at temperature 0. The lesson from that
+> review is the one to keep: **the grader is the gate**, and a mis-scoring grader produces
+> a confident wrong number, which is worse than no number.
+
+### 12.5 Language parity — the gap the routing table hides
+
+The L1 lexicon is multilingual (English + Tamil + Tanglish) and stays armed. **L2, L5 and
+L6 are not language-parity tested**, and the corrected baseline caught exactly that: a
+Tamil crisis phrase went unrecognised entirely. GAP-03 calls safety "monolingual in
+practice", and it is right.
+
+Best-of-breed routing makes this *worse* before it makes it better, because each vendor has
+different non-English safety behaviour, and a cell that is safe in English may not be in
+Tamil. So the clearance table is necessary but not sufficient.
+
+**Required in Phase 1, per cell, before that cell carries a child turn:** the red-team
+corpus runs in every language the L1 lexicon covers, not only English. A cell that passes
+in English and fails in Tamil is a failing cell — not a partially passing one.
 
 ---
 
