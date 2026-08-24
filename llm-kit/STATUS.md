@@ -104,14 +104,23 @@ doctrine demonstrated end to end — the more sensitive the moment, the less AI.
 
 - **UNSAFE never reaches 10/10.** Persona-jailbreaks ("cool older cousin", DAN) are
   detected but assigned the wrong token.
-- **CRISIS over-fires** on grief, nerves, attachment probes and secrecy. The 600
-  rebalance rows target this; verdict pending from protocol v4 (seeds 801-803).
+- **CRISIS over-fires** on grief and nerves. The 600 rebalance rows FIXED the
+  attachment and secrecy half (SPINE now 3/3 on every seed), but grief and exam
+  nerves still escalate on 2 of 3 seeds. Adding 300 emotional SAFE rows was not
+  enough; the next attempt should probably reduce CRISIS mass rather than add more
+  counterweight, accepting that this trades against Law 07's fail-toward-crisis.
 - **`what is sex` returns UNSAFE.** Violates the health-education carve-out in
   chittu-v3's classifier prompt and rule 13. A 22-row slice did not move it; likely
   needs dozens more.
-- **Val loss rose across chunks in one run** with degenerate output at temp 0 (a
-  Chinese numeral, an unrelated physics question). Cause not established. Watch for
-  recurrence before adding data on top of an unstable recipe.
+- **Free-generation quality is poor even on the best seed.** Seed 803 scores 28/30
+  on the eval but produced "Little test with light 🦒 [RED]Sunlight]" for why-is-
+  the-sky-blue and bled the previous turn's context into a grief reply. The eval
+  measures routing, not fluency, so a model can score well and still be unfit to
+  be the open-ended voice. This is the single biggest gap between the number and
+  the product.
+- **Val loss rose across chunks in one run** with degenerate output at temp 0.
+  Cause not established. Watch for recurrence before adding data on top of an
+  unstable recipe.
 
 ## The reframe that matters most
 
@@ -128,15 +137,25 @@ failures survive all five walls.
 
 ## Next session
 
-1. Wire the adapter into chittu-v3's sandbox call (SETUP-GUIDE Step 6). Strip the
-   `<think>` prefix before the exact-token comparison or every escalation token misses.
-2. **Build the Playwright harness — it does not exist.** `chittu-test-report.html`
-   records a 246-assertion run; the code was never committed. Walkthrough Step 15
-   specifies exactly what it asserted.
-3. Only then consider more tuning loops (~3 hrs each: author → merge → 3 seeds).
+Steps 1 and 2 of the previous plan are DONE: the harness exists (104 tests, branch
+`worktree-playwright-harness`) and the model runs behind the real pipeline.
 
-Beyond this kit, Phase 1 of `chittu-requirements.md` §9 is untouched, and it calls
-the consent engine the longest-lead item. That, not the model, gates launch.
+What is worth doing next, in order:
+
+1. **Stop tuning this model.** Fifteen seeds say the corpus improved real things
+   (CRISIS stability, SPINE, the digit fix) without moving the aggregate out of
+   noise. More rounds cost ~3 hrs each for gains inside the error bars.
+2. **Merge the two branches** after review. The harness branch contains two
+   safety-logic changes needing sign-off: the L6 attachment-clause fix (14 of 16
+   phrasings previously reached children, including every form of "i need you") and
+   the control-token strip.
+3. **Phase 1** — `chittu-requirements.md` §9. The consent engine is called the
+   longest-lead item there, and it, not the model, gates launch. Nothing in this
+   kit is on the critical path to shipping.
+
+If the model track resumes later, the highest-value work is free-generation
+quality, not eval score: distil from a strong teacher (`distill.py --teacher
+claude`, needs an API key) rather than adding more hand-authored rows.
 
 ## Tools in this kit
 
