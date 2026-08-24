@@ -107,6 +107,74 @@ export interface RevokeResponse {
 }
 
 /**
+ * A flag as a parent sees it: a category and wording written by us, plus — for
+ * ASSIST only — a bare school topic. There is deliberately no field here that
+ * could hold what a child typed, which mirrors the table having no column for
+ * it.
+ */
+export interface ParentFlag {
+  readonly kind: 'SAFETY' | 'ASSIST' | 'GATE';
+  readonly category: string;
+  readonly body: string;
+  readonly at: string;
+  readonly topic: string | null;
+}
+
+export interface SessionSummary {
+  readonly id: string;
+  readonly band: Band;
+  readonly startedAt: string;
+  readonly endedAt: string | null;
+  readonly msgCount: number;
+  readonly crisisLock: boolean;
+}
+
+export interface DashboardResponse {
+  readonly child: {
+    readonly firstName: string; readonly band: Band;
+    readonly country: Country; readonly board: string;
+  };
+  readonly consent: {
+    readonly law: string; readonly method: string; readonly status: string;
+    readonly issuedAt: string | null; readonly expiresAt: string | null;
+    readonly scopes: { readonly memory: boolean; readonly learning: boolean };
+  };
+  readonly stats: {
+    readonly sessions: number; readonly messages: number;
+    readonly spines: number; readonly memories: number;
+    readonly crisisLocked: boolean;
+    readonly firstSeen: string | null; readonly lastSeen: string | null;
+  };
+  readonly sessions: readonly SessionSummary[];
+  readonly memories: readonly Memory[];
+  readonly flags: {
+    readonly safety: readonly ParentFlag[];
+    readonly assist: readonly ParentFlag[];
+    readonly gate: readonly ParentFlag[];
+  };
+  readonly helplines: {
+    readonly name: string; readonly law: string; readonly consent: string;
+    readonly lines: readonly { readonly name: string; readonly contact: string }[];
+  };
+  readonly learning: {
+    readonly optedIn: boolean;
+    /** Always false. The loop has no link back to a child, by design. */
+    readonly perChildQueueExists: boolean;
+  };
+}
+
+export interface TranscriptResponse {
+  readonly band: Band;
+  /** False for a teen — and the UI must say so rather than showing a blank. */
+  readonly bodiesIncluded: boolean;
+  readonly note: string | null;
+  readonly turns: readonly {
+    readonly seq: number; readonly role: string;
+    readonly topic: string | null; readonly body: string | null;
+  }[];
+}
+
+/**
  * A failed call, with the server's own message where it is safe to show.
  *
  * The API replaces every 5xx body with `{"error":"something went wrong"}` so a
@@ -204,6 +272,18 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
     verifyPin: (pin: string) => go<PinResponse>('/v1/parent/pin/verify', json({ pin })),
 
     signOutParent: () => go<{ ok: boolean }>('/v1/parent/signout', { method: 'POST' }),
+
+    /** Requires a live parent session. 403 `PARENT_REQUIRED` without one. */
+    dashboard: () => go<DashboardResponse>('/v1/parent/dashboard'),
+
+    /** Band-aware: a teen's turns come back with `body: null` and a note. */
+    transcript: (sessionId: string) =>
+      go<TranscriptResponse>(`/v1/parent/sessions/${sessionId}/transcript`),
+
+    /** No cookie needed — a child in trouble must not wait for an adult. */
+    helplines: (country: Country) =>
+      go<{ country: Country; name: string; lines: readonly { name: string; contact: string }[] }>(
+        `/v1/helplines/${country}`),
 
     /** Requires a live parent session. 403 `PARENT_REQUIRED` without one. */
     revoke: () => go<RevokeResponse>('/v1/consent', { method: 'DELETE' }),

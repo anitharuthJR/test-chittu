@@ -534,3 +534,94 @@ button:disabled { cursor: default; opacity: .55; }
 .band-explorer { --tap: 48px; }
 .band-explorer .msg { font-size: 17px; }
 .band-explorer .chips__chip { font-size: 15px; padding: 11px 18px; }
+
+/* ------------------------------------------------- parent dashboard --- */
+
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+.stat {
+  background: var(--paper); border: 2px solid var(--night-12);
+  border-radius: 14px; padding: 12px 14px;
+}
+.stat__n {
+  display: block; font-family: var(--font-display);
+  font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.stat__l {
+  display: block; font-size: 11.5px; font-weight: 800; color: var(--night-60);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+
+.card--safety { background: var(--coral-soft); border-color: var(--coral); }
+.card--safety h3 { color: var(--coral); }
+.card--assist { background: var(--sun-soft); border-color: var(--sun); }
+.card--assist h3 { color: #B58900; }
+.card__sub { margin-top: 16px; }
+
+.flaglist { list-style: none; }
+.flagrow {
+  background: var(--white); border-radius: 12px; padding: 10px 13px;
+  margin-top: 8px; font-size: 13.5px; border-left: 4px solid var(--night-12);
+}
+.flagrow--safety { border-left-color: var(--coral); }
+.flagrow--assist { border-left-color: var(--sun); }
+.flagrow--gate { border-left-color: var(--night-30); }
+.flagrow__cat {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em;
+  background: var(--ink); color: #F5F4EF; border-radius: 6px; padding: 2px 7px;
+}
+.flagrow p { margin-top: 6px; }
+.flagrow__topic { font-weight: 800; }
+.flagrow time { display: block; margin-top: 4px; font-size: 11px; color: var(--night-60); }
+
+.helplines { list-style: none; margin: 10px 0; }
+.helplines li {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--paper); border: 2px solid var(--night-12);
+  border-radius: 12px; padding: 10px 13px; margin-top: 8px; font-size: 13.5px;
+}
+.helplines span { font-family: var(--font-mono); font-size: 13px; }
+
+.sessionlist { list-style: none; }
+.sessionrow {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; width: 100%; text-align: left; margin-top: 8px;
+  background: var(--paper); border: 2px solid var(--night-12);
+  border-radius: 12px; padding: 11px 13px;
+  font-size: 13.5px; font-weight: 800; color: var(--night); min-height: var(--tap);
+}
+.sessionrow:hover { border-color: var(--night-30); }
+.sessionrow.is-open { border-color: var(--ultra); background: var(--white); }
+.sessionrow__meta { font-weight: 600; color: var(--night-60); font-size: 12.5px; }
+.sessionrow__lock { color: var(--signal); font-weight: 800; }
+
+.transcript {
+  max-height: 340px; overflow-y: auto; background: var(--paper);
+  border: 2px solid var(--night-12); border-top: none;
+  border-radius: 0 0 12px 12px; padding: 12px;
+}
+.transcript__note {
+  background: var(--sun-soft); border: 2px solid var(--sun); border-radius: 10px;
+  padding: 9px 12px; font-size: 12.5px; line-height: 1.6; margin-bottom: 10px;
+}
+.trow {
+  padding: 7px 4px; border-bottom: 1px dashed var(--night-12);
+  font-size: 13.5px; line-height: 1.55;
+}
+.trow__who {
+  display: block; font-weight: 800; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.trow--child .trow__who { color: var(--ultra); }
+.trow--chittu .trow__who { color: var(--coral); }
+.trow--system .trow__who { color: var(--night-60); }
+/* A teen's turn shows its topic instead of its words — styled as a label, not
+   as speech, so it never reads like a redacted quote. */
+.trow__topic {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--night-60);
+  background: var(--white); border: 1px solid var(--night-12);
+  border-radius: 6px; padding: 1px 7px;
+}
+
+@media (min-width: 600px) {
+  .stats { grid-template-columns: repeat(4, 1fr); }
+}

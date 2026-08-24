@@ -204,6 +204,58 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
         [childId, sessionId, kind, noteKey, assistTopic ?? null]);
     },
 
+    /**
+     * Counts for the parent dashboard, in one round trip.
+     *
+     * Everything here is an aggregate. There is no path through this function
+     * that returns a child's words, which is why it can be computed without
+     * touching the DEK at all.
+     */
+    async stats(tx: Db, childId: string): Promise<{
+      sessions: number; messages: number; spines: number; crisisLocked: boolean;
+      firstSeen: string | null; lastSeen: string | null;
+    }> {
+      const r = await tx.query<{
+        sessions: string; messages: string; spines: string;
+        locked: boolean; first_seen: string | null; last_seen: string | null;
+      }>(
+        `SELECT count(*)::text                               AS sessions,
+                coalesce(sum(msg_count),0)::text             AS messages,
+                coalesce(sum(spine_count),0)::text           AS spines,
+                bool_or(crisis_lock)                         AS locked,
+                min(started_at)                              AS first_seen,
+                max(coalesce(ended_at, started_at))          AS last_seen
+           FROM session WHERE child_id = $1`, [childId]);
+      const x = r.rows[0];
+      return {
+        sessions: Number(x?.sessions ?? 0),
+        messages: Number(x?.messages ?? 0),
+        spines: Number(x?.spines ?? 0),
+        crisisLocked: x?.locked ?? false,
+        firstSeen: x?.first_seen ? new Date(x.first_seen).toISOString() : null,
+        lastSeen: x?.last_seen ? new Date(x.last_seen).toISOString() : null,
+      };
+    },
+
+    /** One row per conversation, for the list a parent picks from. */
+    async sessionList(tx: Db, childId: string): Promise<{
+      id: string; band: string; startedAt: string; endedAt: string | null;
+      msgCount: number; crisisLock: boolean;
+    }[]> {
+      const r = await tx.query<{
+        id: string; band: string; started_at: string; ended_at: string | null;
+        msg_count: number; crisis_lock: boolean;
+      }>(`SELECT id, band, started_at, ended_at, msg_count, crisis_lock
+            FROM session WHERE child_id = $1 ORDER BY started_at DESC LIMIT 100`,
+        [childId]);
+      return r.rows.map((x) => ({
+        id: x.id, band: x.band,
+        startedAt: new Date(x.started_at).toISOString(),
+        endedAt: x.ended_at ? new Date(x.ended_at).toISOString() : null,
+        msgCount: x.msg_count, crisisLock: x.crisis_lock,
+      }));
+    },
+
     async listFlags(tx: Db, childId: string): Promise<
       { kind: string; category: string; body: string; at: string; topic: string | null }[]
     > {

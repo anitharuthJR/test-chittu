@@ -28,6 +28,7 @@ import {
 import type { DbPool, KeyProvider } from '@chittu/db';
 import { type ProviderRouter, stubRouter } from './providers.js';
 import { createStore } from './store.js';
+import { REGISTRY } from '@chittu/safety-kernel';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
   setParentCookie, clearParentCookie, parentFor,
@@ -339,6 +340,140 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     clearParentCookie(reply, { env });
     return reply.send({ ok: true });
   });
+
+  // ---- the parent dashboard (W4) ------------------------------------------
+
+  /**
+   * Resolve a request to the family it is a signed-in parent for.
+   *
+   * Both cookies, and they must agree. A consent cookie alone is a CHILD — the
+   * browser the dashboard is being opened from is usually the child's — so
+   * every route below is gated on the parent session, not on being signed in.
+   */
+  async function parentContext(req: FastifyRequest) {
+    const stored = await consentFromCookie(req);
+    if (!stored) return null;
+    if (parentFor(req, await opts.keys.indexKey()) !== stored.consentId) return null;
+    return stored;
+  }
+
+  const PARENT_REQUIRED = { error: 'a parent PIN is required', code: 'PARENT_REQUIRED' };
+
+  app.get('/v1/parent/dashboard', async (req, reply) => {
+    const stored = await parentContext(req);
+    if (!stored) return reply.code(403).send(PARENT_REQUIRED);
+    const c = stored.record;
+
+    const data = await store.withChild(stored.childId, async (tx) => ({
+      stats: await store.child.stats(tx, stored.childId),
+      sessions: await store.child.sessionList(tx, stored.childId),
+      memories: await store.child.listMemories(tx, stored.childId),
+      flags: await store.child.listFlags(tx, stored.childId),
+    }));
+
+    return reply.send({
+      child: {
+        firstName: c.childFirstName, band: c.band,
+        country: c.country, board: c.board,
+      },
+      consent: {
+        law: c.law, method: c.method, status: c.status,
+        issuedAt: c.issuedAt, expiresAt: c.expiresAt,
+        scopes: {
+          memory: c.scopes.includes('memory'),
+          learning: c.scopes.includes('learning'),
+        },
+      },
+      stats: { ...data.stats, memories: data.memories.length },
+      sessions: data.sessions,
+      memories: data.memories,
+      // Split by kind so the client cannot accidentally render a GATE flag in
+      // the safety panel. Each carries a template-authored body and, for ASSIST,
+      // a constrained topic — there is no field here a child's words could be in.
+      flags: {
+        safety: data.flags.filter((f) => f.kind === 'SAFETY'),
+        assist: data.flags.filter((f) => f.kind === 'ASSIST'),
+        gate: data.flags.filter((f) => f.kind === 'GATE'),
+      },
+      helplines: REGISTRY[c.country],
+      /**
+       * There is deliberately no per-child learning queue, and this field says
+       * so rather than leaving an empty panel to be misread as "nothing yet".
+       *
+       * `learning_insight` has no foreign key to child, session or message —
+       * the loop cannot be traced back to a child because the link does not
+       * exist (schema §8). A parent can see whether the family opted in; there
+       * is nothing of their child's to show them, by design.
+       */
+      learning: {
+        optedIn: c.scopes.includes('learning'),
+        perChildQueueExists: false,
+      },
+    });
+  });
+
+  /**
+   * One conversation, band-aware.
+   *
+   * **The teen carve-out is applied HERE as well as by the database.** The
+   * schema's `teen_bodies_are_never_stored` CHECK means a thinker's `body_enc`
+   * is already NULL, so this re-check is redundant today — which is exactly why
+   * it is worth having. It costs nothing, and it means a future migration that
+   * relaxed the constraint would not silently turn every teen's transcript into
+   * a parent-readable log. Two independent controls for one promise.
+   */
+  app.get<{ Params: { id: string } }>(
+    '/v1/parent/sessions/:id/transcript', {
+      schema: {
+        params: {
+          type: 'object', required: ['id'], additionalProperties: false,
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    }, async (req, reply) => {
+      const stored = await parentContext(req);
+      if (!stored) return reply.code(403).send(PARENT_REQUIRED);
+
+      const owner = await opts.pool.query<{ child_id: string; band: string }>(
+        `SELECT child_id, band FROM session WHERE id = $1`, [req.params.id]);
+      const row = owner.rows[0];
+      // Same 404 for "no such session" and "not your session", so the response
+      // cannot be used to discover that another family's session id is real.
+      if (!row || row.child_id !== stored.childId) {
+        return reply.code(404).send({ error: 'no such session' });
+      }
+
+      const rows = await store.withChild(stored.childId, (tx) =>
+        store.child.transcript(tx, req.params.id, stored.childId));
+
+      const teen = row.band === 'thinker';
+      return reply.send({
+        band: row.band,
+        /** False for a teen: the parent is told what they are NOT getting. */
+        bodiesIncluded: !teen,
+        note: teen
+          ? 'Your teenager gets a topics-only view. We do not store what they typed, '
+            + 'so there is nothing here we are choosing to withhold — there is nothing to show.'
+          : null,
+        turns: rows.map((t) => ({
+          seq: t.seq, role: t.role, topic: t.topic,
+          body: teen ? null : t.body,
+        })),
+      });
+    });
+
+  /**
+   * Local crisis lines. Not behind the parent gate: a child in trouble should
+   * be able to reach a helpline without an adult unlocking anything first.
+   */
+  app.get<{ Params: { country: string } }>(
+    '/v1/helplines/:country', async (req, reply) => {
+      const country = req.params.country.toUpperCase() as Country;
+      if (!(COUNTRIES as readonly string[]).includes(country)) {
+        return reply.code(404).send({ error: 'no verified helplines for that country' });
+      }
+      return reply.send({ country, ...REGISTRY[country] });
+    });
 
   // ---- sessions -----------------------------------------------------------
 
