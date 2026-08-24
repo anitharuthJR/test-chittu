@@ -453,14 +453,57 @@ mid-sentence in body copy. This is an India-first product whose maths lessons
 talk about money, and a mismatched glyph at 15.5px in prose is far more visible
 than one in a 9.5px trace. One codepoint, 1.2 KB, its own `unicode-range`.
 
-### NOTED — a reload loses the conversation, but not the record
+### FIXED — a reload was an escape from the crisis lock
 
-`messages` lives in memory. On reload the client opens a **new** session and the
-previous exchange is gone from the screen. Nothing is lost from the database —
-the transcript and the seal chain are intact — but there is no
-`GET /v1/session/:id/messages`, so the client cannot restore what it is entitled
-to show. Two consequences worth stating: a child who reloads mid-conversation
-starts over, and the seal chain gains a session per reload.
+The reported symptom was cosmetic: a reload lost the conversation from the
+screen. The cause was not. `crisis_lock` lives on the session, and the client
+opened a **new** session on every page load — so a child who hit a crisis lock
+could press F5 and carry on. New session, `crisisLock: false`, next turn
+straight to a model.
+
+Doctrine says the only exit from a crisis lock is a parent's acknowledgement
+(§4.5). A page reload was an exit. Confirmed by probe before fixing:
+
+```
+after crisis turn, crisisLock = true
+new session id differs        = true
+new session crisisLock        = false
+reply after reload            = [{"kind":"text","text":"I'm still learning..."}]
+```
+
+`POST /v1/session` now RESUMES the child's live session. The policy:
+
+- a crisis-locked session is resumed **regardless of age**, so the lock can be
+  neither reloaded nor waited out;
+- a recent session is resumed, so a reload keeps the conversation and the
+  classifier's rolling window;
+- a stale one (>12h) is closed `ended_reason='timeout'` and a new one begins,
+  because "session-only conversation memory; forgetting is a feature" (§7).
+
+The response carries `resumed` and `crisisLock`, and the client re-applies the
+lock from the server rather than from a local signal it could not have set. It
+also stops the seal chain gaining a session per reload.
+
+`GET /v1/session/:id/messages` repaints the conversation. Only the text is
+restored, not the cards and chips: what is stored is the flattened reply, and
+blocks cannot be re-derived from it. That is a fair trade against losing the
+conversation, and nothing is invented that was not said.
+
+**A teen cannot be repainted at all** — their words were never written down.
+The route says so (`restorable: false`) and the client shows the sentence rather
+than an empty screen, which would read as "we lost your chat". That is the cost
+of the carve-out, stated out loud.
+
+### FIXED — chips were being stored as though Chittu had said them
+
+Found while looking at a repainted screen. The stored reply flattened chip
+labels into the prose, producing *"I'm still learning that one! Tell me more
+Something else"* — in a parent's transcript, and then on the child's screen once
+a reload repainted from the same text.
+
+Chips are suggested next taps, not utterance. They are excluded from the stored
+body now, which improves the parent transcript as much as the repaint. They are
+still shown to the child in the live turn; a test asserts both halves.
 
 ### NOTED — the client duplicates `stripControlTokens` on purpose
 

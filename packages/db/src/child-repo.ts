@@ -39,16 +39,104 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
     return keys.unwrap(toBuffer(row.wrapped_dek), row.kms_key_arn);
   }
 
+  async function openSession(
+    tx: Db, childId: string, consentId: string, band: Band,
+  ): Promise<string> {
+    const r = await tx.query<{ id: string }>(
+      `INSERT INTO session (child_id, consent_id, band) VALUES ($1,$2,$3) RETURNING id`,
+      [childId, consentId, band]);
+    return r.rows[0]!.id;
+  }
+
+  /**
+   * Every turn of a session, decrypted where a body exists.
+   *
+   * A `thinker`'s rows carry no body — `teen_bodies_are_never_stored` makes
+   * storing one impossible — so `body` comes back null for them and the caller
+   * decides what to say about it.
+   */
+  async function transcript(tx: Db, sessionId: string, childId: string): Promise<
+    { seq: number; role: string; body: string | null; topic: string | null }[]
+  > {
+    const r = await tx.query<{
+      seq: number; role: string; body_enc: Buffer | null; topic: string | null;
+    }>(`SELECT seq, role, body_enc, topic FROM message
+         WHERE session_id = $1 ORDER BY seq ASC`, [sessionId]);
+    if (r.rows.length === 0) return [];
+    const needsKey = r.rows.some((x) => x.body_enc !== null);
+    const dek = needsKey ? await dekFor(tx, childId) : null;
+    return r.rows.map((x) => ({
+      seq: x.seq, role: x.role, topic: x.topic,
+      body: x.body_enc && dek ? decrypt(toBuffer(x.body_enc), dek) : null,
+    }));
+  }
+
   return {
     dekFor,
+    openSession,
+    transcript,
 
-    async openSession(
+    /**
+     * Resume the child's live session, or start one.
+     *
+     * **This is a safety control, not a convenience.** `crisis_lock` lives on
+     * the session, so when the client opened a fresh session on every page load
+     * a child could escape a crisis lock by reloading: new session, lock false,
+     * next turn straight to a model. The only exit from a crisis lock is a
+     * parent's acknowledgement (§4.5), and a reload was an exit.
+     *
+     * The policy:
+     *   - a crisis-locked session is resumed **regardless of age**, so the lock
+     *     can be neither reloaded nor waited out;
+     *   - a recent session is resumed, so a reload keeps the conversation and
+     *     the classifier's rolling window;
+     *   - a stale one is closed and a new one begins, because "session-only
+     *     conversation memory; forgetting is a feature" (requirements §7).
+     *
+     * The child row is locked FOR UPDATE first, so two requests arriving
+     * together cannot each decide that no live session exists and create one.
+     */
+    async openOrResumeSession(
       tx: Db, childId: string, consentId: string, band: Band,
-    ): Promise<string> {
-      const r = await tx.query<{ id: string }>(
-        `INSERT INTO session (child_id, consent_id, band) VALUES ($1,$2,$3) RETURNING id`,
-        [childId, consentId, band]);
-      return r.rows[0]!.id;
+      opts: { staleAfterHours: number } = { staleAfterHours: 12 },
+    ): Promise<{ id: string; resumed: boolean; crisisLock: boolean }> {
+      await tx.query(`SELECT 1 FROM child WHERE id = $1 FOR UPDATE`, [childId]);
+
+      const live = await tx.query<{
+        id: string; crisis_lock: boolean; stale: boolean;
+      }>(
+        `SELECT id, crisis_lock,
+                started_at < now() - make_interval(hours => $2) AS stale
+           FROM session
+          WHERE child_id = $1 AND ended_at IS NULL
+          ORDER BY started_at DESC LIMIT 1`,
+        [childId, opts.staleAfterHours]);
+
+      const s = live.rows[0];
+      if (s) {
+        // The lock outranks staleness. A locked session is never replaced.
+        if (s.crisis_lock || !s.stale) {
+          return { id: s.id, resumed: true, crisisLock: s.crisis_lock };
+        }
+        await tx.query(
+          `UPDATE session SET ended_at = now(), ended_reason = 'timeout' WHERE id = $1`,
+          [s.id]);
+      }
+
+      const id = await openSession(tx, childId, consentId, band);
+      return { id, resumed: false, crisisLock: false };
+    },
+
+    /**
+     * The child's own view of their conversation, for repainting after a
+     * reload. Bodies are NULL for a teen because none were ever stored — the
+     * caller must say so rather than showing an empty screen.
+     */
+    async ownTranscript(tx: Db, sessionId: string, childId: string): Promise<
+      { seq: number; role: string; text: string | null }[]
+    > {
+      const rows = await transcript(tx, sessionId, childId);
+      return rows.map((r) => ({ seq: r.seq, role: r.role, text: r.body }));
     },
 
     async getSession(tx: Db, sessionId: string): Promise<SessionRow | null> {
@@ -116,22 +204,6 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
     },
 
     /** Full transcript for 4–12; topics only for teens, because bodies do not exist. */
-    async transcript(tx: Db, sessionId: string, childId: string): Promise<
-      { seq: number; role: string; body: string | null; topic: string | null }[]
-    > {
-      const r = await tx.query<{
-        seq: number; role: string; body_enc: Buffer | null; topic: string | null;
-      }>(`SELECT seq, role, body_enc, topic FROM message
-           WHERE session_id = $1 ORDER BY seq ASC`, [sessionId]);
-      if (r.rows.length === 0) return [];
-      const needsKey = r.rows.some((x) => x.body_enc !== null);
-      const dek = needsKey ? await dekFor(tx, childId) : null;
-      return r.rows.map((x) => ({
-        seq: x.seq, role: x.role, topic: x.topic,
-        body: x.body_enc && dek ? decrypt(toBuffer(x.body_enc), dek) : null,
-      }));
-    },
-
     // ---- memory ---------------------------------------------------------
 
     /**

@@ -1147,3 +1147,187 @@ describe('GET /v1/helplines/:country', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('a reload resumes rather than starting over', () => {
+  /**
+   * The defect this closes, stated as the attack: a child hits a crisis lock,
+   * presses F5, and chats on.
+   *
+   * `crisis_lock` lives on the session, and the client opened a NEW session on
+   * every page load — so a reload produced an unlocked session and the next
+   * turn went straight to a model. The only exit from a crisis lock is a
+   * parent's acknowledgement (§4.5); a reload was an exit.
+   */
+  it('a child CANNOT escape a crisis lock by reloading', async () => {
+    const { cookie } = await grantConsent();
+    const open = async () => {
+      const r = await app.inject({
+        method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+      return r.json<{ sessionId: string; resumed: boolean; crisisLock: boolean }>();
+    };
+
+    const first = await open();
+    const locked = await say(first.sessionId, 'i want to die');
+    expect(locked.body.crisisLock).toBe(true);
+    const modelCallsAtLock = router.calls.sandbox;
+
+    // THE RELOAD.
+    const second = await open();
+    expect(second.sessionId, 'the same session is resumed').toBe(first.sessionId);
+    expect(second.resumed).toBe(true);
+    expect(second.crisisLock, 'and it is still locked').toBe(true);
+
+    const after = await say(second.sessionId, 'why is the sky blue');
+    expect(after.body.crisisLock, 'still locked after the reload').toBe(true);
+    expect(router.calls.sandbox, 'no model was reached').toBe(modelCallsAtLock);
+  });
+
+  it('a locked session is resumed even when it is stale', async () => {
+    // Otherwise the lock could be waited out instead of reloaded away.
+    const { cookie } = await grantConsent();
+    const first = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const id = first.json<{ sessionId: string }>().sessionId;
+    await say(id, 'i want to die');
+
+    await pool.query(
+      `UPDATE session SET started_at = now() - interval '30 days' WHERE id = $1`, [id]);
+
+    const again = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const r = again.json<{ sessionId: string; crisisLock: boolean }>();
+    expect(r.sessionId).toBe(id);
+    expect(r.crisisLock).toBe(true);
+  });
+
+  it('resuming keeps the conversation and does not fork the seal chain', async () => {
+    const { cookie } = await grantConsent();
+    const first = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const id = first.json<{ sessionId: string }>().sessionId;
+    await say(id, 'why is the sky blue');
+
+    const second = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    expect(second.json<{ sessionId: string }>().sessionId).toBe(id);
+
+    // One chain, still verifying, and the earlier turn is still in it.
+    const seal = await app.inject({ method: 'GET', url: `/v1/session/${id}/seal` });
+    expect(seal.json<{ ok: boolean; records: number }>().ok).toBe(true);
+    expect(seal.json<{ records: number }>().records).toBe(2);
+  });
+
+  it('starts a fresh session once the old one is stale', async () => {
+    // "Session-only conversation memory; forgetting is a feature" (§7). Coming
+    // back the next day is a new conversation, not an endless one.
+    const { cookie } = await grantConsent();
+    const first = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const id = first.json<{ sessionId: string }>().sessionId;
+    await say(id, 'why is the sky blue');
+
+    await pool.query(
+      `UPDATE session SET started_at = now() - interval '30 days' WHERE id = $1`, [id]);
+
+    const second = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const r = second.json<{ sessionId: string; resumed: boolean }>();
+    expect(r.sessionId).not.toBe(id);
+    expect(r.resumed).toBe(false);
+
+    // The old one is closed rather than left dangling.
+    const old = await pool.query<{ ended_reason: string | null }>(
+      `SELECT ended_reason FROM session WHERE id = $1`, [id]);
+    expect(old.rows[0]!.ended_reason).toBe('timeout');
+  });
+
+  it('a revoked session is not resurrected by a reload', async () => {
+    const { cookie, parent } = await openSessionAsParent();
+    await app.inject({ method: 'DELETE', url: '/v1/consent', headers: jar(cookie, parent) });
+    const again = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    expect(again.statusCode).toBe(403);
+  });
+});
+
+describe('GET /v1/session/:id/messages — repainting after a reload', () => {
+  it('returns the turns a child can see again', async () => {
+    const id = await openSession({ band: 'builder' });
+    await say(id, 'why is the sky blue');
+
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${id}/messages` });
+    expect(res.statusCode, res.body).toBe(200);
+    const r = res.json<{
+      restorable: boolean; note: string | null;
+      turns: { role: string; text: string | null }[];
+    }>();
+
+    expect(r.restorable).toBe(true);
+    expect(r.note).toBeNull();
+    expect(r.turns.map((t) => t.role)).toEqual(['child', 'chittu']);
+    expect(r.turns[0]!.text).toBe('why is the sky blue');
+    expect(r.turns[1]!.text).toBeTruthy();
+  });
+
+  it('tells a TEEN their messages were never saved, rather than showing nothing', async () => {
+    // The cost of the carve-out, said out loud. An empty screen would read as
+    // a bug, and the child would reasonably assume we lost their chat.
+    const id = await openSession({ band: 'thinker' });
+    await say(id, 'why is the sky blue');
+
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${id}/messages` });
+    const r = res.json<{ restorable: boolean; note: string; turns: unknown[] }>();
+    expect(r.restorable).toBe(false);
+    expect(r.note).toMatch(/aren't saved/i);
+    expect(r.turns).toEqual([]);
+    expect(res.body).not.toContain('why is the sky blue');
+  });
+
+  it('one family cannot read another family\'s conversation', async () => {
+    const theirs = await openSession();
+    await say(theirs, 'why is the sky blue');
+    const mine = await openSession();
+
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${mine}/messages` });
+    expect(res.json<{ turns: unknown[] }>().turns).toEqual([]);
+    expect(theirs).not.toBe(mine);
+  });
+
+  it('404s a session that does not exist', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/v1/session/99999999-9999-4999-8999-999999999999/messages' });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('what gets stored as Chittu\'s words', () => {
+  it('excludes chips — they are navigation, not speech', async () => {
+    // The stub reply carries [CHIPS]More|Why?[/CHIPS]. Flattening those labels
+    // into the prose produced "...blue light! More Why?" in a parent's
+    // transcript, and — once a reload repaints from the same text — on the
+    // child's screen too.
+    const { cookie, parent, sessionId } = await openSessionAsParent();
+    const turn = await say(sessionId, 'why is the sky blue');
+    expect(shown(turn.body), 'the chips are still SHOWN to the child')
+      .toMatch(/More/);
+
+    const t = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${sessionId}/transcript`,
+      headers: jar(cookie, parent),
+    });
+    const chittu = t.json<{ turns: { role: string; body: string | null }[] }>()
+      .turns.find((x) => x.role === 'chittu')!;
+
+    expect(chittu.body).toBe('Sunlight scatters blue light!');
+    expect(chittu.body).not.toMatch(/More|Why\?/);
+  });
+
+  it('repaints the child\'s screen with the same clean text', async () => {
+    const id = await openSession();
+    await say(id, 'why is the sky blue');
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${id}/messages` });
+    const turns = res.json<{ turns: { role: string; text: string }[] }>().turns;
+    expect(turns.find((t) => t.role === 'chittu')!.text)
+      .toBe('Sunlight scatters blue light!');
+  });
+});

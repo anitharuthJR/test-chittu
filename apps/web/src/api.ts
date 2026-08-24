@@ -78,6 +78,22 @@ export interface SessionResponse {
   readonly sessionId: string;
   readonly band: Band;
   readonly country: Country;
+  /** True when a live session was picked up rather than a new one started. */
+  readonly resumed: boolean;
+  /**
+   * The server's answer, and the only one that counts. A reloaded page did not
+   * witness the turn that locked the session, so it cannot know this locally.
+   */
+  readonly crisisLock: boolean;
+}
+
+export interface OwnMessagesResponse {
+  /** False for a teen: nothing was stored, so nothing can be repainted. */
+  readonly restorable: boolean;
+  readonly note: string | null;
+  readonly turns: readonly {
+    readonly seq: number; readonly role: string; readonly text: string | null;
+  }[];
 }
 
 export interface TurnResponse {
@@ -299,6 +315,10 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
         json(mode === undefined ? { text } : { text, mode })),
 
     seal: (sessionId: string) => go<SealResponse>(`/v1/session/${sessionId}/seal`),
+
+    /** The child's own turns, for repainting after a reload. */
+    ownMessages: (sessionId: string) =>
+      go<OwnMessagesResponse>(`/v1/session/${sessionId}/messages`),
 
     memories: (sessionId: string) =>
       go<{ memories: readonly Memory[] }>(`/v1/session/${sessionId}/memories`),

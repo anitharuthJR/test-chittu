@@ -57,7 +57,9 @@ function stubApi(overrides: Partial<Api> = {}): Api {
     openSession: vi.fn(async () => ({
       sessionId: '11111111-1111-4111-8111-111111111111',
       band: 'builder' as const, country: 'IN' as const,
+      resumed: false, crisisLock: false,
     })),
+    ownMessages: vi.fn(async () => ({ restorable: true, note: null, turns: [] })),
     turn: vi.fn(),
     seal: vi.fn(),
     memories: vi.fn(async () => ({ memories: [] })),
@@ -287,6 +289,71 @@ describe('the parent PIN gate', () => {
 
     await waitFor(() =>
       expect(screen.getByText(/please enter your pin again/i)).toBeTruthy());
+  });
+});
+
+describe('reload', () => {
+  const RESUMED = {
+    sessionId: 'live-session', band: 'builder' as const, country: 'IN' as const,
+    resumed: true, crisisLock: false,
+  };
+
+  it('puts the earlier conversation back on screen', async () => {
+    const api = signedIn({
+      openSession: vi.fn(async () => RESUMED),
+      ownMessages: vi.fn(async () => ({
+        restorable: true, note: null,
+        turns: [
+          { seq: 1, role: 'child', text: 'why is the sky blue' },
+          { seq: 2, role: 'chittu', text: 'Sunlight scatters blue light!' },
+        ],
+      })),
+    });
+    render(<App api={api} />);
+
+    await waitFor(() => expect(screen.getByText('why is the sky blue')).toBeTruthy());
+    expect(screen.getByText('Sunlight scatters blue light!')).toBeTruthy();
+    // ...and not the greeting, which would imply a fresh start.
+    expect(screen.queryByText(/ask me anything, or pick something below/i)).toBeNull();
+  });
+
+  it('greets on a NEW session and does not ask for messages', async () => {
+    const api = signedIn();
+    render(<App api={api} />);
+    await waitFor(() => expect(
+      screen.getByText(/ask me anything, or pick something below/i)).toBeTruthy());
+    expect(api.ownMessages).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The defect this whole change exists for. A child hits a crisis lock and
+   * reloads; the page has no memory of the turn that locked it, so if the lock
+   * came from local state only, the reload would be an escape.
+   */
+  it('re-applies a crisis lock the page never witnessed', async () => {
+    const api = signedIn({
+      openSession: vi.fn(async () => ({ ...RESUMED, crisisLock: true })),
+      ownMessages: vi.fn(async () => ({ restorable: true, note: null, turns: [] })),
+    });
+    render(<App api={api} />);
+
+    await waitFor(() => expect(screen.getByText(/pause and find a grown-up/i)).toBeTruthy());
+    // The composer is disabled, so the child cannot simply carry on.
+    const input = screen.getByLabelText(/type a message to chittu/i) as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+  });
+
+  it('tells a teen their messages were not saved instead of showing a blank', async () => {
+    const api = signedIn({
+      openSession: vi.fn(async () => ({ ...RESUMED, band: 'thinker' as const })),
+      ownMessages: vi.fn(async () => ({
+        restorable: false,
+        note: "We don't keep what you type, so your earlier messages aren't saved.",
+        turns: [],
+      })),
+    });
+    render(<App api={api} />);
+    await waitFor(() => expect(screen.getByText(/aren't saved/i)).toBeTruthy());
   });
 });
 

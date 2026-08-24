@@ -40,8 +40,23 @@ export function Chat(
     // confirmed the consent is active, so a 403 here means it changed underneath
     // us — revoked in another tab, or expired.
     api.openSession()
-      .then((s) => {
+      .then(async (s) => {
         session.value = s;
+
+        /**
+         * The lock comes from the SERVER, always.
+         *
+         * A reloaded page has no memory of the turn that locked the session, so
+         * a client that only set this from a turn response let a child escape a
+         * crisis lock by pressing F5. The server now resumes the locked session
+         * and says so; this line is what makes the page obey it.
+         */
+        crisisLock.value = s.crisisLock;
+
+        if (s.resumed) {
+          await repaint(s.sessionId);
+          return;
+        }
         push({
           id: nextId(), role: 'chittu',
           blocks: [
@@ -63,6 +78,43 @@ export function Chat(
       })
       .finally(() => { opening.current = false; });
   }, [api]);
+
+  /**
+   * Put the earlier conversation back on screen.
+   *
+   * Only the text is restored, not the cards and chips: what is stored is the
+   * flattened reply a parent reads, and re-deriving blocks from it is not
+   * possible. A plainer repaint is a fair trade for not losing the
+   * conversation, and it is honest — nothing is invented that was not said.
+   */
+  async function repaint(sessionId: string): Promise<void> {
+    try {
+      const r = await api.ownMessages(sessionId);
+      if (!r.restorable) {
+        // A teen's words were never written down. Say so; an empty screen would
+        // read as "we lost your chat".
+        if (r.note !== null) push({ id: nextId(), role: 'system', text: r.note });
+        return;
+      }
+      for (const t of r.turns) {
+        if (t.text === null) continue;
+        if (t.role === 'child') {
+          push({ id: nextId(), role: 'child', text: t.text });
+        } else {
+          push({
+            id: nextId(), role: 'chittu',
+            blocks: [{ kind: 'text', text: t.text }],
+            trace: 'from earlier', layers: [],
+          });
+        }
+      }
+    } catch {
+      push({
+        id: nextId(), role: 'system',
+        text: "I couldn't bring back what we said earlier, but we can keep going.",
+      });
+    }
+  }
 
   async function send(text: string): Promise<void> {
     const s = session.value;
