@@ -14,13 +14,18 @@ once at startup and ignores the request's `model` field entirely, so there is
 nothing to get wrong.
 
 Serves POST /v1/chat/completions with the subset chittu-v3's provider router uses
-(messages, max_tokens, temperature). Single-threaded on purpose: MLX generation is
-not reentrant and one browser tab is the only client.
-"""
-import argparse, json, sys, threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+(messages, max_tokens, temperature).
 
-STATE = {"model": None, "tok": None, "name": "", "lock": threading.Lock()}
+SINGLE-THREADED, and that is load-bearing: MLX streams are thread-local, so
+generating on a worker thread raises "There is no Stream(cpu, 0) in current
+thread." A ThreadingHTTPServer looks like the obvious choice here and fails on
+every single request. HTTP/1.0 keeps each request on its own connection so one
+idle keep-alive client cannot block the next turn.
+"""
+import argparse, json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+STATE = {"model": None, "tok": None, "name": ""}
 
 
 def generate_reply(messages, max_tokens, temperature):
@@ -28,14 +33,12 @@ def generate_reply(messages, max_tokens, temperature):
     from mlx_lm.sample_utils import make_sampler
     tok = STATE["tok"]
     prompt = tok.apply_chat_template(messages, add_generation_prompt=True)
-    with STATE["lock"]:                      # MLX generation is not reentrant
-        out = generate(STATE["model"], tok, prompt=prompt, max_tokens=max_tokens,
-                       sampler=make_sampler(temp=temperature), verbose=False) or ""
-    return out
+    return generate(STATE["model"], tok, prompt=prompt, max_tokens=max_tokens,
+                    sampler=make_sampler(temp=temperature), verbose=False) or ""
 
 
 class Handler(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
+    protocol_version = "HTTP/1.0"
 
     def _send(self, code, payload):
         body = json.dumps(payload).encode()
@@ -82,7 +85,9 @@ class Handler(BaseHTTPRequestHandler):
                              "message": {"role": "assistant", "content": text}}],
             })
         except Exception as e:                # never take the server down on one bad turn
-            self._send(500, {"error": str(e)})
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            self._send(500, {"error": repr(e)})
 
     def log_message(self, fmt, *args):
         sys.stderr.write("  %s\n" % (fmt % args))
@@ -102,7 +107,7 @@ def main():
     STATE["model"], STATE["tok"] = load(a.base, adapter_path=adapter)
     STATE["name"] = a.base + ("" if adapter is None else f"+{adapter}")
     print(f"READY on http://localhost:{a.port}/v1  ({STATE['name']})", file=sys.stderr)
-    ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
+    HTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
 
 
 if __name__ == "__main__":
