@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kids AI — Complete Model Landscape</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f4f6fb;
+    color: #1a1a2e;
+    padding: 32px 24px;
+  }
+  h1 { font-size: 1.7rem; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { font-size: 0.9rem; color: #666; margin-bottom: 24px; }
+  .section-head {
+    margin: 34px 0 10px;
+    padding-left: 12px;
+    border-left: 5px solid #1A18D4;
+  }
+  .section-head h2 { font-size: 1.15rem; color: #1A18D4; }
+  .section-head p { font-size: 0.82rem; color: #777; margin-top: 2px; }
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    background: #fff;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 1080px; }
+  thead tr { background: #1A18D4; color: #fff; }
+  thead th {
+    padding: 12px 14px; text-align: left; font-weight: 600;
+    font-size: 0.78rem; letter-spacing: 0.03em; white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid #eef0f6; transition: background 0.15s; }
+  tbody tr:hover { background: #f0f2ff; }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 11px 14px; vertical-align: top; line-height: 1.5; }
+  .model-name { font-weight: 700; color: #1A18D4; white-space: nowrap; }
+  .maker { color: #444; font-size: 0.78rem; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-size: 0.71rem; font-weight: 600; white-space: nowrap;
+  }
+  .badge-open   { background: #e8f5e9; color: #2e7d32; }
+  .badge-closed { background: #fce4ec; color: #c62828; }
+  .badge-layer  { background: #fff8e1; color: #e65100; }
+  .badge-dead   { background: #eceff1; color: #546e7a; }
+  .age-chip {
+    display: inline-block; background: #e8eaf6; color: #3949ab;
+    border-radius: 6px; padding: 2px 7px; font-size: 0.74rem;
+    font-weight: 600; white-space: nowrap;
+  }
+  .tick { color: #2e7d32; font-weight: 700; }
+  .cross { color: #c62828; font-weight: 700; }
+  .partial { color: #e65100; font-weight: 700; }
+  .warn { color: #c62828; font-weight: 600; font-size: 0.76rem; }
+  .tag {
+    display: inline-block; background: #ede7f6; color: #4527a0;
+    border-radius: 4px; padding: 1px 6px; font-size: 0.71rem; margin: 1px 2px 1px 0;
+  }
+  .tag-math { background:#e3f2fd; color:#0d47a1; }
+  .tag-read { background:#e8f5e9; color:#1b5e20; }
+  .tag-stem { background:#fff3e0; color:#bf360c; }
+  .tag-gen  { background:#f3e5f5; color:#6a1b9a; }
+  .tag-chat { background:#fce4ec; color:#880e4f; }
+  .tag-lang { background:#e0f7fa; color:#006064; }
+  .tag-safe { background:#fffde7; color:#827717; }
+  .tag-sel  { background:#efebe9; color:#4e342e; }
+  .note { font-size: 0.78rem; color: #888; margin-top: 22px; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<h1>🤖 Kids AI — Complete Model &amp; Platform Landscape</h1>
+<p class="subtitle">All LLMs and AI models trained for / used in the children's AI space — deep-research compilation, August 2026 · 27 entries across 6 categories</p>
+
+<!-- ============ SECTION A ============ -->
+<div class="section-head">
+  <h2>A. Purpose-Built / Fine-Tuned Education &amp; Kids LLMs</h2>
+  <p>Models where the training or fine-tuning itself was done for children / learners — the true "model-level" players</p>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Model</th><th>Made By</th><th>Launched</th><th>Base Model</th><th>Target Age</th><th>Focus</th><th>Access</th><th>Child Safe</th><th>Key Strength</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><div class="model-name">LearnLM</div><div class="maker">Google DeepMind + Research</div></td>
+      <td>Google</td>
+      <td>May 2024; folded into Gemini 2.5 (May 2025)</td>
+      <td>Gemini 1.5 Pro → Gemini 2.5</td>
+      <td><span class="age-chip">K-12 + adults</span></td>
+      <td><span class="tag tag-gen">Learning</span><span class="tag tag-math">Math</span><span class="tag tag-stem">Science</span></td>
+      <td><span class="badge badge-closed">API / AI Studio</span></td>
+      <td><span class="tick">✓</span> pedagogy filters</td>
+      <td>Preferred +31% over GPT-4o by expert raters; powers YouTube Learning, Circle to Search, Classroom; now baked into Gemini 2.5</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><div class="model-name">Merlyn Origin Suite</div><div class="maker">3 open-source models</div></td>
+      <td>Merlyn Mind</td>
+      <td>2023 (open models); Origin June 2024</td>
+      <td>Fine-tuned open-source (LLaMA-family, 7B–65B era)</td>
+      <td><span class="age-chip">K-12</span></td>
+      <td><span class="tag tag-gen">Classroom Q&amp;A</span><span class="tag tag-gen">Curriculum-aligned</span></td>
+      <td><span class="badge badge-open">Open Source</span></td>
+      <td><span class="tick">✓</span> ~1–2% hallucination</td>
+      <td>First LLM built for classrooms at the model level; answers only from school-selected curriculum, not the open internet; GDPR/FERPA</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><div class="model-name">Orca-Math</div><div class="maker">7B SLM</div></td>
+      <td>Microsoft Research</td>
+      <td>Feb 2024</td>
+      <td>Mistral 7B fine-tune</td>
+      <td><span class="age-chip">Grade school</span></td>
+      <td><span class="tag tag-math">GSM math word problems</span></td>
+      <td><span class="badge badge-open">Open (HF)</span></td>
+      <td><span class="partial">Research</span></td>
+      <td>Expert-level grade-school math at only 7B params; proof small models beat giants in a focused kid domain</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><div class="model-name">EduChat</div><div class="maker">ECNU-led consortium</div></td>
+      <td>Chinese academic consortium</td>
+      <td>2023–2024</td>
+      <td>Fine-tuned LLaMA / Baichuan</td>
+      <td><span class="age-chip">Students, all ages</span></td>
+      <td><span class="tag tag-gen">Open Q&amp;A</span><span class="tag tag-chat">Emotional support</span><span class="tag tag-read">Essay grading</span></td>
+      <td><span class="badge badge-open">Open Source</span></td>
+      <td><span class="partial">Moderation layer</span></td>
+      <td>Bilingual (CN/EN) multi-function education LLM: Socratic questioning, emotional support, essay correction; includes Child_chat_data companionship corpus</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><div class="model-name">MathGPT</div><div class="maker">Korea / Asia</div></td>
+      <td>Mathpresso (QANDA) + Upstage</td>
+      <td>2023–2024</td>
+      <td>Llama 2 fine-tune on QANDA math data</td>
+      <td><span class="age-chip">Primary–secondary</span></td>
+      <td><span class="tag tag-math">Math tutoring</span></td>
+      <td><span class="badge badge-closed">In QANDA app</span></td>
+      <td><span class="partial">Education-scoped</span></td>
+      <td>Set world-record benchmarks for primary/secondary math; beats Microsoft ToRA 13B; teaches solution process, not just answers; huge Asian user base</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><div class="model-name">MathGPT (TAL)</div><div class="maker">China</div></td>
+      <td>TAL Education Group</td>
+      <td>2023</td>
+      <td>Proprietary math LLM</td>
+      <td><span class="age-chip">K-12</span></td>
+      <td><span class="tag tag-math">Step-by-step math</span></td>
+      <td><span class="badge badge-closed">Closed</span></td>
+      <td><span class="partial">Education-scoped</span></td>
+      <td>China EdTech giant's dedicated math model for step-by-step problem-solving guidance across write/speak/read modes</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><div class="model-name">AI Guru</div><div class="maker">India STEM tutor LLM</div></td>
+      <td>Physics Wallah + Microsoft Research</td>
+      <td>Announced Feb 2025</td>
+      <td>MSR base, fine-tuned</td>
+      <td><span class="age-chip">STEM students</span></td>
+      <td><span class="tag tag-stem">STEM</span><span class="tag tag-math">Math</span></td>
+      <td><span class="badge badge-closed">In development</span></td>
+      <td><span class="partial">Education-safe</span></td>
+      <td>Aims to match a real teacher's accuracy for STEM tutoring; trained on Physics Wallah's massive India student base — closest analogue to an India-first education LLM</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><div class="model-name">Squirrel AI LAM</div><div class="maker">Large Adaptive Model</div></td>
+      <td>Squirrel Ai Learning (Shanghai)</td>
+      <td>LAM era 2023–2025</td>
+      <td>Foundation models + RAG + adaptive engine</td>
+      <td><span class="age-chip">Pre-K–12</span></td>
+      <td><span class="tag tag-gen">Adaptive learning</span><span class="tag tag-math">10,000+ knowledge points</span></td>
+      <td><span class="badge badge-closed">Learning centers + app</span></td>
+      <td><span class="tick">✓</span> supervised centers</td>
+      <td>24M+ students taught; TIME Best Inventions 2025; knowledge-graph adaptive pathways; expanding to the US amid teacher shortages</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><div class="model-name">iFLYTEK Spark (EDU)</div><div class="maker">China</div></td>
+      <td>iFLYTEK</td>
+      <td>May 2023+</td>
+      <td>Spark Desk foundation model</td>
+      <td><span class="age-chip">Students</span></td>
+      <td><span class="tag tag-gen">Education vertical</span><span class="tag tag-lang">Language</span></td>
+      <td><span class="badge badge-closed">Closed</span></td>
+      <td><span class="partial">CN regulated</span></td>
+      <td>Education named as its lead vertical; deployed in Chinese schools with learning machines and student devices at massive scale</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><div class="model-name">Youdao Ziyue</div><div class="maker">China</div></td>
+      <td>NetEase Youdao</td>
+      <td>2023</td>
+      <td>Proprietary education LLM</td>
+      <td><span class="age-chip">Students</span></td>
+      <td><span class="tag tag-lang">English speaking / IELTS</span><span class="tag tag-gen">Tutoring</span></td>
+      <td><span class="badge badge-closed">In Youdao devices</span></td>
+      <td><span class="partial">Education-scoped</span></td>
+      <td>Education-first LLM powering AI IELTS speaking examiner, essay feedback and dictionary-pen tutoring hardware for children</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ SECTION B ============ -->
+<div class="section-head">
+  <h2>B. Research Models — Trained on Child Language Itself</h2>
+  <p>Academic models pretrained on child-directed or child-written corpora — the scientific frontier of "kids LLMs"</p>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Model</th><th>Made By</th><th>Launched</th><th>Base / Method</th><th>Target</th><th>Focus</th><th>Access</th><th>Child Safe</th><th>Key Strength</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>11</td>
+      <td><div class="model-name">KidLM</div><div class="maker">EMNLP 2024 paper</div></td>
+      <td>Univ. of Alberta (Nayeem et al.)</td>
+      <td>Oct 2024</td>
+      <td>Masked LM pretrained on child-written/child-directed corpus; novel "Stratified Masking" objective</td>
+      <td><span class="age-chip">Children</span></td>
+      <td><span class="tag tag-read">Child language</span><span class="tag tag-safe">Safety</span></td>
+      <td><span class="badge badge-open">Open research</span></td>
+      <td><span class="tick">✓</span> avoids stereotypes</td>
+      <td>First serious attempt at a child-specific pretrained LM: user-centric data pipeline of text written for and by children; excels at lower grade-level text</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td><div class="model-name">TinyStories models</div><div class="maker">1M–80M param SLMs</div></td>
+      <td>Microsoft Research (Eldan &amp; Li)</td>
+      <td>2023; ecosystem ongoing</td>
+      <td>GPT-Neo / nanoGPT variants trained on synthetic children's stories (10k-token vocab)</td>
+      <td><span class="age-chip">~Ages 3–4 vocabulary</span></td>
+      <td><span class="tag tag-read">Story generation</span></td>
+      <td><span class="badge badge-open">Open (HF)</span></td>
+      <td><span class="partial">Research</span></td>
+      <td>Proved even 3M-param models can write coherent, grammatical children's stories — canonical benchmark for small-model research and on-device kids AI</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td><div class="model-name">BabyBERTa / BabyLM models</div><div class="maker">Challenge series 2023–2025</div></td>
+      <td>Academic community (Warstadt et al.; Huebner et al.)</td>
+      <td>2021–2025</td>
+      <td>RoBERTa/GPT-2 trained on 5M–100M words of child-directed speech (CHILDES, subtitles)</td>
+      <td><span class="age-chip">Child-scale input</span></td>
+      <td><span class="tag tag-read">Language acquisition</span></td>
+      <td><span class="badge badge-open">Open research</span></td>
+      <td><span class="partial">Research</span></td>
+      <td>Models trained on the amount of language a real child hears; BabyBERTa matched larger models' grammar with 5M words — informs data-efficient kids models</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ SECTION C ============ -->
+<div class="section-head">
+  <h2>C. Child-Safe Conversational AI Platforms (Safety Layers on Foundation LLMs)</h2>
+  <p>Not new base models — proprietary safety, pedagogy and moderation stacks wrapped around GPT / Claude / Gemini</p>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Platform</th><th>Made By</th><th>Launched</th><th>Base Model</th><th>Target Age</th><th>Focus</th><th>Access</th><th>COPPA</th><th>Parental Controls</th><th>Key Strength</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>14</td>
+      <td><div class="model-name">HeyOtto</div><div class="maker">Atlanta, GA</div></td>
+      <td>HeyOtto (Natalie Gibson)</td>
+      <td>Feb 2026</td>
+      <td>Proprietary layer on foundation LLMs</td>
+      <td><span class="age-chip">8–18</span></td>
+      <td><span class="tag tag-gen">General Q&amp;A</span><span class="tag tag-safe">11-category monitoring</span></td>
+      <td><span class="badge badge-closed">Freemium iOS</span></td>
+      <td><span class="tick">✓</span></td>
+      <td><span class="tick">✓</span> full visibility + crisis escalation</td>
+      <td>95% KORA child-safety score; age-adaptive by developmental stage; no companion-AI features; parent-customisable value alignment at model layer</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td><div class="model-name">PinwheelGPT</div><div class="maker">Kid-safe ChatGPT</div></td>
+      <td>Pinwheel</td>
+      <td>July 2023; watch integration 2025</td>
+      <td>ChatGPT (OpenAI)</td>
+      <td><span class="age-chip">7–12</span></td>
+      <td><span class="tag tag-gen">Q&amp;A</span><span class="tag tag-safe">Clean-content filter</span></td>
+      <td><span class="badge badge-layer">Freemium ($5.99/mo)</span></td>
+      <td><span class="tick">✓</span></td>
+      <td><span class="tick">✓</span> sees even deleted chats</td>
+      <td>First kid-safe ChatGPT wrapper with full parent portal; declines sensitive topics and redirects child to a trusted adult; no images/links; also on Pinwheel Watch</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td><div class="model-name">LittleLit Kids AI Models</div><div class="maker">3 specialist models</div></td>
+      <td>LittleLit</td>
+      <td>2024</td>
+      <td>OpenAI + Anthropic + Gemini (layered)</td>
+      <td><span class="age-chip">Age/grade adaptive</span></td>
+      <td><span class="tag tag-gen">Text Q&amp;A</span><span class="tag tag-safe">Visual AI</span><span class="tag tag-safe">Computer vision</span></td>
+      <td><span class="badge badge-layer">Proprietary layer</span></td>
+      <td><span class="tick">✓</span></td>
+      <td><span class="tick">✓</span></td>
+      <td>Trained on kids' own language patterns (typed and spoken); blocks profanity/violence/adult content; K-12 curriculum-aligned subject bots</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td><div class="model-name">Khanmigo</div><div class="maker">Khan Academy</div></td>
+      <td>Khan Academy + OpenAI</td>
+      <td>2023 beta; public 2024</td>
+      <td>GPT-4</td>
+      <td><span class="age-chip">K-12 + adults</span></td>
+      <td><span class="tag tag-math">Math</span><span class="tag tag-stem">Coding</span><span class="tag tag-read">Writing</span><span class="tag tag-gen">Humanities</span></td>
+      <td><span class="badge badge-closed">$4/mo; teachers free</span></td>
+      <td><span class="tick">✓</span></td>
+      <td><span class="tick">✓</span> chat visibility + flag alerts</td>
+      <td>Never gives direct answers — Socratic only; deep Khan Academy content integration; the reference standard for guided AI tutoring</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td><div class="model-name">HolaNolis</div><div class="maker">EU teen-safety AI</div></td>
+      <td>HolaNolis</td>
+      <td>2025–2026</td>
+      <td>Layer on foundation LLMs</td>
+      <td><span class="age-chip">Teens</span></td>
+      <td><span class="tag tag-gen">Q&amp;A</span><span class="tag tag-safe">Graduated supervision</span></td>
+      <td><span class="badge badge-closed">Subscription</span></td>
+      <td><span class="partial">EU/GDPR-minor focus</span></td>
+      <td><span class="tick">✓</span> teen-consented levels</td>
+      <td>European approach: graduated, teen-consented supervision rather than full chat surveillance; positioned against US-style monitoring</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td><div class="model-name">ChatGPT Study Mode + Teen Controls</div><div class="maker">Retrofit, not purpose-built</div></td>
+      <td>OpenAI</td>
+      <td>Study Mode Jul 2025; parental controls Sep 2025</td>
+      <td>GPT-4o / GPT-5 family</td>
+      <td><span class="age-chip">13+ only</span></td>
+      <td><span class="tag tag-gen">General</span><span class="tag tag-safe">Socratic study mode</span></td>
+      <td><span class="badge badge-closed">Free tier incl.</span></td>
+      <td><span class="cross">✗</span> (not for &lt;13)</td>
+      <td><span class="partial">Opt-in, teen can remove</span></td>
+      <td>Massive default usage (59% of US teens); Study Mode answers with guided questions — but no age-adaptive responses and filters can be bypassed</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ SECTION D ============ -->
+<div class="section-head">
+  <h2>D. Purpose-Built AI Tutoring Apps (Proprietary Speech / Reading Models)</h2>
+  <p>Companies that trained their own child-specific ASR + tutoring models — often stronger IP than chat wrappers</p>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Product</th><th>Made By</th><th>Launched</th><th>Model / Tech</th><th>Target Age</th><th>Focus</th><th>Access</th><th>COPPA</th><th>Key Strength</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>20</td>
+      <td><div class="model-name">Ello</div><div class="maker">AI reading + math coach</div></td>
+      <td>Ello Technology</td>
+      <td>2021; math + Storytime 2024+</td>
+      <td>Proprietary child-speech ASR (claims to beat Whisper &amp; Google Cloud) + LLM</td>
+      <td><span class="age-chip">4–9</span></td>
+      <td><span class="tag tag-read">Phonics / reading</span><span class="tag tag-math">Early math</span></td>
+      <td><span class="badge badge-closed">Freemium $14.99/mo</span></td>
+      <td><span class="tick">✓</span></td>
+      <td>Listens to child read aloud, corrects in real time; 1,200+ decodable books; Science of Reading; Common Sense Media endorsed; iOS + Android</td>
+    </tr>
+    <tr>
+      <td>21</td>
+      <td><div class="model-name">Amira Learning</div><div class="maker">B2B schools, HMH partner</div></td>
+      <td>Amira Learning</td>
+      <td>2019; K-8 Suite 2024–25</td>
+      <td>Proprietary ASR/NLP trained on millions of children's oral reading samples; 20+ yrs R&amp;D</td>
+      <td><span class="age-chip">PreK–Grade 8</span></td>
+      <td><span class="tag tag-read">Oral fluency</span><span class="tag tag-read">Dyslexia screening</span></td>
+      <td><span class="badge badge-closed">Schools only</span></td>
+      <td><span class="tick">✓</span></td>
+      <td>250+ districts, 49 states; 96%-accurate dyslexia screener; up to 68% faster reading growth; English + Spanish dual-language tutoring</td>
+    </tr>
+    <tr>
+      <td>22</td>
+      <td><div class="model-name">Socratic by Google</div><div class="maker">Homework help</div></td>
+      <td>Google</td>
+      <td>2019 (acq.); Google-AI updates 2022+</td>
+      <td>Google multimodal AI + Lens</td>
+      <td><span class="age-chip">12–18</span></td>
+      <td><span class="tag tag-math">Math</span><span class="tag tag-stem">Science</span><span class="tag tag-gen">History/Lit</span></td>
+      <td><span class="badge badge-open">Free</span></td>
+      <td><span class="partial">Partial</span></td>
+      <td>Photo-a-question → step-by-step explanations + curated videos; zero cost, no account — the accessibility benchmark</td>
+    </tr>
+    <tr>
+      <td>23</td>
+      <td><div class="model-name">Duolingo Max</div><div class="maker">Language learning</div></td>
+      <td>Duolingo + OpenAI</td>
+      <td>2023+</td>
+      <td>GPT-4</td>
+      <td><span class="age-chip">All ages</span></td>
+      <td><span class="tag tag-lang">Languages</span><span class="tag tag-chat">Roleplay</span></td>
+      <td><span class="badge badge-closed">$30/mo</span></td>
+      <td><span class="partial">Partial</span></td>
+      <td>"Roleplay" conversation practice + "Explain My Answer"; widely used by children with family guidance across 50+ languages</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ SECTION E ============ -->
+<div class="section-head">
+  <h2>E. AI Robots &amp; Smart Toys for Children</h2>
+  <p>Embodied kids AI — where conversational models meet hardware (and where most safety incidents have occurred)</p>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Product</th><th>Made By</th><th>Launched</th><th>Model / Tech</th><th>Target Age</th><th>Focus</th><th>Status</th><th>Key Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>24</td>
+      <td><div class="model-name">Miko 3 / Mini / 4</div><div class="maker">Mumbai, India 🇮🇳</div></td>
+      <td>Miko (Emotix)</td>
+      <td>2017→; Miko Mini 2024</td>
+      <td>Deep-learning conversational AI, trained + moderated specifically for children; face/voice recognition; closed data system</td>
+      <td><span class="age-chip">4–10</span></td>
+      <td><span class="tag tag-stem">STEAM</span><span class="tag tag-chat">Conversation</span><span class="tag tag-sel">SEL</span></td>
+      <td><span class="badge badge-closed">$99–$249 + Miko Max sub</span></td>
+      <td>India's flagship kids-AI export; Disney/Paramount content; parent app with time limits and data deletion; the closest India analogue to Chittu/Kili ambitions</td>
+    </tr>
+    <tr>
+      <td>25</td>
+      <td><div class="model-name">Moxie</div><div class="maker">SEL companion robot</div></td>
+      <td>Embodied Inc.</td>
+      <td>2020; <span class="warn">company shut down Dec 2024</span></td>
+      <td>Advanced NLP + emotion-aware conversation engine</td>
+      <td><span class="age-chip">5–10</span></td>
+      <td><span class="tag tag-sel">Social-emotional learning</span></td>
+      <td><span class="badge badge-dead">Defunct</span></td>
+      <td>Cautionary tale: cloud-dependent robots died when the company folded, orphaning children's "friends" overnight — a landmark case study in kids-AI dependency risk</td>
+    </tr>
+    <tr>
+      <td>26</td>
+      <td><div class="model-name">Curio: Grok, Gabbo, Grem</div><div class="maker">Grimes-voiced plushies</div></td>
+      <td>Curio Interactive</td>
+      <td>Dec 2023+</td>
+      <td>OpenAI models via cloud Voice Box; parent app transcripts</td>
+      <td><span class="age-chip">3–12</span></td>
+      <td><span class="tag tag-chat">Open conversation</span><span class="tag tag-gen">Screen-free play</span></td>
+      <td><span class="badge badge-closed">$99 each</span></td>
+      <td>Screen-free conversational plush toys; full transcripts to parent app; PIRG 2025 report flagged the category's reliance on adult-grade LLMs (OpenAI says its models aren't for under-13s)</td>
+    </tr>
+    <tr>
+      <td>27</td>
+      <td><div class="model-name">ROYBI Robot</div><div class="maker">Language + STEM tutor toy</div></td>
+      <td>ROYBI</td>
+      <td>2019+</td>
+      <td>Proprietary NLP + speech recognition for early learners</td>
+      <td><span class="age-chip">3–7</span></td>
+      <td><span class="tag tag-lang">Languages</span><span class="tag tag-stem">STEM basics</span></td>
+      <td><span class="badge badge-closed">Device + sub</span></td>
+      <td>One of the earliest AI tutor toys; 500+ lessons; adapts to child's pace; TIME Best Inventions honoree</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note">
+  <strong>Legend:</strong>
+  <span class="badge badge-open">Open</span> public weights/free &nbsp;|&nbsp;
+  <span class="badge badge-closed">Closed</span> proprietary/paid &nbsp;|&nbsp;
+  <span class="badge badge-layer">Layer</span> wrapper on 3rd-party LLMs &nbsp;|&nbsp;
+  <span class="badge badge-dead">Defunct</span> &nbsp;|&nbsp;
+  <span class="tick">✓</span> Yes · <span class="cross">✗</span> No · <span class="partial">~</span> Partial
+  <br>
+  <strong>Notable exclusions &amp; cautions:</strong> Character.AI banned under-18 open chat (Nov 2025) after wrongful-death litigation settled in 2026 — companion-style AI is now widely advised against for minors (Common Sense Media, Nov 2025). FoloToy's Kumma teddy (OpenAI-powered) was pulled after the Dec 2025 PIRG safety report. General chatbots (ChatGPT &lt;13, Gemini, Meta AI) have no child-safety architecture at the model level.
+  <br>
+  <strong>Sources:</strong> Google DeepMind (arXiv 2412.16429), Merlyn Mind, Microsoft Research (arXiv 2402.14830), KidLM (arXiv 2410.03884), TinyStories ecosystem, BabyLM Challenge, TIME Best Inventions 2025, Meta AI blog (MathGPT), Yicai Global, PIRG Education Fund, TechCrunch, HeyOtto, Pinwheel, Ello, Amira Learning — compiled Aug 2026.
+</p>
+
+</body>
+</html>

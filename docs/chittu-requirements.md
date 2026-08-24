@@ -225,11 +225,14 @@ Jurisdiction adapters per new market (G0 each); language waves per playbook (saf
 ---
 
 ## 12. Reference Artifacts
-- `kids-ai-council.html` — Guardian Council (44 seats, 6 chambers)
-- `council-session-001.html` — The doctrine (Ten Laws, minority note)
-- `chittu-gap-map.html` — 12 gaps × owners × gates × phases
-- `chittu-v3.html` — Prototype v3.3 (this spec's living reference)
-- `chittu-admin.html` — Platform admin (metering, cost, ops)
-- `chittu-flows.html` — Diagrams D1–D5 + model-routing table (Mermaid source included)
+- `docs/council/kids-ai-council.html` — Guardian Council (44 seats, 6 chambers, the six gates)
+- `docs/council/council-session-001.html` — The doctrine (Ten Laws, minority note)
+- `docs/council/chittu-gap-map.html` — 12 gaps × owners × gates × phases
+- `docs/research/kids_ai_models.html` — Kids-AI model landscape, Aug 2026 (27 entries) — the evidence behind §6's named alternates
+- `docs/chittu-status.md` — Current done / mocked / absent ledger, gate + gap status, open issues
+- `prototype/chittu-v3.html` — Prototype v3.3 (this spec's living reference)
+- `prototype/chittu-admin.html` — Platform admin (metering, cost, ops) — simulated telemetry
+- `prototype/chittu-flows.html` — Diagrams D1–D5 + model-routing table (Mermaid source included)
+- `archive/` — Superseded prototypes v1 and v2, kept for lineage only
 
 *The more sensitive the moment, the less AI. Consent before existence. Honest machine, warm machine. Graduation is the goal.*
