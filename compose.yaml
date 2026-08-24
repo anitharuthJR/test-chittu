@@ -8,6 +8,15 @@
 #   docker compose up -d          (OrbStack works identically — it is a drop-in)
 #   pnpm test:pg
 #
+# The `dev` PROFILE is a second, separate thing: the API in its own container
+# against its own Postgres, which is the smallest honest rehearsal of §14's
+# topology available without AWS.
+#
+#   pnpm stack:up / pnpm stack:down
+#
+# Kept behind a profile so `docker compose up -d` still means "the test
+# database, nothing else" and `pnpm test:pg` is unaffected.
+#
 services:
   postgres:
     # pgvector's own image, so CREATE EXTENSION vector is available. Pinned to
@@ -28,3 +37,69 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  # --------------------------------------------------------------- dev stack ---
+  # Its own database, on its own port and a real volume: this one is meant to
+  # survive a restart, which is exactly the opposite of the tmpfs test instance
+  # above and the reason it is not the same service.
+  postgres-dev:
+    profiles: ['dev']
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chittu
+      POSTGRES_PASSWORD: chittu
+      POSTGRES_DB: chittu
+    ports:
+      - '55433:5432'
+    volumes:
+      - chittu-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chittu -d chittu']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # Runs to completion, then exits. The API waits for it rather than migrating
+  # itself: bootstrapDb() deliberately does NOT migrate the Postgres path, because
+  # a service that migrates on boot runs N times concurrently the moment it scales
+  # past one task. This is the shape a deployment uses — a migration task before
+  # the service — rehearsed locally.
+  migrate:
+    profiles: ['dev']
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://chittu:chittu@postgres-dev:5432/chittu
+    command: ['node', '--import', 'tsx', 'src/migrate.ts']
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    profiles: ['dev']
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      # The image defaults to production — deliberately, so an unconfigured
+      # deployment refuses to start rather than serving children through the
+      # stub router. Local rehearsal opts OUT of that here, in the open.
+      NODE_ENV: development
+      DATABASE_URL: postgres://chittu:chittu@postgres-dev:5432/chittu
+      # Passed through if the shell has one; absent means the stub router, and
+      # the API says so on the first line of its output.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  chittu-dev-data:

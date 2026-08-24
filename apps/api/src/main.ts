@@ -116,4 +116,14 @@ const app = await buildServer({
   pool, keys, router: await chooseRouter(), logger: loggerOptions,
   ...(isProd ? { env: 'prod' as const } : {}),
 });
-await app.listen({ port, host: '127.0.0.1' });
+/**
+ * Bind address. Defaults to loopback and must be opted OUT of.
+ *
+ * A container needs 0.0.0.0 or nothing outside it can reach the service, but
+ * making that the default would silently publish a developer's API — with its
+ * PGlite database and, if they exported one, their provider key — to every
+ * device on whatever café wifi they are on. So the Dockerfile sets HOST
+ * explicitly and a laptop stays on loopback.
+ */
+const host = process.env['HOST'] ?? '127.0.0.1';
+await app.listen({ port, host });

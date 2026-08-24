@@ -13,7 +13,11 @@
     "test:pg": "DATABASE_URL=postgres://chittu:chittu@localhost:55432/chittu_test vitest run",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down -v",
-    "start": "bash scripts/dev.sh"
+    "start": "bash scripts/dev.sh",
+    "stack:up": "docker compose --profile dev up -d --build --wait",
+    "stack:down": "docker compose --profile dev down",
+    "stack:logs": "docker compose --profile dev logs -f api",
+    "db:migrate": "pnpm --filter @chittu/api run migrate"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",

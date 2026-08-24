@@ -116,18 +116,82 @@ artifact — an auditor reads it directly — so it is authored in SQL rather th
 from a query builder. Drizzle is used for *typed queries over* this schema, never to
 author it.
 
-**There is no migration CLI yet, and `pnpm db:migrate` does not exist** — this
-file claimed it did until 2026-08-24. Migrations are applied at startup by
-`applyMigrations()` in `apps/api/src/db-bootstrap.ts`, which reads
-`db/migrations/*.sql` in filename order and runs every one on each boot. That is
-fine while `0001_init.sql` is regenerated from the schema and nothing is deployed;
-it stops being fine the moment migrations must be additive and applied once, which
-is the same inversion described above. A real runner is part of that change, not
-before it.
+```bash
+DATABASE_URL=postgres://… pnpm db:migrate    # apply to a real Postgres
+```
+
+**`pnpm db:migrate` only became real on 2026-08-24, and this file claimed it for
+a while before that.** There is still no `db:migrate:status`.
+
+The gap it closes is worth knowing about, because containerising is what found
+it: `bootstrapDb()` applies migrations on the **PGlite** path and not on the
+**Postgres** path. Point the API at a real database and you got an empty schema —
+and it started, and reported healthy, because `/health` is `SELECT 1` and an
+empty database answers that perfectly well. Nobody sets `DATABASE_URL` on a
+laptop, so the gap had never been on a path anyone ran.
+
+Migration stays a **separate step**, not something the service does at boot. A
+service that migrates on start runs N times concurrently the first time it scales
+past one task, and that is the opposite of the additive, applied-once rule above.
+Deployments run a migration task before the service; `compose.yaml`'s `dev`
+profile rehearses exactly that shape.
 
 For PGlite the pgvector DDL is rewritten on the way through — `vector(1024)`
 becomes `real[]` and the HNSW index is dropped — so corpus-embedding behaviour is
 the one thing the fast lane does not actually exercise.
+
+**`pnpm db:migrate` only became real on 2026-08-24, and this file claimed it for
+a while before that.** There is still no `db:migrate:status`.
+
+The gap it closes is worth knowing about, because containerising is what found
+it: `bootstrapDb()` applies migrations on the **PGlite** path and not on the
+**Postgres** path. Point the API at a real database and you got an empty schema —
+and it started, and reported healthy, because `/health` is `SELECT 1` and an
+empty database answers that perfectly well. Nobody sets `DATABASE_URL` on a
+laptop, so the gap had never been on a path anyone ran.
+
+Migration stays a **separate step**, not something the service does at boot. A
+service that migrates on start runs N times concurrently the first time it scales
+past one task, and that is the opposite of the additive, applied-once rule above.
+Deployments run a migration task before the service; `compose.yaml`'s `dev`
+profile rehearses exactly that shape.
+
+## The container, and the dev stack
+
+```bash
+pnpm stack:up      # postgres + migrate + api, all in Docker
+pnpm stack:logs
+pnpm stack:down
+```
+
+The smallest honest rehearsal of §14's topology available without AWS: the API in
+its own image, against real Postgres with real pgvector, migrated by a task that
+runs to completion before the service starts. Verified from an empty volume — 29
+tables, `vector(1024)` as a genuine type rather than PGlite's `real[]` shim.
+
+It is a **profile**, so plain `docker compose up -d` still means "the test
+database, nothing else" and `pnpm test:pg` is unaffected.
+
+Two things about the image are deliberate and both are arguable:
+
+- **It runs TypeScript through `tsx`; it does not compile.** Every package points
+  `main` at `src/index.ts` and nothing here emits JavaScript. Adding tsc emit
+  means changing main/exports in nine packages and re-proving that vitest, tsx and
+  every entry point still resolve — a real refactor, and not the one that unblocks
+  a container. The cost is a transpiler in the runtime image and a slower cold
+  start. Before production this becomes a build stage plus a runtime with neither
+  tsx nor sources.
+- **`node:22-slim`, not distroless.** §14 says distroless where possible; tsx
+  wants a real libc. That becomes easy in the same change as the above.
+
+**`NODE_ENV=production` is baked into the image on purpose.** An unconfigured
+deployment then refuses to start rather than serving children through the stub
+router — confirmed in-container, it exits with the `ANTHROPIC_API_KEY` refusal.
+The compose dev profile opts out of that in the open, where you can see it.
+
+**The API binds loopback by default and the Dockerfile sets `HOST=0.0.0.0`.**
+The reverse default would silently publish a developer's API — with its database
+and, if they exported one, their provider key — to every device on the wifi.
 
 ## Before you alter a table
 
