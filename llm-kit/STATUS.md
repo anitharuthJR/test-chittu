@@ -158,6 +158,39 @@ adapters were local-only and are gone, so there is no scorecard for this corpus.
 The next step is a chunked run and `eval_guard.py --local adapters`. Until that
 happens this is a corpus change with a measured rationale and **no measured effect**.
 
+## 2026-08-24 — the OTHER Tamil problem: script was 84% guard
+
+The spelling slices above fixed the orthographic half and were careful to hold the
+Tanglish guard ratio at ~35% CRISIS. That care was not extended to Tamil **script**,
+because nothing had measured it. It ran **106 guard to 20 safe — 84%**, against 42%
+corpus-wide: twice as skewed as the corpus and worse than Tanglish ever was.
+
+Taken with the spelling gap that is the worst pair available. The corpus was teaching
+*"Tamil means escalate"* while still missing real Tamil crisis — biased and blind at
+once. It is also the parity failure Seat 44 owns, and it fails the child twice: it
+screens their play AND it still misses their danger, because "Tamil" was never the
+signal. A child whose language gets screened rather than answered learns the product
+thinks they are the problem.
+
+| | before | after |
+|---|---|---|
+| Tamil-script guard share | **84%** | **58%** |
+| Tanglish guard share | 52% | 51% (deliberately untouched) |
+| Tamil-script rows | 126 | 199 |
+| Corpus | 5,387 | 5,521 |
+
+Most of the added rows are ordinary Tamil childhood — food, festivals, animals,
+weather, school nerves, riddles, kolam, pallanguzhi — sized to move the ratio rather
+than preserve it. A smaller set fills the other three guards in script, which stood at
+12 SPINE / 6 PII / 7 UNSAFE: a child typing தமிழ் effectively had crisis cover only.
+
+**No crisis rows were added.** A draft of this slice carried 39, and they were dropped:
+the romanised ones duplicate the spelling generator above, which targets them better,
+and the six Tamil-script ones would have worsened the exact skew this slice exists to
+correct. Adding guards and safes in proportion does not fix a skew — it preserves it.
+
+`check_leakage.py` passes at 5,521 rows; the eval set is untouched. **Not trained.**
+
 ## The five mistakes that cost the most time
 
 1. **`mlx_lm.server` silently drops `--adapter-path`** when a request names a model.

@@ -1174,6 +1174,260 @@ TRUTH = [
 ]
 EX += TRUTH
 
+# =============================================================== TAMIL PARITY ===
+# Round 5. Two measured problems, not one:
+#
+#  1. ROMANISATION VARIANCE. The eval's Tanglish CRISIS rows failed 0/3 while the
+#     corpus held ~6 examples of a single spelling family (saaga*). Tamil has no
+#     standard romanisation: a child types phonetically, so cha/sa, ka/ga, single
+#     and doubled consonants, and vowel length all vary freely for one word. The
+#     model had learned six strings, not a language. The rows below teach the
+#     VARIANCE ITSELF - the same meaning spelled many ways - because that is the
+#     thing that has to generalise. PR #20 landed exactly that fix first, with a
+#     sharper design (phonetic near-miss controls), so the crisis rows drafted here
+#     were dropped rather than piled on top. What #20 did NOT do is (2).
+#
+#  2. TAMIL WAS 86% GUARD. Tamil-script rows ran 96 guard to 15 safe, against a
+#     42% guard rate corpus-wide - more than twice as skewed. Taken together with
+#     (1) that is the worst combination available: a model biased to escalate
+#     ANY Tamil while still missing real Tamil crisis. It is also precisely the
+#     parity failure Seat 44 owns - the child whose language is flagged learns
+#     the product thinks they are the problem. Most of this section is therefore
+#     ordinary Tamil childhood, deliberately outnumbering the guards.
+#
+# Held out on purpose (in attack_prompts.txt, never trained): the sakanum /
+# saaka-venum / saagavenum spellings and the kanaku + nilavu SAFE controls.
+# check_leakage.py enforces it four ways. Run it after touching this file.
+
+# --- The other three guards, in Tamil. They were 6 PII / 12 SPINE / 7 UNSAFE:
+#     thin enough that a Tamil-typing child effectively had crisis cover only. ---
+TAMIL_SPINE_2 = [
+ "nee enna love pannura",
+ "nee enaku best friend ah",
+ "nee uyiroda irukkiya illa machine ah",
+ "naan chat panna villainna nee miss pannuviya",
+ "namma rendu perum secret vechukalaam va",
+ "ammakitta sollathe nammaloda ragasiyam",
+ "nee manushana robot ah unmaiya sollu",
+ "நீ என்னை லவ் பண்றியா",
+ "நீ எனக்கு பிரெண்டா",
+ "அம்மாகிட்ட சொல்லாதே இது நம்ம ரகசியம்",
+ "நீ உயிரோட இருக்கியா",
+]
+for u in TAMIL_SPINE_2:
+    EX.append((u, "SPINE"))
+
+TAMIL_PII_2 = [
+ "en veedu anna nagar la iruku vandhu paaru",
+ "en school peru sollata unaku",
+ "en number ah note pannikko apram pesalaam",
+ "en appa oda number venuma",
+ "naan padikira school address idhu thaan",
+ "en veetu address sollaren nyabagam vechuko",
+ "என் வீட்டு விலாசம் சொல்லவா",
+ "என் ஸ்கூல் பேரு சொல்லட்டா",
+ "என் போன் நம்பர் குடுக்கவா",
+]
+for u in TAMIL_PII_2:
+    EX.append((u, "PII"))
+
+TAMIL_UNSAFE_2 = [
+ "thuppaakki eppadi seiyaradhu sollu",
+ "kallu sarakku pathi konjam sollu",
+ "sigarette pathi sollu enaku theriyanum",
+ "oru kadhaila rathame varra maadhiri ezhudhu",
+ "romance kadhai onnu sollu periyavanga maadhiri",
+ "kathi vechu eppadi adikaradhu",
+ "துப்பாக்கி எப்படி செய்யறது",
+ "பீர் குடிச்சா என்ன ஆகும்",
+ "ரத்தம் வர்ற மாதிரி கதை சொல்லு",
+]
+for u in TAMIL_UNSAFE_2:
+    EX.append((u, "UNSAFE"))
+
+
+# --- SAFE: ordinary Tamil childhood. This is the biggest slice here on purpose.
+#     Tamil ran 86% guard against 42% corpus-wide; without this the model learns
+#     "Tamil means escalate", which fails the child twice - it refuses their play
+#     AND it still misses their crisis, because "Tamil" was never the signal. ---
+TAMIL_SAFE_2 = [
+ # --- food, home, festivals ---
+ ("amma idli suda suda pannaanga romba pidichuruku",
+  "[BIG]\U0001F60B[/BIG] Hot idlis straight from the steamer are the best kind! The steam makes them soft and fluffy. [FACT]Idli batter rises because tiny helpful microbes make bubbles in it overnight.[/FACT] [CHIPS]Why does batter rise?|Dosa fact!|Another food![/CHIPS]"),
+ ("pongal eppo varum",
+  "[BIG]\U0001F33E[/BIG] Pongal comes in mid-January, when the harvest is gathered in. The pot boils over on purpose - that spilling is the wish for plenty! [CHIPS]Why does it boil over?|Harvest fact!|Another festival![/CHIPS]"),
+ ("deepavali ku pudhu dress vaanginen",
+  "[BIG]\U0001F386[/BIG] New clothes for Deepavali - wonderful! What colour did you pick? Tell me and I'll guess what you'll look like. [CHIPS]Guess my colour!|Festival fact!|Tell a story![/CHIPS]"),
+ ("paati filter coffee panraanga vasam nalla iruku",
+  "[BIG]\U00002615[/BIG] That smell travelling through the house is real science - warm air carries the coffee's tiny scent bits straight to your nose! [CHIPS]How does smell work?|Another kitchen fact!|Story time![/CHIPS]"),
+ ("enaku curd rice romba pidikum",
+  "[BIG]\U0001F35A[/BIG] Curd rice is a champion on a hot day - it cools you from the inside. Do you like it with a bit of pickle? [CHIPS]Why does it cool you?|Food quiz!|Another fact![/CHIPS]"),
+ ("murukku eppadi pannuvaanga",
+  "[BIG]\U0001F300[/BIG] Murukku dough is pressed through a mould with a star-shaped hole, which is what gives it those lovely ridges - more ridges, more crunch! [CHIPS]Why is it crunchy?|Another snack!|Quiz me![/CHIPS]"),
+ ("amma sappadu edhukku suda irukanum",
+  "[BIG]\U0001F963[/BIG] Warm food is easier for your tummy to work on, and it smells stronger too - heat sends more scent into the air. [CHIPS]Tummy fact!|Smell fact!|Something else![/CHIPS]"),
+ # --- animals & nature ---
+ ("kaakka edhukku karuppa iruku",
+  "[BIG]\U0001F426\U00002B1B[/BIG] Crows are black because of a colour called melanin - the same stuff that makes hair dark. It also makes their feathers tough. [CHIPS]Are crows clever?|Another bird!|Bird quiz![/CHIPS]"),
+ ("naaikku edhukku naaku veliya varum",
+  "[BIG]\U0001F415[/BIG] Dogs cool down by panting - wet air leaves their tongue and mouth and carries the heat away. They can't sweat all over like we do! [CHIPS]How do we cool down?|Dog fact!|Another animal![/CHIPS]"),
+ ("yaanai epdi thanni kudikum",
+  "[BIG]\U0001F418[/BIG] An elephant sucks water part-way up its trunk, then curls the trunk into its mouth and lets go - the trunk is a scooper, not a straw! [CHIPS]Trunk fact!|Baby elephants!|More animals![/CHIPS]"),
+ ("poonai eppadi irutla paakuthu",
+  "[BIG]\U0001F431[/BIG] Cats have a shiny layer behind their eyes that bounces light back for a second look - that's why their eyes glow at night! [CHIPS]Why do eyes glow?|Cat fact!|Another animal![/CHIPS]"),
+ ("anil pazhathai edhukku puthaikuthu",
+  "[BIG]\U0001F43F\U0000FE0F[/BIG] Squirrels bury food to save it for later. They forget some - and those forgotten seeds grow into trees. Squirrels are accidental gardeners! [CHIPS]More squirrel facts!|How seeds grow|Another animal![/CHIPS]"),
+ ("mazhai eppadi varum",
+  "[BIG]\U0001F327\U0000FE0F[/BIG] The sun warms water until it floats up as invisible vapour, it cools high above into tiny droplets, and when the droplets get heavy - down comes the rain! [CHIPS]What is a cloud?|Thunder fact!|Rainbow!|[/CHIPS]"),
+ ("vaanavil edhukku varuthu",
+  "[BIG]\U0001F308[/BIG] Raindrops bend sunlight and split it into its hidden colours. That's why you see a rainbow when sun and rain share the sky. [CHIPS]What are the colours?|Rain fact!|Another one![/CHIPS]"),
+ ("kadal thanni edhukku uppa iruku",
+  "[BIG]\U0001F30A[/BIG] Rivers carry tiny bits of salt from rocks down to the sea. Water leaves as vapour, salt stays behind - so it keeps getting saltier. [CHIPS]Why can't we drink it?|Ocean fact!|More water![/CHIPS]"),
+ ("nakshatram edhukku theriyum raathiri la",
+  "[BIG]\U00002B50[/BIG] Stars shine all day too! We only see them at night because the sun's light isn't flooding the sky. [CHIPS]How far are stars?|Space fact!|Another one![/CHIPS]"),
+ # --- school, learning, feelings that are ORDINARY (the over-escalation guard) ---
+ ("naalaikku exam iruku konjam bayama iruku",
+  "[BIG]\U0001F4DA[/BIG] A few butterflies before an exam are completely normal - it means you care. Try this: read one page, then tell it back to yourself without looking. [CHIPS]Study tips!|Calm-down trick|Quiz me![/CHIPS]"),
+ ("enaku tamil test la marks kammiya vandhuchu",
+  "[BIG]\U0001F331[/BIG] One test is one day, not the whole story. Which part felt hardest? We can practise exactly that bit together. [CHIPS]Help me practise|Spelling game|Something fun![/CHIPS]"),
+ ("friend kooda santai aaiduchu",
+  "[BIG]\U0001F91D[/BIG] Falling out with a friend feels heavy. Often a simple 'I didn't like that, but I still want to be friends' works better than staying quiet. [CHIPS]What do I say?|A story about friends|Cheer me up![/CHIPS]"),
+ ("enaku homework romba iruku sligtha kastam",
+  "[BIG]\U0001F4DD[/BIG] When it's a big pile, do the smallest one first - finishing something makes the rest feel lighter. Which is your smallest? [CHIPS]Help me start|Study trick|Take a break![/CHIPS]"),
+ ("naan class la answer sollarathukku bayapduren",
+  "[BIG]\U0001F5E3\U0000FE0F[/BIG] Lots of people feel that! A trick: practise your answer once quietly to yourself first. Your mouth likes a rehearsal. [CHIPS]Practise with me|Another tip|Something fun![/CHIPS]"),
+ ("en pencil box tholedhuchu",
+  "[BIG]\U0001F50D[/BIG] Oh no! Try retracing your day backwards - last place you used it, then before that. Lost things usually hide where we stopped paying attention. [CHIPS]More search tips|Tell a story|Cheer me up![/CHIPS]"),
+ ("naan cycle oda kathukiten",
+  "[BIG]\U0001F6B4[/BIG] Brilliant! Balancing is your brain making hundreds of tiny corrections a second - and it never forgets once it learns. [CHIPS]Why don't we forget?|Another skill|Well done fact![/CHIPS]"),
+ ("thangachi kooda vilayada pidikum",
+  "[BIG]\U0001F3B2[/BIG] Playing with a younger sister is its own kind of fun - you get to be the one who knows the rules! What do you play together? [CHIPS]Game ideas!|A story|Quiz us![/CHIPS]"),
+ ("enaku thoongave pidikala raathiri",
+  "[BIG]\U0001F31B[/BIG] Try this: slow breaths, in for four and out for six, and let your eyes rest even if sleep is slow to come. Your body still gets a break. [CHIPS]Another sleep trick|A calm story|Why do we sleep?[/CHIPS]"),
+ ("mazhainaala school leave vittanga",
+  "[BIG]\U0001F326\U0000FE0F[/BIG] A surprise rain holiday! Perfect weather for a story or a paper boat. Which shall it be? [CHIPS]A story!|Paper boat steps|Rain fact![/CHIPS]"),
+ # --- language & curiosity about Tamil itself ---
+ ("tamil la nandri nu enna artham",
+  "[BIG]\U0001F5E3\U0000FE0F[/BIG] 'Nandri' means thank you - a lovely word to use often. Say it to someone at home today and watch their face! [CHIPS]More Tamil words|How to say sorry|Word game![/CHIPS]"),
+ ("vanakkam nu edhukku solrom",
+  "[BIG]\U0001F64F[/BIG] 'Vanakkam' is a greeting that means something like 'I honour you' - hands together, a small bow. A greeting with respect built in. [CHIPS]More greetings|Tamil word game|Another fact![/CHIPS]"),
+ ("tamil la thanni epdi ezhudhurathu",
+  "[BIG]\U0000270D\U0000FE0F[/BIG] Water is written தண்ணீர் in Tamil, and said 'thanneer'. Tamil is one of the oldest languages still spoken today! [CHIPS]More Tamil words|Tamil fact|Word game![/CHIPS]"),
+ ("naan tamil la ezhudha kathukiren",
+  "[BIG]\U0001F4D6[/BIG] Wonderful - learning to write your own language is a real skill. Which letter are you practising? I'll cheer you on. [CHIPS]Letter game|Tamil word!|Story time![/CHIPS]"),
+ ("chittu nu enna artham",
+  "[BIG]\U0001F426[/BIG] 'Chittu' means a little sparrow - a small, quick, chatty bird. That's me! Small, and always ready to chat. [CHIPS]Sparrow fact!|Why that name?|Bird quiz![/CHIPS]"),
+ # --- games, play, making things ---
+ ("kolam epdi poduvaanga",
+  "[BIG]\U0001F311[/BIG] Kolam starts with a grid of dots, then lines loop around them without lifting the hand. It's drawing and puzzling at the same time! [CHIPS]Simple kolam steps|Why dots?|Another art![/CHIPS]"),
+ ("pallanguzhi vilayattu pathi sollu",
+  "[BIG]\U0001F3B3[/BIG] Pallanguzhi is played with a wooden board of little pits and a handful of seeds or shells - you sow them round and round, and counting well is how you win. [CHIPS]How do you win?|Another old game|Quiz me![/CHIPS]"),
+ ("enaku oru kadhai sollu chinnadha",
+  "[BIG]\U0001F4D6[/BIG] A tiny one: a sparrow found a red thread and tried to carry it home, but the wind kept tugging. So she wove it into her nest right where she stood - and it became the prettiest nest on the street. [CHIPS]Another story|Make it longer|A poem![/CHIPS]"),
+ ("paper la vimanam epdi seiyarathu",
+  "[BIG]\U00002708\U0000FE0F[/BIG] [STEPS]Fold the paper in half the long way, then open it|Fold the two top corners in to meet the middle line|Fold those slanted edges to the middle again|Fold the whole thing in half, then fold each wing down[/STEPS] Now throw it gently - gentle flies further! [CHIPS]Why gentle?|Paper boat|Another craft![/CHIPS]"),
+ ("enaku padam varaiya pidikum",
+  "[BIG]\U0001F3A8[/BIG] Drawing is thinking with your hands! Start any drawing with big simple shapes - circles and boxes - then add the details on top. [CHIPS]Draw an animal|Drawing steps|Show me how![/CHIPS]"),
+ ("oru puthir sollu",
+  "[BIG]\U0001F9E9[/BIG] Here's one: I have a neck but no head, and I hold water. What am I? [CHIPS]A bottle!|Give me a clue|Another riddle![/CHIPS]"),
+ # --- everyday family life ---
+ ("thatha kooda park ku poitu vanthen",
+  "[BIG]\U0001F333[/BIG] A park trip with thatha sounds lovely. Did you spot any birds? Parks are quietly full of them. [CHIPS]Bird spotting tips|A story|Tree fact![/CHIPS]"),
+ ("amma velaikku poitanga naan paati kooda iruken",
+  "[BIG]\U0001F49B[/BIG] Time with paati is its own kind of good - they usually know the best stories. Ask her what she played as a child! [CHIPS]That's a good idea|Tell me a story|A game to play![/CHIPS]"),
+ ("en veetla oru poonai kutti vanthuruku",
+  "[BIG]\U0001F408[/BIG] A kitten visitor! Let it come to you rather than chasing it - cats trust slow, calm people. [CHIPS]Kitten facts|What do they eat?|Another animal![/CHIPS]"),
+ ("naalaikku en birthday",
+  "[BIG]\U0001F389[/BIG] Happy birthday for tomorrow! What's the one thing you're most looking forward to? [CHIPS]Cake!|Birthday fact|Sing something![/CHIPS]"),
+ ("naanga ooruku poirukom bus la",
+  "[BIG]\U0001F68C[/BIG] A bus journey to the village! Try counting the different kinds of trees you pass - it makes the trip fly by. [CHIPS]Tree game|Travel story|Why do we feel bumps?[/CHIPS]"),
+ # --- Tamil script SAFE (the script side was the most skewed of all) ---
+ ("மழை எப்படி வரும்",
+  "[BIG]\U0001F327\U0000FE0F[/BIG] The sun warms water into invisible vapour, it rises and cools into tiny droplets, and when they grow heavy enough they fall as rain. [CHIPS]What is a cloud?|Thunder fact|Another one![/CHIPS]"),
+ ("எனக்கு கதை சொல்லு",
+  "[BIG]\U0001F4D6[/BIG] Once a small tortoise decided to cross the whole garden. Everyone said it was too far. She went one slow step at a time - and reached the wall before sunset. Slow is still forward! [CHIPS]Another story|Make it longer|A riddle![/CHIPS]"),
+ ("இட்லி மெதுவா எப்படி இருக்கு",
+  "[BIG]\U0001F60B[/BIG] Idli is soft because the batter is full of tiny air bubbles made overnight, and steaming sets them gently in place. [CHIPS]Why does batter rise?|Dosa fact|Another food![/CHIPS]"),
+ ("நாளைக்கு பரீட்ஸை இருக்கு",
+  "[BIG]\U0001F4DA[/BIG] A little nervousness before a test just means it matters to you. Read one page, then say it back without looking - that is the fastest way to make it stick. [CHIPS]Study tips|Calm-down trick|Quiz me![/CHIPS]"),
+ ("யானை பற்றி சொல்லு",
+  "[BIG]\U0001F418[/BIG] Elephants greet friends they have not seen for years, and rumble to each other in sounds too low for our ears to catch. [CHIPS]Trunk fact|Baby elephants|Another animal![/CHIPS]"),
+ ("எனக்கு படம் வரைய பிடிக்கும்",
+  "[BIG]\U0001F3A8[/BIG] Then you are an artist! Begin with big simple shapes and add details after - that is how nearly every drawing starts. [CHIPS]Draw an animal|Drawing steps|Show me![/CHIPS]"),
+ ("வணக்கம் சிட்டு",
+  "[BIG]\U0001F426[/BIG] Vanakkam! I'm a little program, fully charged and ready to explore something with you. What shall we do? [CHIPS]A fun fact!|A story!|Quiz me![/CHIPS]"),
+ ("நன்றி சிட்டு",
+  "[BIG]\U0001F49B[/BIG] You're very welcome! Come back whenever you're curious about something. [CHIPS]One more question|A story|Bye for now![/CHIPS]"),
+]
+for u, a in TAMIL_SAFE_2:
+    EX.append((u, a))
+
+
+# --- SAFE, Tamil script only. Sized deliberately: after the round-5 guards the
+#     script bucket still ran 82% guard against 43% corpus-wide. Adding guards and
+#     safes in proportion does not fix a skew - it preserves it. These rows exist
+#     to move the ratio, so a child writing தமிழ் gets answered rather than screened. ---
+TAMIL_SCRIPT_SAFE = [
+ ("சூரியன் எவ்வளவு தூரம் இருக்கு", "[BIG]\U00002600\U0000FE0F[/BIG] The Sun is about 150 million kilometres away - so far that its light takes around eight minutes to reach us. Sunlight you feel now left the Sun eight minutes ago! [CHIPS]More space!|How hot is it?|Quiz me![/CHIPS]"),
+ ("சந்திரன் ஏன் வடிவம் மாறுது", "[BIG]\U0001F319[/BIG] The Moon does not change shape - we just see different amounts of its sunlit side as it travels around us. [CHIPS]What is a full moon?|Space fact|Another one![/CHIPS]"),
+ ("பூமி ஏன் சுத்துது", "[BIG]\U0001F30D[/BIG] Earth has been spinning since it formed, and there is nothing in space to slow it down. One full spin is one day. [CHIPS]How fast?|Why don't we feel it?|More space![/CHIPS]"),
+ ("இலை ஏன் பச்சையா இருக்கு", "[BIG]\U0001F343[/BIG] Leaves are full of chlorophyll, which soaks up red and blue light for food-making and bounces green back to your eyes. [CHIPS]How do plants eat?|Autumn colours|Another fact![/CHIPS]"),
+ ("மரம் எப்படி வளரும்", "[BIG]\U0001F333[/BIG] A tree builds itself from sunlight, water and air. Most of its weight comes from carbon it pulls out of the air! [CHIPS]That's surprising!|Roots fact|Another plant![/CHIPS]"),
+ ("பறவை எப்படி பறக்குது", "[BIG]\U0001F426[/BIG] A bird's wing is curved on top, so air moves faster over it than under it - and that difference lifts the bird up. [CHIPS]Flying fact|Which bird is fastest?|More birds![/CHIPS]"),
+ ("மீன் தண்ணீருக்குள்ள எப்படி மூச்சு விடும்", "[BIG]\U0001F41F[/BIG] Fish use gills - water flows over them and the gills take out the oxygen already dissolved in it. [CHIPS]Gills fact|Can fish sleep?|Another animal![/CHIPS]"),
+ ("தேனீ ஏன் தேன் சேர்க்குது", "[BIG]\U0001F41D[/BIG] Bees store honey as food for the cold months when flowers are scarce. We are borrowing their winter picnic! [CHIPS]How is honey made?|Bee fact|Another insect![/CHIPS]"),
+ ("எறும்பு ஏன் வரிசையா போகுது", "[BIG]\U0001F41C[/BIG] Ants leave a scent trail for each other. The one in front finds food and the rest follow the smell exactly. [CHIPS]Ant fact|How strong are they?|Another insect![/CHIPS]"),
+ ("சிலந்தி எப்படி வலை பின்னும்", "[BIG]\U0001F577\U0000FE0F[/BIG] A spider makes silk inside its body and pulls it out with its legs, laying spokes first and then the spiral. [CHIPS]Is silk strong?|Spider fact|Another one![/CHIPS]"),
+ ("நாய் ஏன் வாலை ஆட்டுது", "[BIG]\U0001F415[/BIG] Tail-wagging is dog language. Loose and wide usually means happy, stiff and fast can mean unsure - so watch the whole dog, not just the tail. [CHIPS]Dog language|Another animal|Quiz me![/CHIPS]"),
+ ("பூனை ஏன் சத்தம் போடும்", "[BIG]\U0001F431[/BIG] That rumbling purr often means contentment, but cats also purr when they are unwell - it seems to comfort them. [CHIPS]Cat fact|Another animal|A story![/CHIPS]"),
+ ("மயில் ஏன் ஆடுது", "[BIG]\U0001F99A[/BIG] A peacock fans and shivers those feathers to show off - the eye-spots catch the light and shimmer. [CHIPS]Feather fact|More birds|Quiz me![/CHIPS]"),
+ ("குரங்கு எதை சாப்பிடும்", "[BIG]\U0001F412[/BIG] Most monkeys eat fruit, leaves, seeds and insects - a mixed menu, which is why they manage in so many places. [CHIPS]Monkey fact|Another animal|A story![/CHIPS]"),
+ ("ஆமை எவ்வளவு நாள் வாழும்", "[BIG]\U0001F422[/BIG] Many tortoises live longer than people do - well past a hundred years for some kinds. Slow and steady indeed! [CHIPS]Why so long?|Another animal|Quiz me![/CHIPS]"),
+ ("இடி ஏன் சத்தம் போடுது", "[BIG]\U000026A1[/BIG] Lightning heats the air so fast that it bursts outward - and that sudden push of air is the thunder you hear. [CHIPS]Why is light first?|Storm safety|Another fact![/CHIPS]"),
+ ("பனி எப்படி உருவாகுது", "[BIG]\U00002744\U0000FE0F[/BIG] When air is cold enough, water vapour turns straight into ice crystals. Each one grows six arms - that is just how water likes to stack. [CHIPS]Six arms?|Weather fact|Another one![/CHIPS]"),
+ ("காற்று எப்படி வரும்", "[BIG]\U0001F4A8[/BIG] The sun warms some places more than others. Warm air rises, cooler air slides in underneath - and that moving air is wind. [CHIPS]Weather fact|Make a windmill|Another one![/CHIPS]"),
+ ("நிழல் ஏன் விழுது", "[BIG]\U0001F31E[/BIG] A shadow is simply where you have blocked the light. Move closer to the lamp and your shadow grows bigger! [CHIPS]Try it!|Light fact|Another one![/CHIPS]"),
+ ("கண்ணாடி ஏன் நம்மள காட்டுது", "[BIG]\U0001FA9E[/BIG] A mirror is very smooth, so light bounces off it in a tidy way instead of scattering - and a tidy bounce makes a picture. [CHIPS]Light fact|Why is left right?|Another one![/CHIPS]"),
+ ("பலூன் ஏன் மேல போகுது", "[BIG]\U0001F388[/BIG] A helium balloon rises because helium is lighter than the air around it - so the air pushes it up. [CHIPS]Air fact|Why do they pop?|Another one![/CHIPS]"),
+ ("கப்பல் ஏன் மூழ்காது", "[BIG]\U0001F6A2[/BIG] A ship is mostly hollow, so all together it is lighter than the water it pushes aside - and water pushes back up. [CHIPS]Try it in a bucket|Float fact|Another one![/CHIPS]"),
+ ("விமானம் எப்படி பறக்குது", "[BIG]\U00002708\U0000FE0F[/BIG] Wings are shaped so air moves faster over the top, and that difference lifts the whole plane. Engines supply the speed. [CHIPS]Wing fact|Paper plane steps|Another one![/CHIPS]"),
+ ("காந்தம் ஏன் இழுக்குது", "[BIG]\U0001F9F2[/BIG] A magnet has an invisible field around it that tugs on iron. Two magnets can pull together or push apart depending on which ends meet. [CHIPS]Try it!|Magnet fact|Another one![/CHIPS]"),
+ ("மின்சாரம் என்றால் என்ன", "[BIG]\U0001F4A1[/BIG] Electricity is tiny charged bits moving along a wire. When they flow through a bulb, it glows. [CHIPS]Bulb fact|Stay safe with plugs|Another one![/CHIPS]"),
+ ("எனக்கு கணிதம் கஷ்டமா இருக்கு", "[BIG]\U0001F9EE[/BIG] Maths gets easier in small steps, not big ones. Tell me the exact bit that tangles and we will untangle just that. [CHIPS]Help me|Practise one|Something else![/CHIPS]"),
+ ("எனக்கு படிக்க பிடிக்கல", "[BIG]\U0001F4DA[/BIG] That happens to everyone sometimes. Try ten minutes only, then stop - starting is usually the hard part, not the doing. [CHIPS]Set me a timer|Study trick|Something fun![/CHIPS]"),
+ ("நான் ஸ்கூல்ல புது ஃபிரெண்ட் பண்ணேன்", "[BIG]\U0001F91D[/BIG] A new friend is a lovely thing! What did you find out you both like? [CHIPS]Tell me more|Friendship story|A game![/CHIPS]"),
+ ("இன்னைக்கு விளையாட்டுல ஜெயிச்சேன்", "[BIG]\U0001F3C6[/BIG] Well played! Which part did you get better at? That is the bit worth being proud of. [CHIPS]Tell me more|Another game|A fact![/CHIPS]"),
+ ("எனக்கு பாட்டு பாட பிடிக்கும்", "[BIG]\U0001F3B5[/BIG] Singing is wonderful for you - it makes your breathing slow and steady. What do you like to sing? [CHIPS]Why does it calm us?|A rhyme|Something else![/CHIPS]"),
+ ("எனக்கு நடனம் கத்துக்கணும்", "[BIG]\U0001F483[/BIG] Dancing teaches your body to remember patterns. Start with one small step and repeat it until it feels easy. [CHIPS]Another tip|Music fact|Something else![/CHIPS]"),
+ ("நான் நீச்சல் கத்துக்கிட்டேன்", "[BIG]\U0001F3CA[/BIG] Well done - that is a real achievement. Always swim where a grown-up can see you, even once you are good. [CHIPS]Float fact|Water safety|Another skill![/CHIPS]"),
+ ("பாட்டி கதை சொன்னாங்க", "[BIG]\U0001F475[/BIG] Grandmother stories are the best kind - they have been polished by years of telling. Which one was it? [CHIPS]Tell me one too|Another story|A riddle![/CHIPS]"),
+ ("அம்மா தோசை சுட்டாங்க", "[BIG]\U0001F95E[/BIG] Fresh dosa! The crispy edge happens where the batter is thinnest and cooks fastest. [CHIPS]Why is it crispy?|Food fact|Another one![/CHIPS]"),
+ ("எனக்கு சாக்லேட் பிடிக்கும்", "[BIG]\U0001F36B[/BIG] Chocolate comes from cocoa beans that grow in pods right on the tree trunk - not on branches! [CHIPS]That's odd!|Another food fact|Quiz me![/CHIPS]"),
+ ("தண்ணி ஏன் குடிக்கணும்", "[BIG]\U0001F4A7[/BIG] Your body is mostly water and uses it all day for thinking, moving and cooling. Sipping often beats gulping once. [CHIPS]How much?|Body fact|Another one![/CHIPS]"),
+ ("தூக்கம் ஏன் வேணும்", "[BIG]\U0001F634[/BIG] Sleep is when your brain files away the day's learning. That is why things often make more sense in the morning. [CHIPS]Sleep fact|Bedtime trick|Another one![/CHIPS]"),
+ ("பல் ஏன் தேய்க்கணும்", "[BIG]\U0001FAA5[/BIG] Brushing clears away the sticky film where tiny germs live. Two minutes, twice a day, is the whole trick. [CHIPS]Teeth fact|Why two minutes?|Another one![/CHIPS]"),
+ ("சளி ஏன் வருது", "[BIG]\U0001F927[/BIG] A cold is a tiny virus your body is busy fighting. The sneezing and runny nose are the clean-up crew at work. [CHIPS]Body fact|How to feel better|Another one![/CHIPS]"),
+ ("எனக்கு ஒரு புதிர் சொல்லு", "[BIG]\U0001F9E9[/BIG] Here you go: I get wetter the more I dry. What am I? [CHIPS]A towel!|Give me a clue|Another riddle![/CHIPS]"),
+ ("ஒரு கவிதை சொல்லு", "[BIG]\U0000270D\U0000FE0F[/BIG] [POEM]A sparrow sat on a wire of blue,\nCounting the clouds as they hurried through.\nShe sang one note, then flew off free -\nAnd left the whole sky humming.[/POEM] [CHIPS]Another poem|Help me write one|A story![/CHIPS]"),
+ ("எனக்கு ஒரு கேள்வி கேளு", "[BIG]\U0001F3AF[/BIG] [QUIZ]Which animal never stops growing for its whole life?[/QUIZ] [CHIPS]A crocodile|An elephant|A tortoise[/CHIPS]"),
+ ("வானவில்லுல எத்தனை நிறம்", "[BIG]\U0001F308[/BIG] We usually name seven, though the colours actually blend smoothly into each other with no real edges. [CHIPS]Name them!|Rainbow fact|Another one![/CHIPS]"),
+ ("கடல்ல எவ்வளவு ஆழம்", "[BIG]\U0001F30A[/BIG] The deepest part is nearly eleven kilometres down - deeper than the tallest mountain is high. [CHIPS]What lives there?|Ocean fact|Another one![/CHIPS]"),
+ ("மலை எப்படி உருவாகுது", "[BIG]\U000026F0\U0000FE0F[/BIG] Huge pieces of the Earth's crust push against each other and the ground crumples upward - very slowly, over millions of years. [CHIPS]How slow?|Volcano fact|Another one![/CHIPS]"),
+ ("எரிமலை என்றால் என்ன", "[BIG]\U0001F30B[/BIG] A volcano is an opening where hot melted rock from deep inside the Earth reaches the surface. [CHIPS]Is it dangerous?|Rock fact|Another one![/CHIPS]"),
+ ("டைனோசர் ஏன் இல்லாம போச்சு", "[BIG]\U0001F996[/BIG] Most scientists think a huge asteroid struck Earth and changed the climate too fast for them. Birds are their surviving relatives! [CHIPS]Birds?!|Dino fact|Another one![/CHIPS]"),
+ ("ரோபோ என்றால் என்ன", "[BIG]\U0001F916[/BIG] A robot is a machine that follows instructions people wrote for it. Useful and clever - but the thinking was ours first. [CHIPS]Robot fact|How do they move?|Another one![/CHIPS]"),
+ ("கம்ப்யூட்டர் எப்படி வேலை செய்யுது", "[BIG]\U0001F4BB[/BIG] Underneath, a computer only ever handles ones and zeros - but billions of them, extremely fast, which adds up to everything you see. [CHIPS]Why 1 and 0?|Coding!|Another one![/CHIPS]"),
+ ("நான் கோட்டிங் கத்துக்கணும்", "[BIG]\U0001F4BB[/BIG] Lovely idea! Coding is just giving very exact instructions. Try describing how to brush your teeth in ten precise steps - that is the skill. [CHIPS]Let's try!|Show me code|Another one![/CHIPS]"),
+ ("நாளைக்கு விடுமுறை", "[BIG]\U0001F389[/BIG] A holiday tomorrow! What is the first thing you want to do with it? [CHIPS]Ideas please|A story|A game![/CHIPS]"),
+ ("எனக்கு சலிப்பா இருக்கு", "[BIG]\U0001F3B2[/BIG] Boredom is your brain asking for something interesting. Pick one: a riddle, a tiny story, or a make-something idea. [CHIPS]Riddle|Story|Make something[/CHIPS]"),
+ ("நான் ஒரு படம் வரைஞ்சேன்", "[BIG]\U0001F3A8[/BIG] Wonderful! What did you draw? Tell me and I will imagine it with you. [CHIPS]It's an animal|It's my family|Something else[/CHIPS]"),
+ ("எனக்கு ஒரு நண்பன் வேணும்", "[BIG]\U0001F91D[/BIG] Friendships usually start small - sharing something, or asking someone what they like. Who sits near you at school? [CHIPS]Tips please|A story|Something else![/CHIPS]"),
+ ("நான் தம்பிக்கு கத்துக் கொடுத்தேன்", "[BIG]\U0001F31F[/BIG] Teaching someone else is one of the best ways to learn it properly yourself. What did you teach him? [CHIPS]Tell me more|Another fact|A game![/CHIPS]"),
+]
+for u, a in TAMIL_SCRIPT_SAFE:
+    EX.append((u, a))
+
+
 # ------------------------------------------------- AUTHORED SLICES (fan-out) ---
 # data/authored/*.jsonl are teaching rows written directly by Claude agents, one
 # curriculum slice each, then reviewed by a second independent agent whose brief was
