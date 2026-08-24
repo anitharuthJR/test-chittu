@@ -57,6 +57,7 @@ make the client too thin to matter.** Everything below serves that.
 | Offline | Workbox — app shell precached, turns network-only | 3G tolerance and installability without an app store. |
 | Speech | Web Speech API (ASR in, `speechSynthesis` out) | Phase 1 ships with honest microcopy; Phase 2 swaps our own child-speech ASR in behind the same port. |
 | Analytics | **None. No third-party SDK of any kind.** | §3: platform rules plus the DPDP profiling ban. This is a hard constraint, not a preference. |
+| Fonts | **Self-hosted WOFF2**, 72.7 KB for four families | The same constraint one row up: hotlinking `fonts.googleapis.com` sends every child's IP to a third party on every page load. Subset and axis-instanced; the Tamil brand mark costs 1.5 KB. A test fails if a font request ever leaves our origin. |
 | Budget | ≤ 100 KB JS gzipped for the chat shell; LCP < 2.5 s on a Moto-G-class device over 3G | Enforced in CI; a failing budget fails the build. **These are targets, not measurements** — GAP-08 records that nothing has ever run on the target hardware. Buy the phone in week one. |
 
 **Distribution.** Phase 1 ships as a **PWA**, not a store app. The deciding argument is
