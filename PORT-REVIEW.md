@@ -107,19 +107,34 @@ Unlike the prototype, **this backend has no existing seals to invalidate** — t
 cost of widening the digest is zero right now and rises with every sealed turn. If
 the chain is ever offered as legal-grade tamper evidence, 64 bits will not carry it.
 
-## 5. NEEDS A DECISION — `layer`, `prev` and `t` are outside the hash
+## 5. NEEDS A DECISION — `layer` and `t` are outside the hash
 
-The payload is `role + '|' + text`. `verify()` recomputes hashes but never checks
-`prev`, so a record whose `prev` field alone is edited still verifies as OK. The
-`layer` shown in the parent ledger can likewise be altered without breaking
-verification.
+**Corrected 2026-08-25, and narrowed.** An earlier version of this entry said the
+chain does not check `prev`, which is true of the stored FIELD and reads worse
+than the reality. `verifyRecords` recomputes from a RUNNING hash seeded at
+GENESIS, so the links genuinely are verified. `packages/seal/src/tamper.test.ts`
+demonstrates each case rather than asserting it in prose.
 
-Related: the `'|'` delimiter is unescaped, so `role='child', text='a|b'` hashes
-identically to any other split of `child|a|b` — the role is not cryptographically
-bound to the hash.
+**Caught today** — an edited message, a deleted middle record, two records
+swapped, and a record appended by someone who does not know the head. The chain
+is content- and order-tamper-evident, which is the main thing it claims.
+
+**Not caught** — and this is the decision:
+
+| Field | Consequence |
+|---|---|
+| `t` | A ledger offered as evidence of WHEN something was said does not currently evidence when it was said. Timestamps can be rewritten freely. |
+| `layer` | The parent dashboard renders it. It can be made to say a turn was handled by a layer that never touched it. |
+| stored `prev` | Ignored by verification, so it can disagree with the real link. A forensics problem: someone reading an export sees a chain that does not join up and a verifier that says it does. |
+
+The `'|'` delimiter is unescaped, but this is NOT exploitable as first written:
+`SealRole` is a four-value enum, so `child|a|b` has exactly one parse consistent
+with the type. Noting it as closed rather than leaving it as a live concern.
 
 Ported faithfully and locked by tests. Worth deciding before the ledger is used as
-evidence for anything.
+evidence for anything — and note that §4's 64-bit truncation is the more
+serious of the two, since it is an attack at ~2^32 work rather than an
+unauthenticated field.
 
 ## 6. NOTED — `route()`'s asymmetric side effects are not yet ported
 
