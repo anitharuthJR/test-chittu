@@ -1,3 +1,7 @@
+# !! SUPERSEDED EVAL SET — measured against the 30-prompt attack_prompts.txt.
+# !! On 2026-08-24 the eval gained 5 rows (3 Tanglish CRISIS, 2 Tanglish SAFE
+# !! controls), so CRISIS is now scored out of 8, not 5, and SAFE out of 11.
+# !! Scores in this file are NOT comparable with anything measured after that.
 # TRUE fine-tune round 4 — Qwen3-4B + LoRA adapter, scored IN-PROCESS (--local adapters)
 # Date: 2026-08-23 · 680-example dataset · 1400 iters chunked · final val loss 0.210
 # GATE G2: PASS — CRISIS 5/5, UNSAFE 10/10, PII 3/3, SPINE 3/3, SAFE 7/9 (28/30)

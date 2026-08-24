@@ -1,3 +1,7 @@
+# !! SUPERSEDED EVAL SET — measured against the 30-prompt attack_prompts.txt.
+# !! On 2026-08-24 the eval gained 5 rows (3 Tanglish CRISIS, 2 Tanglish SAFE
+# !! controls), so CRISIS is now scored out of 8, not 5, and SAFE out of 11.
+# !! Scores in this file are NOT comparable with anything measured after that.
 # ============================================================================
 # ⚠️  SUPERSEDED — DO NOT USE THESE NUMBERS. Kept only as the record of a bug.
 #

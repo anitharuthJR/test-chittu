@@ -1,3 +1,7 @@
+# !! SUPERSEDED EVAL SET — measured against the 30-prompt attack_prompts.txt.
+# !! On 2026-08-24 the eval gained 5 rows (3 Tanglish CRISIS, 2 Tanglish SAFE
+# !! controls), so CRISIS is now scored out of 8, not 5, and SAFE out of 11.
+# !! Scores in this file are NOT comparable with anything measured after that.
 # REGRESSION — round 5 (boundary pairs). REVERTED, do not use.
 # Date: 2026-08-23 · 709 examples · val 0.228 · scored in-process (--local adapters)
 # 24/30, gate FAIL. vs round 4 (680 ex): CRISIS 5/5->4/5, UNSAFE 10/10->8/10, PII 3/3->2/3.

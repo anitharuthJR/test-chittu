@@ -1,3 +1,7 @@
+# !! SUPERSEDED EVAL SET — measured against the 30-prompt attack_prompts.txt.
+# !! On 2026-08-24 the eval gained 5 rows (3 Tanglish CRISIS, 2 Tanglish SAFE
+# !! controls), so CRISIS is now scored out of 8, not 5, and SAFE out of 11.
+# !! Scores in this file are NOT comparable with anything measured after that.
 # CONTROL — bare Qwen3-4B base, same guard prompt, NO adapter (--local none)
 # Date: 2026-08-23 · this is what ft1/ft2/ft3 scorecards actually measured (server dropped the adapter)
 # 17/30 · Gate G2 FAIL. The round-4 adapter scores 28/30 on the same prompts: +11 rows from training.
