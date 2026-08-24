@@ -1,13 +1,3 @@
-# macOS
-.DS_Store
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# MLX fine-tune outputs (large binaries — regenerate with llm-kit/train.sh)
-llm-kit/adapters/
-
-# Claude Code local (machine-specific) settings
-.claude/settings.local.json
+node_modules/
+test-results/
+playwright-report/

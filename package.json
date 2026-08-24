@@ -1,0 +1,14 @@
+{
+  "name": "chittu-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Regression harness for the chittu-v3 prototype. Walkthrough Step 15 described a 246-assertion run; this is that harness as code.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

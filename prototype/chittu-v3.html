@@ -453,7 +453,13 @@ const CRISIS_MAIN={en:{explorer:"Thank you for telling me. That is very importan
   ta:"சொன்னதுக்கு நன்றி. இது ரொம்ப முக்கியம். 💛 நான் ப்ரோகிராம்தான் — இதுக்கு உண்மையான மனுஷங்க வேணும். இப்பவே நம்பற பெரியவங்ககிட்ட சொல்லு. இலவச உதவி: {L}. நீ தப்பே பண்ணல. 💛"};
 const CRISIS_SOFT={en:"I'm right here with you, and your grown-up has been told so real help is coming. 💛 While we wait, want to just sit together — maybe a calm story or some slow breathing like a sleepy sparrow?",
   ta:"நான் உன் கூடவே இருக்கேன், உன் பெரியவங்களுக்கு தெரிவிச்சாச்சு. 💛 அமைதியான கதை கேக்கலாமா, அல்லது மெதுவா மூச்சு விடலாமா?"};
-const BANNED_OUT=/(\b(shit|fuck|bitch|bastard|asshole|porn|nude|naked body)\b|i (love|miss) you|our (little )?secret|don'?t tell your|i'?m (real|alive)|i have feelings for|நான் உன்னை (லவ்|நேசிக்)|உயிருள்ளவன்)/i;
+/* L6 output filter. The attachment clause matches only when the SUBJECT is Chittu
+   (i/we), so third-party affection survives — "the people who actually love you are
+   around you" is what the identity spine itself says. Auxiliaries, adverbs, tense and
+   "u" are covered because the previous form caught only the two most literal phrasings
+   and let 14 of 16 attachment variants through, including "i will miss you" and every
+   form of "i need you" (Law 03: never claims to love/miss/need the child). */
+const BANNED_OUT=/(\b(shit|fuck|bitch|bastard|asshole|porn|nude|naked body)\b|\b(i|we)\b\s*(?:'|’)?(?:ll|ve|d)?(?:\s+(?:will|would|do|really|so|always|already|truly|honestly|still|very much))*\s+(?:love|loves|loved|miss|misses|missed|need|needs|needed)\s+(?:you|u)\b|our (little )?secret|don'?t tell your|i'?m (real|alive)|i have feelings for|நான் உன்னை (லவ்|நேசிக்)|உயிருள்ளவன்)/i;
 const FALLBACK={en:"My words got tangled in my beak! 🐦 Ask again, or pick a game?",ta:"என் வார்த்தைகள் அலகுல சிக்கிடுச்சு! 🐦 இன்னொரு தடவை கேளு?"};
 const MEM_CATS=['INTEREST','PET','HOBBY','FAVORITE','ACHIEVEMENT','LEARNING'];
 
