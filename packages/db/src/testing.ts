@@ -20,7 +20,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { createPgPool, wrapPglite, type DbPool } from './client';
+import { createPgPool, wrapPglite, type DbPool } from './client.js';
 
 export interface TestDb {
   readonly pool: DbPool;

@@ -34,8 +34,16 @@ export async function applyMigrations(
   }
 }
 
+/**
+ * How the PGlite module is obtained. Injectable for ONE reason: the interesting
+ * failure is "this image has no PGlite in it", and that is not reproducible in
+ * a test run where it is installed.
+ */
+export type PgliteLoader = () => Promise<typeof import('@electric-sql/pglite')>;
+
 export async function bootstrapDb(
   env: NodeJS.ProcessEnv = process.env,
+  loadPglite: PgliteLoader = () => import('@electric-sql/pglite'),
 ): Promise<Bootstrapped> {
   const keys = localKeyProvider(devMasterKeyFromEnv(env), env['NODE_ENV'] ?? 'dev');
   const url = env['DATABASE_URL'];
@@ -45,7 +53,23 @@ export async function bootstrapDb(
   if (env['NODE_ENV'] === 'production') {
     throw new Error('DATABASE_URL is required in production');
   }
-  const { PGlite } = await import('@electric-sql/pglite');
+  // PGlite is a devDependency, so it is absent from the production image. That
+  // is correct — a WASM Postgres has no business shipping to production — but
+  // reaching this line in such an image produced a bare ERR_MODULE_NOT_FOUND
+  // stack, which names the package and not the actual mistake: no DATABASE_URL.
+  // Anything else that goes wrong is re-thrown untouched.
+  let PGlite;
+  try {
+    ({ PGlite } = await loadPglite());
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'ERR_MODULE_NOT_FOUND') throw e;
+    throw new Error(
+      'no DATABASE_URL, and @electric-sql/pglite is not installed in this '
+      + 'environment — which is what a production image looks like, since PGlite '
+      + 'is a devDependency. Set DATABASE_URL to a real Postgres.',
+      { cause: e },
+    );
+  }
   const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
   const pg = await PGlite.create({ extensions: { pgcrypto } });
   await applyMigrations((sql) => pg.exec(sql), true);

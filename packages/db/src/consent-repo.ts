@@ -19,8 +19,8 @@ import type { Band, Country } from '@chittu/contracts';
 import type {
   ConsentMethod, ConsentRecord, ConsentScope, VerificationEvidence,
 } from '@chittu/consent';
-import type { Db, DbPool } from './client';
-import { encrypt, fingerprint, type KeyProvider } from './crypto';
+import type { Db, DbPool } from './client.js';
+import { encrypt, fingerprint, type KeyProvider } from './crypto.js';
 
 export interface FamilyDraft {
   readonly parentName: string;
@@ -229,7 +229,7 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
           WHERE ch.id = $1`, [childId]);
       const row = r.rows[0];
       if (!row) return '';
-      const { decrypt } = await import('./crypto');
+      const { decrypt } = await import('./crypto.js');
       const dek = await keys.unwrap(toBuffer(row.wrapped_dek), row.kms_key_arn);
       return decrypt(toBuffer(row.first_name_enc), dek);
     },

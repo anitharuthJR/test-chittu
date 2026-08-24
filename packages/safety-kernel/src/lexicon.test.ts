@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GuardKind } from '@chittu/contracts';
-import { L1_ORDER, LEX, scan } from './lexicon';
+import { L1_ORDER, LEX, scan } from './lexicon.js';
 
 const expectKind = (text: string, kind: GuardKind): void => {
   expect(scan(text)).toBe(kind);

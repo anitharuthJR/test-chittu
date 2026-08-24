@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseClassifier, ClassifierParseError, CLASSIFIER_SYSTEM, CLASSIFIER_PROMPT_VERSION,
-} from './classifier';
+} from './classifier.js';
 
 const ok = (label: string, extra = '') =>
   `{"label":"${label}","memory":null,"assist":null${extra}}`;

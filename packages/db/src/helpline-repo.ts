@@ -17,7 +17,7 @@
  * minutes instead of a release cycle. See `resolveHelplines`.
  */
 
-import type { Db, DbPool } from './client';
+import type { Db, DbPool } from './client.js';
 
 export type HelplineStatus = 'verified' | 'stale' | 'P0_WRONG_NUMBER';
 

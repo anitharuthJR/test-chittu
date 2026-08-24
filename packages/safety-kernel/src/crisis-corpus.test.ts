@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { LEX } from './lexicon';
+import { LEX } from './lexicon.js';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const CORPUS = join(REPO, 'safety-corpus', 'crisis-phrases.tsv');

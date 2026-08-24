@@ -7,8 +7,8 @@ import {
   SUBJECT_PED,
   detectSubject,
   subjectPedagogyLine,
-} from './index';
-import type { Subject } from './index';
+} from './index.js';
+import type { Subject } from './index.js';
 
 describe('detection order (REGRESSION-LOCKED)', () => {
   // CLAUDE.md: languages BEFORE science, because "how do you say…" must not

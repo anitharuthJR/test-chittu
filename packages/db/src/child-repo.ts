@@ -10,9 +10,9 @@
 
 import type { Band, Memory, MemoryCategory, Mode } from '@chittu/contracts';
 import { MEMORY_CATEGORIES } from '@chittu/contracts';
-import type { Db, DbPool } from './client';
-import { encrypt, decrypt, fingerprint, type KeyProvider } from './crypto';
-import { toBuffer } from './consent-repo';
+import type { Db, DbPool } from './client.js';
+import { encrypt, decrypt, fingerprint, type KeyProvider } from './crypto.js';
+import { toBuffer } from './consent-repo.js';
 
 /** Default conversation retention. Architecture doc §6.3 — a proposal, not a ruling. */
 export const MESSAGE_TTL_DAYS = 30;

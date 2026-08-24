@@ -1,85 +1,115 @@
 # chittu-api — architecture §14's first container.
 #
-# TWO DECISIONS WORTH ARGUING WITH, both recorded rather than buried.
+# Four stages: deps (full, for the compiler) -> build (tsc emit) ->
+# prod-deps (runtime tree, no devDependencies) -> runtime (distroless).
 #
-# 1. IT RUNS TYPESCRIPT VIA tsx, IT DOES NOT COMPILE.
-#    Every workspace package points `main` at `src/index.ts`; nothing in this
-#    repo has a build script or emits JavaScript. Adding tsc emit means changing
-#    main/exports in nine packages and re-proving that vitest, tsx and the
-#    published entry points all still resolve — a real refactor, and not the one
-#    that unblocks a container today.
-#    The cost is honest: a transpiler in the runtime image, and a slower cold
-#    start. Before production this should become a build stage that emits to
-#    dist/ and a runtime stage with neither tsx nor sources. Tracked, not solved.
+# THE RUNTIME IMAGE CONTAINS NO TYPESCRIPT, NO SOURCES AND NO SHELL.
+# The first version of this file ran src/*.ts through tsx because nothing in the
+# repo emitted JavaScript. That is now fixed at the root: every relative import
+# in packages/ carries an explicit `.js`, which is what Node's ESM resolver
+# requires and what `moduleResolution: nodenext` demands of an emitted .d.ts.
+# Without it `export * from './client'` resolves under vitest and fails under
+# node — so the 1054-test suite stayed green while the container could not boot.
+# scripts/smoke-dist.mjs exists to catch exactly that, because the test suite
+# structurally cannot: it resolves @chittu/* through the `development` export
+# condition, i.e. the sources, not the artifact.
 #
-# 2. node:22-slim, NOT distroless — for now.
-#    §14 says "distroless where possible". tsx shells out and wants a real libc
-#    and a package manager present at install time; distroless has neither.
-#    Once (1) is done and the runtime is plain node + dist/, distroless becomes
-#    straightforward and should happen in the same change.
-#
-# Build from the REPO ROOT, not this directory — the build context needs the
-# workspace:
+# Build from the REPO ROOT — the context needs the workspace:
 #
 #   docker build -f apps/api/Dockerfile -t chittu-api .
 
-# ---------------------------------------------------------------- deps ------
-FROM node:22-slim AS deps
+# ---------------------------------------------------------------- base ------
+# Manifests only. BOTH dependency trees below derive from this, so the --prod
+# install starts from an empty node_modules and never has to purge a dev tree —
+# pnpm refuses that without a TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY)
+# and the usual workaround, CI=true, silences a prompt that is there for a
+# reason. Two clean installs from one lockfile is the honest shape.
+FROM node:22-slim AS base
 
 # corepack ships with node and pins pnpm from packageManager, so the image and
 # the laptop resolve the identical dependency tree.
 RUN corepack enable
-
 WORKDIR /app
 
 # Manifests only, so a source edit does not invalidate the dependency layer.
-# Every workspace member's package.json is needed for pnpm to build the graph.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/api/package.json          apps/api/
-COPY apps/web/package.json          apps/web/
-COPY packages/consent/package.json      packages/consent/
-COPY packages/contracts/package.json    packages/contracts/
-COPY packages/db/package.json           packages/db/
-COPY packages/maths-engine/package.json packages/maths-engine/
-COPY packages/pedagogy/package.json     packages/pedagogy/
-COPY packages/pipeline/package.json     packages/pipeline/
+COPY apps/api/package.json               apps/api/
+COPY packages/consent/package.json       packages/consent/
+COPY packages/contracts/package.json     packages/contracts/
+COPY packages/db/package.json            packages/db/
+COPY packages/disengagement/package.json packages/disengagement/
+COPY packages/maths-engine/package.json  packages/maths-engine/
+COPY packages/pedagogy/package.json      packages/pedagogy/
+COPY packages/pipeline/package.json      packages/pipeline/
 COPY packages/safety-kernel/package.json packages/safety-kernel/
-COPY packages/seal/package.json         packages/seal/
+COPY packages/seal/package.json          packages/seal/
 
+# Store location only — NO install here. An install (or even `pnpm fetch`) in
+# this stage leaves a node_modules/.modules.yaml behind, and the --prod install
+# downstream then treats it as a tree to purge and stops for a TTY that a build
+# does not have.
+RUN pnpm config set store-dir /pnpm/store
+
+# ---------------------------------------------------------------- deps ------
+# The full tree, devDependencies included: tsc lives there.
+FROM base AS deps
+WORKDIR /app
 # --frozen-lockfile so the image can never quietly resolve a different tree than
-# CI reviewed. --ignore-scripts because postinstall in a transitive dependency is
-# arbitrary code running as root at build time.
+# the local verify run reviewed. --ignore-scripts because a postinstall in a
+# transitive dependency is arbitrary code running as root at build time.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
- && pnpm install --frozen-lockfile --ignore-scripts \
-      --filter @chittu/api... --filter '!@chittu/web'
+    pnpm install --frozen-lockfile --ignore-scripts --filter @chittu/api...
+
+# --------------------------------------------------------------- build ------
+FROM deps AS build
+WORKDIR /app
+COPY packages ./packages
+COPY apps/api ./apps/api
+COPY tsconfig.base.json ./
+# Topological: pnpm orders workspace builds by dependency graph, so @chittu/db
+# is emitted before apps/api compiles against its generated .d.ts.
+RUN pnpm -r --filter @chittu/api... build
+
+# ----------------------------------------------------------- prod-deps ------
+# A second, DEVELOPMENT-FREE dependency tree. Resolved from the same lockfile,
+# so it is a subset of what was built against and never a different resolution.
+FROM base AS prod-deps
+WORKDIR /app
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --ignore-scripts --prod --filter @chittu/api...
 
 # ------------------------------------------------------------- runtime ------
-FROM node:22-slim AS runtime
-
-RUN corepack enable
+# Distroless: no shell, no package manager, no libc tooling — nothing an
+# attacker who reaches RCE can pivot through. Possible only because the runtime
+# is now plain node + dist/.
+FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 ENV NODE_ENV=production
-
-# Non-root. node:22-slim ships a `node` user (uid 1000) already.
 WORKDIR /app
 
-# The WHOLE tree from deps, not just the root node_modules. pnpm puts each
-# workspace link in that package's own node_modules — packages/pipeline resolves
-# @chittu/contracts through packages/pipeline/node_modules/@chittu/contracts, a
-# symlink to ../../contracts. Copying only /app/node_modules produced exactly one
-# error, ERR_MODULE_NOT_FOUND for @chittu/contracts, and it is worth knowing that
-# is what it means rather than reaching for `pnpm install` in the runtime stage.
-COPY --from=deps --chown=node:node /app ./
+# The WHOLE tree, not just the root node_modules. pnpm puts each workspace link
+# in that package's own node_modules — packages/pipeline resolves @chittu/contracts
+# through packages/pipeline/node_modules/@chittu/contracts, a symlink to
+# ../../contracts. Copying only /app/node_modules produced exactly one error,
+# ERR_MODULE_NOT_FOUND for @chittu/contracts, and it is worth knowing that is
+# what it means rather than reaching for an install in the runtime stage.
+COPY --from=prod-deps --chown=nonroot:nonroot /app ./
 
-# Sources go on top. COPY MERGES into an existing directory rather than
-# replacing it, so the node_modules above survive; .dockerignore keeps any local
-# node_modules out of the context so there is nothing to clobber them with.
-COPY --chown=node:node packages ./packages
-COPY --chown=node:node apps/api ./apps/api
+# Compiled output only. No .ts anywhere in this image.
+COPY --from=build --chown=nonroot:nonroot /app/packages/consent/dist       ./packages/consent/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/contracts/dist     ./packages/contracts/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/db/dist            ./packages/db/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/disengagement/dist ./packages/disengagement/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/maths-engine/dist  ./packages/maths-engine/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/pedagogy/dist      ./packages/pedagogy/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/pipeline/dist      ./packages/pipeline/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/safety-kernel/dist ./packages/safety-kernel/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/seal/dist          ./packages/seal/dist
+COPY --from=build --chown=nonroot:nonroot /app/apps/api/dist               ./apps/api/dist
+
 # Migrations are read at boot by applyMigrations() — see db/README.md.
-COPY --chown=node:node db/migrations ./db/migrations
+COPY --chown=nonroot:nonroot db/migrations ./db/migrations
 
-USER node
+USER nonroot
 
 # 0.0.0.0 is set HERE and nowhere else. main.ts defaults to loopback precisely
 # so that a laptop never publishes its API to the local network by accident.
@@ -91,14 +121,15 @@ ENV LOG_DIR=""
 
 EXPOSE 8080
 
-# Talks to the app rather than the process table: a listening socket that
-# cannot reach Postgres is not healthy, and /health does check the database.
+# Talks to the app rather than the process table: a listening socket that cannot
+# reach Postgres is not healthy, and /health does check the database. Absolute
+# node path because distroless has no shell and no PATH lookup for CMD.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>{if(!r.ok)process.exit(1);return r.json()}).then(j=>process.exit(j.status==='ok'?0:1)).catch(()=>process.exit(1))"
+  CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>{if(!r.ok)process.exit(1);return r.json()}).then(j=>process.exit(j.status==='ok'?0:1)).catch(()=>process.exit(1))"]
 
 WORKDIR /app/apps/api
 
-# No init shim and no shell form: node is PID 1 and receives SIGTERM directly,
-# which is what the graceful shutdown in main.ts is waiting for. A shell form
-# would make /bin/sh PID 1 and swallow the signal.
-CMD ["node", "--import", "tsx", "src/main.ts"]
+# The distroless image's ENTRYPOINT is node, so CMD is just the script. No shell
+# form and no init shim: node is PID 1 and receives SIGTERM directly, which is
+# what the graceful shutdown in main.ts is waiting for.
+CMD ["dist/main.js"]

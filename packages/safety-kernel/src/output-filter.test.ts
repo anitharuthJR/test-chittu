@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { L6_LAYER, passesOutputFilter, stripControlTokens } from './output-filter';
+import { L6_LAYER, passesOutputFilter, stripControlTokens } from './output-filter.js';
 
 /**
  * Regression lock for the L6 filter. Every expectation here was taken from the

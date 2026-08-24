@@ -14,7 +14,7 @@ import {
   assertActiveConsent, verifySeal, sealOf, runConsentFlow, ConsentError,
   selectAdapter, methodsFor, offersFor, devStubAdapter, signedFormReviewAdapter,
   ConsentAdapterError, type ConsentDraft,
-} from './index';
+} from './index.js';
 
 const draft: ConsentDraft = {
   parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',

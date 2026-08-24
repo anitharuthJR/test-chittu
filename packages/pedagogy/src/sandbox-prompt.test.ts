@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { sandboxSystemPrompt, SANDBOX_PROMPT_VERSION } from './sandbox-prompt';
+import { sandboxSystemPrompt, SANDBOX_PROMPT_VERSION } from './sandbox-prompt.js';
 
 const ctx = {
   band: 'builder' as const, kid: 'Meera', board: 'CBSE',

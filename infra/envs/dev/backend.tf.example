@@ -1,0 +1,21 @@
+# Copy to backend.tf and fill in, AFTER creating the bucket and table by hand.
+#
+# Absent by default so `terraform init -backend=false` works with no AWS account
+# — which is how every check in this repository has been run so far.
+#
+# One backend per environment (§14). Never a shared state file: a dev apply that
+# can lock or corrupt prod state is not a separate environment.
+
+terraform {
+  backend "s3" {
+    bucket = "chittu-tfstate-dev"
+    key    = "envs/dev/terraform.tfstate"
+    region = "ap-south-1"
+
+    # Locking. Without it, two applies can interleave and leave state describing
+    # infrastructure that never existed.
+    dynamodb_table = "chittu-tfstate-lock"
+
+    encrypt = true
+  }
+}

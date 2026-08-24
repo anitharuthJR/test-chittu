@@ -14,7 +14,7 @@
  */
 
 import type { Band } from '@chittu/contracts';
-import { BANDS, boardGuidance, subjectPedagogyLine, type Subject } from './index';
+import { BANDS, boardGuidance, subjectPedagogyLine, type Subject } from './index.js';
 
 /** Bump when the wording changes, so `RouteDecision.promptVersion` means something. */
 export const SANDBOX_PROMPT_VERSION = 'sandbox-v1';

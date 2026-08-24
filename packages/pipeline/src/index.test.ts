@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { createChain, type SealChain } from '@chittu/seal';
 import type { ClassifierOutcome } from '@chittu/contracts';
-import { runTurn, GUARD_EFFECTS, SAFE_FALLBACK, type SessionState, type PipelinePorts } from './index';
+import { runTurn, GUARD_EFFECTS, SAFE_FALLBACK, type SessionState, type PipelinePorts } from './index.js';
 
 interface Harness {
   readonly ports: PipelinePorts;

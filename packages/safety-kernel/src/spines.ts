@@ -12,7 +12,7 @@
  */
 
 import type { Band, Country, GuardKind } from '@chittu/contracts';
-import { helplineText } from './helplines';
+import { helplineText } from './helplines.js';
 
 /**
  * Guard kinds whose reply lives in SPINE. `crisis` has its own two-stage script

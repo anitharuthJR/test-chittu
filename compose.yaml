@@ -72,7 +72,9 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://chittu:chittu@postgres-dev:5432/chittu
-    command: ['node', '--import', 'tsx', 'src/migrate.ts']
+    # Just the script: the distroless runtime's ENTRYPOINT is already node, and
+    # there is no tsx and no src/ in the image any more.
+    command: ['dist/migrate.js']
     depends_on:
       postgres-dev:
         condition: service_healthy

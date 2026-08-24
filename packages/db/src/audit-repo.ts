@@ -14,7 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { Db, DbPool } from './client';
+import type { Db, DbPool } from './client.js';
 
 export const GENESIS = 'GENESIS';
 

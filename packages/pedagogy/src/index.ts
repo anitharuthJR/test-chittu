@@ -164,5 +164,5 @@ export const BOARDS: Readonly<Record<string, string>> = Object.freeze({
 export const boardGuidance = (board: string): string =>
   BOARDS[board] ?? BOARDS['General']!;
 
-export { sandboxSystemPrompt, SANDBOX_PROMPT_VERSION } from './sandbox-prompt';
-export type { SandboxPromptContext } from './sandbox-prompt';
+export { sandboxSystemPrompt, SANDBOX_PROMPT_VERSION } from './sandbox-prompt.js';
+export type { SandboxPromptContext } from './sandbox-prompt.js';

@@ -6,7 +6,7 @@
  * future fix has to be a decision rather than an accident.
  */
 import { describe, expect, it } from 'vitest';
-import type { LessonContext, MathContext, MathOp } from './index';
+import type { LessonContext, MathContext, MathOp } from './index.js';
 import {
   askPractice,
   buildMathLesson,
@@ -20,7 +20,7 @@ import {
   STEPS_SEPARATOR,
   SYM,
   tryMath,
-} from './index';
+} from './index.js';
 
 const explorer: MathContext = { band: 'explorer', board: 'General', kid: 'Meera' };
 const builder: MathContext = { band: 'builder', board: 'General', kid: 'Meera' };

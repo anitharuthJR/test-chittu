@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BANDS, COUNTRIES, GUARD_KINDS } from '@chittu/contracts';
 import type { Band } from '@chittu/contracts';
-import { CRISIS_MAIN, CRISIS_SOFT, SPINE, crisisMain, spineFor } from './spines';
-import type { SpineKind } from './spines';
-import { helplineText } from './helplines';
+import { CRISIS_MAIN, CRISIS_SOFT, SPINE, crisisMain, spineFor } from './spines.js';
+import type { SpineKind } from './spines.js';
+import { helplineText } from './helplines.js';
 
 /**
  * Scripted safety copy is asserted longhand, character for character. Deriving

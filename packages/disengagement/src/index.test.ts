@@ -16,7 +16,7 @@
  * last sessions went, and the corpus of that is metadata only — never content.
  */
 import { describe, expect, it } from 'vitest';
-import { classifyChild, cohortSignal, type SessionSummary } from './index';
+import { classifyChild, cohortSignal, type SessionSummary } from './index.js';
 
 const DAY = 86_400_000;
 /** Fixed clock: these tests must not depend on when they run. */

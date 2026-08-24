@@ -13,7 +13,7 @@
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import pino from 'pino';
-import { buildLoggerOptions, REDACTED, SENSITIVE_PATHS } from './logging';
+import { buildLoggerOptions, REDACTED, SENSITIVE_PATHS } from './logging.js';
 
 /**
  * Drive the REAL pino, not a re-implementation of its redaction.

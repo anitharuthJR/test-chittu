@@ -8,6 +8,12 @@ import preact from '@preact/preset-vite';
  * change what the API tests are testing.
  */
 export default defineConfig({
+  // Packages expose conditional exports: `development` -> src/*.ts, default ->
+  // dist/*.js so the container can run compiled output without tsx. Vitest must
+  // ask for `development`, or the suite silently starts testing the build
+  // artefact instead of the TypeScript, and a stale dist/ would pass while the
+  // source was broken.
+  resolve: { conditions: ['development'] },
   plugins: [preact()],
   test: {
     name: 'web',

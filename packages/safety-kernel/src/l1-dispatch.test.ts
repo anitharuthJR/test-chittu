@@ -11,8 +11,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { GUARD_KINDS } from '@chittu/contracts';
-import { scan, L1_ORDER, L1_PATTERNS, LEX, PROFANITY } from './lexicon';
-import { PROFANITY_REPLY } from './spines';
+import { scan, L1_ORDER, L1_PATTERNS, LEX, PROFANITY } from './lexicon.js';
+import { PROFANITY_REPLY } from './spines.js';
 
 describe('L1 dispatch covers every guard the prototype dispatches', () => {
   it('runs six guards, not the five in LEX', () => {

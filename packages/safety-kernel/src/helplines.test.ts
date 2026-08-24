@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COUNTRIES } from '@chittu/contracts';
 import type { Country } from '@chittu/contracts';
-import { REGISTRY, helplineText } from './helplines';
+import { REGISTRY, helplineText } from './helplines.js';
 
 /**
  * These expectations are written out longhand rather than derived from REGISTRY.

@@ -20,7 +20,21 @@ node_modules/
 test-results/
 playwright-report/
 live-harness.log
-apps/web/dist/
+# Compiled output. Every workspace package now emits to dist/ and the container
+# builds it in a Docker stage, so a committed dist/ could only ever be a stale
+# copy that disagrees with src/ — and the export map points production AT it.
+dist/
+*.tsbuildinfo
 
 # Application logs (dev). Production ships stdout to a log group — see architecture §14.
 logs/
+
+# Terraform. Provider binaries are hundreds of MB; lock files ARE committed
+# (they pin provider versions), backend.tf and *.tfvars are not (they name real
+# accounts). Nothing here has ever been applied — see infra/README.md.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+infra/envs/*/backend.tf
+infra/envs/*/terraform.tfvars

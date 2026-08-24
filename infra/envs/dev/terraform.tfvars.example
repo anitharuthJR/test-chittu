@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars. No secrets here — provider_key_secret_arn is an ARN,
+# not a key, and the value is resolved by ECS at task start.
+
+region             = "ap-south-1"
+availability_zones = ["ap-south-1a", "ap-south-1b"]
+
+# Digest-pinned in staging and prod. A mutable tag means the task definition
+# does not describe what is running.
+image = "<account>.dkr.ecr.ap-south-1.amazonaws.com/chittu-api:dev"
+
+certificate_arn = "arn:aws:acm:ap-south-1:<account>:certificate/<id>"
+
+# Null, and the service will refuse to start — see README. Set it to a real ARN
+# to run dev against a live provider.
+provider_key_secret_arn = null

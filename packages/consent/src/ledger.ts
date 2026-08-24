@@ -17,7 +17,7 @@ import type { Band, Country } from '@chittu/contracts';
 import { REGISTRY } from '@chittu/safety-kernel';
 import type {
   ConsentAdapter, ConsentDraft, ConsentMethod, VerificationEvidence,
-} from './adapters';
+} from './adapters.js';
 
 export type ConsentStatus =
   | 'draft' | 'verifying' | 'active' | 'revoked' | 'expired' | 'superseded';

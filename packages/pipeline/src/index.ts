@@ -41,10 +41,10 @@ export interface SealAppender {
     readonly text: string;
   }): Promise<unknown>;
 }
-import { GUARD_EFFECTS } from './guards';
+import { GUARD_EFFECTS } from './guards.js';
 
-export { GUARD_EFFECTS } from './guards';
-export type { GuardEffect } from './guards';
+export { GUARD_EFFECTS } from './guards.js';
+export type { GuardEffect } from './guards.js';
 
 // ---------------------------------------------------------------------------
 // State

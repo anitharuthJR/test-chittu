@@ -15,7 +15,7 @@ import {
   withChildScope, localKeyProvider, encrypt, decrypt, fingerprint, createTestDb,
   CryptoError, auditRepo, consentRepo, childRepo, chainHash, GENESIS,
   type DbPool, type FamilyDraft,
-} from './index';
+} from './index.js';
 
 let pool: DbPool;
 let db: Awaited<ReturnType<typeof createTestDb>>;
