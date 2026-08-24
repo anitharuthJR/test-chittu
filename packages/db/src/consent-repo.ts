@@ -1,6 +1,12 @@
 /**
  * The consent ledger, persisted.
  *
+ * Reads take a `Db` rather than closing over the pool. That is not ceremony:
+ * a repository that reads from the pool while its caller holds a transaction
+ * takes a SECOND connection — which on a single-connection driver deadlocks, and
+ * on a real pool silently reads a different snapshot than the one being written.
+ * Passing the handle makes "which transaction is this in?" impossible to fudge.
+ *
  * Everything a child has exists downstream of a row here, so this file is the
  * one to read when asking "could a session exist without consent?". The answer
  * is enforced in three places that must all agree: `assertActiveConsent` in
@@ -182,23 +188,23 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
      * revoked or superseded one cannot be found here even if the caller still
      * holds the string.
      */
-    async findByToken(token: string): Promise<StoredConsent | null> {
+    async findByToken(db: Db, token: string): Promise<StoredConsent | null> {
       const indexKey = await keys.indexKey();
-      const r = await pool.query<ConsentRow & { child_id: string; parent_id: string }>(
+      const r = await db.query<ConsentRow & { child_id: string; parent_id: string }>(
         `SELECT c.*, c.child_id, c.parent_id FROM consent_record c
           WHERE c.token_hash = $1 AND c.status = 'active'`,
         [tokenHash(token, indexKey)]);
       const row = r.rows[0];
       if (!row) return null;
-      const name = await this.childName(row.child_id);
+      const name = await this.childName(db, row.child_id);
       return {
         consentId: row.id, childId: row.child_id, parentId: row.parent_id,
         record: rowToRecord(row, name),
       };
     },
 
-    async byId(consentId: string): Promise<StoredConsent | null> {
-      const r = await pool.query<ConsentRow & { child_id: string; parent_id: string }>(
+    async byId(db: Db, consentId: string): Promise<StoredConsent | null> {
+      const r = await db.query<ConsentRow & { child_id: string; parent_id: string }>(
         `SELECT c.*, c.child_id, c.parent_id FROM consent_record c WHERE c.id = $1`,
         [consentId]);
       const row = r.rows[0];
@@ -208,7 +214,7 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
       // point of keeping the row — so a shredded name yields '' rather than
       // making the record unreadable.
       let name = '';
-      try { name = await this.childName(row.child_id); } catch { name = ''; }
+      try { name = await this.childName(db, row.child_id); } catch { name = ''; }
       return {
         consentId: row.id, childId: row.child_id, parentId: row.parent_id,
         record: rowToRecord(row, name),
@@ -216,8 +222,8 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
     },
 
     /** Decrypts the child's first name. Needs the child's own DEK. */
-    async childName(childId: string): Promise<string> {
-      const r = await pool.query<{ first_name_enc: Buffer; wrapped_dek: Buffer; kms_key_arn: string }>(
+    async childName(db: Db, childId: string): Promise<string> {
+      const r = await db.query<{ first_name_enc: Buffer; wrapped_dek: Buffer; kms_key_arn: string }>(
         `SELECT ch.first_name_enc, k.wrapped_dek, k.kms_key_arn
            FROM child ch JOIN child_data_key k ON k.child_id = ch.id
           WHERE ch.id = $1`, [childId]);
@@ -248,10 +254,10 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
 
     // ---- PIN ------------------------------------------------------------
 
-    async pinFor(parentId: string): Promise<{
+    async pinFor(db: Db, parentId: string): Promise<{
       hash: string; failedAttempts: number; lockedUntil: number | null;
     } | null> {
-      const r = await pool.query<{
+      const r = await db.query<{
         pin_hash: string; failed_attempts: number; locked_until: string | null;
       }>(`SELECT pin_hash, failed_attempts, locked_until FROM parent_pin WHERE parent_id = $1`,
         [parentId]);

@@ -18,6 +18,22 @@ import type { Db, DbPool } from './client';
 
 export const GENESIS = 'GENESIS';
 
+/**
+ * Each session's chain starts from its OWN genesis.
+ *
+ * A plain shared 'GENESIS' looks harmless and is not: two sessions whose first
+ * turn is the same text produce the same payload hash from the same previous
+ * hash, so they produce the SAME record hash — and `UNIQUE (hash)` rejects the
+ * second one. Two children asking "why is the sky blue" first is not an edge
+ * case; it is Tuesday.
+ *
+ * Binding the session into the genesis also means a record cannot be lifted from
+ * one child's chain and dropped into another's: it would no longer verify.
+ */
+export function genesisFor(sessionId: string): string {
+  return `${GENESIS}|${sessionId}`;
+}
+
 export interface AuditAppend {
   readonly sessionId: string;
   readonly role: 'child' | 'chittu' | 'system';
@@ -78,7 +94,7 @@ export function auditRepo(pool: DbPool) {
         `SELECT seq, hash FROM audit_event
           WHERE session_id = $1 ORDER BY seq DESC LIMIT 1`, [e.sessionId]);
 
-      const prevHash = head.rows[0]?.hash ?? GENESIS;
+      const prevHash = head.rows[0]?.hash ?? genesisFor(e.sessionId);
       const seq = head.rows[0] ? head.rows[0].seq + 1 : 0;
       const { payloadHash, hash } = chainHash(prevHash, e.role, e.text);
 
@@ -107,7 +123,7 @@ export function auditRepo(pool: DbPool) {
       }>(`SELECT seq, role, payload_hash, prev_hash, hash FROM audit_event
            WHERE session_id = $1 ORDER BY seq ASC`, [sessionId]);
 
-      let prev = GENESIS;
+      let prev = genesisFor(sessionId);
       for (const [i, row] of r.rows.entries()) {
         if (row.seq !== i) return { ok: false, records: r.rows.length, brokenAt: i };
         if (row.prev_hash !== prev) {
@@ -125,7 +141,7 @@ export function auditRepo(pool: DbPool) {
       const r = await pool.query<{ hash: string }>(
         `SELECT hash FROM audit_event WHERE session_id = $1 ORDER BY seq DESC LIMIT 1`,
         [sessionId]);
-      return r.rows[0]?.hash ?? GENESIS;
+      return r.rows[0]?.hash ?? genesisFor(sessionId);
     },
 
     async size(sessionId: string): Promise<number> {

@@ -240,6 +240,19 @@ CREATE TABLE session (
   device_class   text,                           -- 'lite','standard' — informs Lite mode
   msg_count      integer NOT NULL DEFAULT 0,
   spine_count    integer NOT NULL DEFAULT 0,
+
+  -- Transient pipeline state that outlives a request but not the session: the
+  -- armed maths practice question, coarse topic labels, assist notes, the last
+  -- detected subject, and the classifier's 3-message rolling window.
+  --
+  -- The rolling window is the uncomfortable part and is flagged rather than
+  -- hidden: for a `thinker` it is the ONE place a teen's words are written down,
+  -- because `message.body_enc` refuses them. Without it the classifier loses its
+  -- window for exactly the band whose turns most need context. It is encrypted
+  -- under the child's DEK, lives only as long as the session, and dies with the
+  -- crypto-shred — but it is still a teen's words at rest, and Chamber II should
+  -- decide whether that trade is the right one.
+  runtime_enc    bytea,
   CONSTRAINT unlock_needs_parent
     CHECK (unlocked_at IS NULL OR unlocked_by IS NOT NULL)
 );
@@ -337,7 +350,16 @@ CREATE TABLE audit_event (
   seq          integer NOT NULL,
   ts           timestamptz NOT NULL DEFAULT now(),
   role         msg_role NOT NULL,
-  layer        pipeline_layer NOT NULL,
+  -- TEXT, not the pipeline_layer enum, and that is a correction rather than a
+  -- relaxation. The prototype seals the human-readable TRACE LABEL — "MATH
+  -- ENGINE · deterministic + pedagogy (CPA)", "SCRIPTED SPINE (Law 03/04)" —
+  -- because that string is what the parent's ledger displays. Typing this as
+  -- the enum assumed the seal carried a machine-readable layer, and the port
+  -- proved otherwise the first time a turn ran.
+  --
+  -- The machine-readable walk is not lost: `message.trace` carries the ordered
+  -- `layers` array. One column, one job.
+  layer        text NOT NULL,
   payload_hash text NOT NULL,        -- SHA-256 of role|text — never the text
   prev_hash    text NOT NULL,        -- 'GENESIS' for seq 0
   hash         text NOT NULL,        -- SHA-256(prev|payload)

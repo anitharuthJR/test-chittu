@@ -27,7 +27,20 @@ import {
 } from '@chittu/safety-kernel';
 import { mathTurn, practiceStep, type MathPractice } from '@chittu/maths-engine';
 import { detectSubject, type Subject } from '@chittu/pedagogy';
-import type { SealChain } from '@chittu/seal';
+/**
+ * The pipeline appends to the chain and never reads it back, so it depends on
+ * appending alone. `SealChain`'s read methods are synchronous, which an
+ * in-memory chain can satisfy and a database cannot — narrowing the port here is
+ * what lets the same pipeline run against either without making every caller
+ * await a `size()`.
+ */
+export interface SealAppender {
+  append(event: {
+    readonly role: 'system' | 'chittu' | 'child' | 'parent';
+    readonly layer: string;
+    readonly text: string;
+  }): Promise<unknown>;
+}
 import { GUARD_EFFECTS } from './guards';
 
 export { GUARD_EFFECTS } from './guards';
@@ -65,7 +78,7 @@ export interface SandboxInput {
 export interface PipelinePorts {
   classify(text: string, history: SessionState['history']): Promise<ClassifierOutcome>;
   generate(input: SandboxInput): Promise<string>;
-  seal: SealChain;
+  seal: SealAppender;
   now(): string;
   newId(): string;
 }

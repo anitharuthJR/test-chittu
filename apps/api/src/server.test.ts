@@ -6,10 +6,15 @@
  * page; now it is behind an endpoint, so the same invariants are checked by
  * counting what the endpoint does — and, crucially, what it does NOT do.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
+import { PGlite } from '@electric-sql/pglite';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import { randomBytes } from 'node:crypto';
+import { wrapPglite, localKeyProvider, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
+import { applyMigrations } from './db-bootstrap.js';
 import type { ProviderRouter } from './providers.js';
 
 interface Counting extends ProviderRouter {
@@ -33,10 +38,23 @@ function countingRouter(): Counting {
 
 let app: FastifyInstance;
 let router: Counting;
+let pool: DbPool;
+let pg: PGlite;
+const keys = localKeyProvider(randomBytes(32), 'dev');
 
+// A fresh database per FILE, not per test: migrating costs a second or two, and
+// every fixture below uses a distinct parent email so rows cannot collide.
+beforeAll(async () => {
+  pg = await PGlite.create({ extensions: { pgcrypto } });
+  await applyMigrations((sql) => pg.exec(sql), true);
+  await pg.exec(`INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);
+  pool = wrapPglite(pg as never);
+}, 180_000);
+
+let seq = 0;
 beforeEach(async () => {
   router = countingRouter();
-  app = buildServer({ router });
+  app = await buildServer({ pool, keys, router, rateLimitMax: 100_000 });
   await app.ready();
 });
 afterEach(async () => { await app.close(); });
@@ -46,7 +64,8 @@ async function grantConsent(over: Record<string, unknown> = {}) {
   const d = await app.inject({
     method: 'POST', url: '/v1/consent/draft',
     payload: {
-      parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',
+      parentName: 'Lakshmi', parentEmail: `p${++seq}@example.com`,
+      childFirstName: 'Meera', country: 'IN',
       band: 'builder', board: 'CBSE', method: 'dev_stub',
       pin: '4917', pinConfirm: '4917', ...over,
     },
@@ -105,7 +124,8 @@ describe('health and session lifecycle', () => {
 
 describe('request validation happens at the edge', () => {
   const validDraft = {
-    parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',
+    parentName: 'Lakshmi', parentEmail: 'valid@example.com',
+    childFirstName: 'Meera', country: 'IN',
     band: 'builder', method: 'dev_stub', pin: '4917', pinConfirm: '4917',
   };
 
@@ -291,7 +311,7 @@ describe('Law 02 — consent before existence', () => {
   it('refuses a session with a made-up token', async () => {
     const res = await app.inject({
       method: 'POST', url: '/v1/session',
-      payload: { consentToken: '11111111-1111-4111-8111-111111111111' },
+      payload: { consentToken: 'a'.repeat(43) },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json<{ code: string }>().code).toBe('no-consent');
@@ -301,7 +321,8 @@ describe('Law 02 — consent before existence', () => {
     const d = await app.inject({
       method: 'POST', url: '/v1/consent/draft',
       payload: {
-        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        parentName: 'L', parentEmail: `s${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
         method: 'dev_stub', pin: '4917', pinConfirm: '4917',
       },
     });
@@ -314,7 +335,8 @@ describe('Law 02 — consent before existence', () => {
     const d = await app.inject({
       method: 'POST', url: '/v1/consent/draft',
       payload: {
-        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        parentName: 'L', parentEmail: `s${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
         method: 'signed_form_review', pin: '4917', pinConfirm: '4917',
       },
     });
@@ -371,8 +393,9 @@ describe('revocation propagates', () => {
     expect(rev.statusCode).toBe(200);
     expect(rev.json<{ sessionsEnded: number }>().sessionsEnded).toBe(1);
 
-    // the live session is gone
-    expect((await say(sid, 'still there?')).status).toBe(404);
+    // 409, not 404: the session existed and was ended by the revocation. Saying
+    // "not found" would be a small lie about something a parent just did.
+    expect((await say(sid, 'still there?')).status).toBe(409);
     // and the token no longer opens a new one
     const again = await app.inject({
       method: 'POST', url: '/v1/session', payload: { consentToken: token },
@@ -398,7 +421,8 @@ describe('consent methods offered', () => {
     const d = await app.inject({
       method: 'POST', url: '/v1/consent/draft',
       payload: {
-        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        parentName: 'L', parentEmail: `s${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
         method: 'digilocker', pin: '4917', pinConfirm: '4917',
       },
     });
@@ -407,12 +431,13 @@ describe('consent methods offered', () => {
   });
 
   it('refuses the dev stub when the deployment says production', async () => {
-    const prod = buildServer({ router: countingRouter(), env: 'prod' });
+    const prod = await buildServer({ pool, keys, router: countingRouter(), env: 'prod', rateLimitMax: 100_000 });
     await prod.ready();
     const d = await prod.inject({
       method: 'POST', url: '/v1/consent/draft',
       payload: {
-        parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+        parentName: 'L', parentEmail: `s${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
         method: 'dev_stub', pin: '4917', pinConfirm: '4917',
       },
     });
@@ -428,7 +453,8 @@ describe('parent PIN over HTTP', () => {
       const res = await app.inject({
         method: 'POST', url: '/v1/consent/draft',
         payload: {
-          parentName: 'L', childFirstName: 'M', country: 'IN', band: 'builder',
+          parentName: 'L', parentEmail: `s${++seq}@example.com`,
+        childFirstName: 'M', country: 'IN', band: 'builder',
           method: 'dev_stub', pin, pinConfirm: pin,
         },
       });
@@ -488,5 +514,39 @@ describe('parent PIN over HTTP', () => {
       payload: { pin: '4918' },
     });
     expect(a.statusCode).toBe(b.statusCode);
+  });
+});
+
+describe('rate limiting', () => {
+  it('refuses a flood of turns on one session', async () => {
+    const limited = await buildServer({ pool, keys, router: countingRouter(), rateLimitMax: 5 });
+    await limited.ready();
+    const d = await limited.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'L', parentEmail: `rl${++seq}@example.com`, childFirstName: 'M',
+        country: 'IN', band: 'builder', method: 'dev_stub',
+        pin: '4917', pinConfirm: '4917',
+      },
+    });
+    const { consentId, challengeId } = d.json<{ consentId: string; challengeId: string }>();
+    const fin = await limited.inject({
+      method: 'POST', url: `/v1/consent/${consentId}/finalize`, payload: { challengeId },
+    });
+    const ses = await limited.inject({
+      method: 'POST', url: '/v1/session',
+      payload: { consentToken: fin.json<{ consentToken: string }>().consentToken },
+    });
+    const sid = ses.json<{ sessionId: string }>().sessionId;
+
+    const codes: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = await limited.inject({
+        method: 'POST', url: `/v1/session/${sid}/turn`, payload: { text: 'hello there' },
+      });
+      codes.push(r.statusCode);
+    }
+    expect(codes).toContain(429);
+    await limited.close();
   });
 });

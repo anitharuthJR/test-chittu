@@ -12,6 +12,7 @@
   "dependencies": {
     "@chittu/consent": "workspace:*",
     "@chittu/contracts": "workspace:*",
+    "@chittu/db": "workspace:*",
     "@chittu/pipeline": "workspace:*",
     "@chittu/safety-kernel": "workspace:*",
     "@chittu/seal": "workspace:*",
@@ -19,6 +20,7 @@
     "fastify": "^5.2.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.7",
     "tsx": "^4.19.0"
   }
 }

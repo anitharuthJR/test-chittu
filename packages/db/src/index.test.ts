@@ -106,18 +106,18 @@ describe('envelope encryption', () => {
 describe('crypto-shredding', () => {
   it('makes a child’s data unrecoverable, and says why', async () => {
     const fam = await makeFamily({ parentEmail: 'shred@example.com' });
-    expect(await fam.repo.childName(fam.childId)).toBe('Meera');
+    expect(await fam.repo.childName(pool, fam.childId)).toBe('Meera');
 
     await fam.repo.revokeAndErase(fam.consentId, fam.childId, 'parent request');
 
     // the wrapped DEK is zeroed, so nothing encrypted under it can be read
-    await expect(fam.repo.childName(fam.childId)).rejects.toThrow(/shredded|erased/i);
+    await expect(fam.repo.childName(pool, fam.childId)).rejects.toThrow(/shredded|erased/i);
   });
 
   it('leaves the consent ledger standing as proof', async () => {
     const fam = await makeFamily({ parentEmail: 'proof@example.com' });
     await fam.repo.revokeAndErase(fam.consentId, fam.childId, 'parent request');
-    const after = await fam.repo.byId(fam.consentId);
+    const after = await fam.repo.byId(pool, fam.consentId);
     expect(after?.record.status).toBe('revoked');
     expect(after?.record.revokedAt).toBeTruthy();
   });
@@ -131,14 +131,14 @@ describe('the consent token', () => {
       [`%${fam.token.slice(0, 12)}%`]);
     expect(r.rows[0]!.n).toBe(0);
     // and the real token still resolves
-    expect((await fam.repo.findByToken(fam.token))?.consentId).toBe(fam.consentId);
+    expect((await fam.repo.findByToken(pool, fam.token))?.consentId).toBe(fam.consentId);
   });
 
   it('stops resolving the moment the consent is revoked', async () => {
     const fam = await makeFamily({ parentEmail: 'rev@example.com' });
-    expect(await fam.repo.findByToken(fam.token)).not.toBeNull();
+    expect(await fam.repo.findByToken(pool, fam.token)).not.toBeNull();
     await fam.repo.revokeAndErase(fam.consentId, fam.childId, 'parent request');
-    expect(await fam.repo.findByToken(fam.token)).toBeNull();
+    expect(await fam.repo.findByToken(pool, fam.token)).toBeNull();
   });
 
   it('the DATABASE refuses a token on a non-active consent', async () => {
@@ -205,6 +205,24 @@ describe('the seal chain under a database', () => {
       }));
     const r = await pool.query(`SELECT * FROM audit_event WHERE session_id = $1`, [sessionId]);
     expect(JSON.stringify(r.rows)).not.toContain('hurt myself');
+  });
+
+  it('two sessions with the same first turn do not collide', async () => {
+    // UNIQUE(hash) is global. A shared GENESIS would make identical opening
+    // turns produce identical hashes and reject the second child.
+    const fam = await makeFamily({ parentEmail: 'collide@example.com' });
+    const audit = auditRepo(pool);
+    const child = childRepo(pool, keys);
+    const ids = await Promise.all([1, 2].map(() =>
+      withChildScope(pool, fam.childId, (tx) =>
+        child.openSession(tx, fam.childId, fam.consentId, 'builder'))));
+    for (const sid of ids) {
+      await withChildScope(pool, fam.childId, (tx) =>
+        audit.append(tx, {
+          sessionId: sid, role: 'child', layer: 'SEAL', text: 'why is the sky blue',
+        }));
+    }
+    for (const sid of ids) expect((await audit.verify(sid)).ok).toBe(true);
   });
 
   it('hashes compose, so verify can recompute from what is stored', () => {

@@ -10,13 +10,16 @@
  * entire reason `PipelinePorts` is injected rather than imported.
  */
 import { describe, it, expect } from 'vitest';
-import { createChain } from '@chittu/seal';
+import { createChain, type SealChain } from '@chittu/seal';
 import type { ClassifierOutcome } from '@chittu/contracts';
 import { runTurn, GUARD_EFFECTS, SAFE_FALLBACK, type SessionState, type PipelinePorts } from './index';
 
 interface Harness {
   readonly ports: PipelinePorts;
   readonly calls: { classifier: number; sandbox: number };
+  /** The concrete chain behind ports.seal. The pipeline only appends; these
+   *  tests also read it back, which the narrowed SealAppender cannot do. */
+  readonly chain: SealChain;
 }
 
 function harness(opts: {
@@ -25,6 +28,7 @@ function harness(opts: {
 } = {}): Harness {
   const calls = { classifier: 0, sandbox: 0 };
   let n = 0;
+  const chain = createChain();
   const ports: PipelinePorts = {
     async classify() {
       calls.classifier += 1;
@@ -36,11 +40,11 @@ function harness(opts: {
       const g = opts.generate ?? 'Sunlight scatters blue light! [CHIPS]More|Why?[/CHIPS]';
       return typeof g === 'function' ? g() : g;
     },
-    seal: createChain(),
+    seal: chain,
     now: () => '2026-08-24T00:00:00.000Z',
     newId: () => `id-${++n}`,
   };
-  return { ports, calls };
+  return { ports, calls, chain };
 }
 
 const base: SessionState = {
@@ -295,14 +299,14 @@ describe('the walk itself', () => {
   ])('seals BOTH the child’s turn and the reply for %s', async (_label, text) => {
     const h = harness();
     await runTurn(base, text, h.ports);
-    expect(h.ports.seal.size(), 'child turn + reply must both be sealed').toBe(2);
-    expect(h.ports.seal.verify().ok).toBe(true);
+    expect(h.chain.size(), 'child turn + reply must both be sealed').toBe(2);
+    expect(h.chain.verify().ok).toBe(true);
   });
 
   it('seals what the child was SHOWN, not the raw model text', async () => {
     const h = harness({ generate: 'i will miss you so much' });
     await runTurn(base, 'i have to go', h.ports);
-    const sealed = h.ports.seal.records().map((r) => r.payload).join(' ');
+    const sealed = h.chain.records().map((r) => r.payload).join(' ');
     // the blocked reply must not be what the ledger says the child was told
     expect(sealed).not.toContain('miss you');
     expect(sealed).toContain('tangled');
@@ -311,7 +315,7 @@ describe('the walk itself', () => {
   it('a locked-chat reply is sealed too', async () => {
     const h = harness();
     await runTurn({ ...base, crisisLock: true }, 'tell me a joke', h.ports);
-    expect(h.ports.seal.size()).toBe(2);
+    expect(h.chain.size()).toBe(2);
   });
 
   it('the seal chain verifies across a multi-turn session', async () => {
@@ -320,6 +324,6 @@ describe('the walk itself', () => {
     for (const t of ['why do volcanoes erupt', 'tell me more', 'what is 9 + 6']) {
       s = (await runTurn(s, t, h.ports)).state;
     }
-    expect(h.ports.seal.verify().ok).toBe(true);
+    expect(h.chain.verify().ok).toBe(true);
   });
 });
