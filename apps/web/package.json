@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "pnpm --filter '@chittu/web^...' build",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
