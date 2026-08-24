@@ -26,13 +26,29 @@ importers:
 
   packages/contracts: {}
 
-  packages/maths-engine: {}
+  packages/maths-engine:
+    dependencies:
+      '@chittu/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
-  packages/pedagogy: {}
+  packages/pedagogy:
+    dependencies:
+      '@chittu/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
-  packages/safety-kernel: {}
+  packages/safety-kernel:
+    dependencies:
+      '@chittu/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
-  packages/seal: {}
+  packages/seal:
+    dependencies:
+      '@chittu/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

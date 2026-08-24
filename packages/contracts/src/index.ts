@@ -33,13 +33,24 @@ export type Mode =
 // ---------------------------------------------------------------------------
 
 /**
- * What the L1 lexicon can detect. Note `identity` and `secret` are separate
+ * What the L1 fast path can detect. Note `identity` and `secret` are separate
  * kinds here but both resolve to the SPINE escalation token — the distinction
  * matters for which scripted reply is used and which flag is raised.
+ *
+ * `profanity` is the Kindness Guard (prototype line 1058). It sits OUTSIDE the
+ * prototype's `LEX` object, which is how it was missed on the first port: five
+ * patterns in `LEX`, six guards in the dispatch. It is listed here so the type
+ * system carries all six, because forgetting it means a child's profane turn
+ * reaches a model provider where the prototype answered it with a script and
+ * spent no tokens at all.
  */
-export type GuardKind = 'crisis' | 'pii' | 'unsafe' | 'secret' | 'identity';
+export type GuardKind =
+  | 'crisis' | 'pii' | 'unsafe' | 'secret' | 'identity' | 'profanity';
 
-export const GUARD_KINDS = ['crisis', 'pii', 'unsafe', 'secret', 'identity'] as const;
+/** Declaration order. The DISPATCH order lives in safety-kernel's L1_ORDER. */
+export const GUARD_KINDS = Object.freeze(
+  ['crisis', 'pii', 'unsafe', 'secret', 'identity', 'profanity'] as const,
+);
 
 /**
  * The exact strings a model may return to hand control back to the scripts.
