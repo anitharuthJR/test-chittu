@@ -6,15 +6,12 @@
  * page; now it is behind an endpoint, so the same invariants are checked by
  * counting what the endpoint does — and, crucially, what it does NOT do.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
-import { PGlite } from '@electric-sql/pglite';
-import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { randomBytes } from 'node:crypto';
-import { wrapPglite, localKeyProvider, type DbPool } from '@chittu/db';
+import { createTestDb, localKeyProvider, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
-import { applyMigrations } from './db-bootstrap.js';
 import type { ProviderRouter } from './providers.js';
 
 interface Counting extends ProviderRouter {
@@ -39,17 +36,17 @@ function countingRouter(): Counting {
 let app: FastifyInstance;
 let router: Counting;
 let pool: DbPool;
-let pg: PGlite;
+let fixture: Awaited<ReturnType<typeof createTestDb>>;
 const keys = localKeyProvider(randomBytes(32), 'dev');
 
 // A fresh database per FILE, not per test: migrating costs a second or two, and
 // every fixture below uses a distinct parent email so rows cannot collide.
 beforeAll(async () => {
-  pg = await PGlite.create({ extensions: { pgcrypto } });
-  await applyMigrations((sql) => pg.exec(sql), true);
-  await pg.exec(`INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);
-  pool = wrapPglite(pg as never);
+  fixture = await createTestDb();
+  pool = fixture.pool;
 }, 180_000);
+
+afterAll(async () => { await fixture.close(); });
 
 let seq = 0;
 beforeEach(async () => {

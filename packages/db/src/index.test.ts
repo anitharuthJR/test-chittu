@@ -8,21 +8,17 @@
  *
  * So the RLS suite below does `SET ROLE chittu_app` and stays there.
  */
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { PGlite } from '@electric-sql/pglite';
-import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
-import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { draftConsent, markVerifying, activate, hashPin } from '@chittu/consent';
 import {
-  wrapPglite, withChildScope, localKeyProvider, encrypt, decrypt, fingerprint,
+  withChildScope, localKeyProvider, encrypt, decrypt, fingerprint, createTestDb,
   CryptoError, auditRepo, consentRepo, childRepo, chainHash, GENESIS,
   type DbPool, type FamilyDraft,
 } from './index';
 
 let pool: DbPool;
-let pg: PGlite;
+let db: Awaited<ReturnType<typeof createTestDb>>;
 const master = randomBytes(32);
 const keys = localKeyProvider(master, 'dev');
 
@@ -33,18 +29,11 @@ const draft: FamilyDraft = {
 };
 
 beforeAll(async () => {
-  const dir = fileURLToPath(new URL('../../../db/migrations/', import.meta.url));
-  pg = await PGlite.create({ extensions: { pgcrypto } });
-  for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) {
-    let sql = readFileSync(dir + f, 'utf8');
-    sql = sql.replace(/CREATE EXTENSION IF NOT EXISTS vector;.*\n/, '')
-             .replace(/vector\(1024\)/g, 'real[]')
-             .replace(/CREATE INDEX corpus_chunk_ann[\s\S]*?;\n/, '');
-    await pg.exec(sql);
-  }
-  await pg.exec(`INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);
-  pool = wrapPglite(pg as never);
+  db = await createTestDb();
+  pool = db.pool;
 }, 180_000);
+
+afterAll(async () => { await db.close(); });
 
 /** Draft → activate, returning the ids and the bearer token. */
 async function makeFamily(over: Partial<typeof draft> = {}) {
@@ -307,79 +296,77 @@ describe('messages, memories and flags', () => {
 // ---------------------------------------------------------------------------
 
 describe('row-level security, AS THE APPLICATION ROLE', () => {
-  // superuser bypasses grants AND rls, so everything above proves nothing here.
-  // The scope is reset too: set_config(..., false) is SESSION-level and outlives
-  // the test that set it, so "never set" would otherwise inherit a stale value.
-  beforeEach(async () => {
-    await pg.exec('RESET ROLE');
-    await pg.exec(`RESET "chittu.child_id"`);
-  });
+  /**
+   * Everything above this line proves nothing about RLS: it runs as superuser,
+   * which bypasses both grants and row-level security.
+   *
+   * `SET ROLE` is PER CONNECTION, and a pool hands out a different connection for
+   * the next query — so a role set by one statement is simply not set for the
+   * next. On PGlite, with its single connection, that mistake is invisible; on a
+   * real pool the second assertion in a pair silently ran as superuser and
+   * passed. So the role is set with SET LOCAL inside ONE transaction, which is
+   * also how the application does it.
+   */
+  async function asAppRole<T>(
+    fn: (tx: { query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
+      Promise<{ rows: R[] }> }) => Promise<T>,
+    childId?: string,
+  ): Promise<T> {
+    return pool.transaction(async (tx) => {
+      await tx.query('SET LOCAL ROLE chittu_app');
+      await tx.query('SELECT set_config($1, $2, true)',
+        ['chittu.child_id', childId ?? '']);
+      return fn(tx);
+    });
+  }
 
   it('the app role can actually read — the grants exist', async () => {
     const fam = await makeFamily({ parentEmail: 'grants@example.com' });
-    await pg.exec('SET ROLE chittu_app');
-    const r = await pg.query(
-      `SELECT set_config('chittu.child_id', '${fam.childId}', false)`);
-    expect(r).toBeTruthy();
-    const rows = await pg.query(`SELECT id FROM child`);
+    const rows = await asAppRole((tx) =>
+      tx.query<{ id: string }>('SELECT id FROM child'), fam.childId);
     expect(rows.rows.length, 'no grants means the policies are inert').toBe(1);
-    await pg.exec('RESET ROLE');
+    expect(rows.rows[0]!.id).toBe(fam.childId);
   });
 
   it('cannot see another family’s child', async () => {
-    const a = await makeFamily({ parentEmail: 'a@example.com' });
-    const b = await makeFamily({ parentEmail: 'b@example.com' });
-    await pg.exec('SET ROLE chittu_app');
-    await pg.query(`SELECT set_config('chittu.child_id', '${a.childId}', false)`);
-    const rows = await pg.query<{ id: string }>(`SELECT id FROM child`);
-    await pg.exec('RESET ROLE');
+    const a = await makeFamily({ parentEmail: 'rlsa@example.com' });
+    const b = await makeFamily({ parentEmail: 'rlsb@example.com' });
+    const rows = await asAppRole((tx) =>
+      tx.query<{ id: string }>('SELECT id FROM child'), a.childId);
     const ids = rows.rows.map((x) => x.id);
     expect(ids).toContain(a.childId);
     expect(ids, 'cross-family leakage').not.toContain(b.childId);
   });
 
   it.each([
-    ['never set', null],
-    ['set to empty', ''],
-  ])('sees NOTHING when the scope is %s — RLS fails closed, without erroring',
+    ['unset', undefined],
+    ['empty', ''],
+  ])('sees NOTHING when the scope is %s — fails closed without erroring',
     async (_label, value) => {
-      await makeFamily({ parentEmail: `noscope-${_label.replace(/ /g, '')}@example.com` });
-      await pg.exec('SET ROLE chittu_app');
-      if (value !== null) {
-        await pg.query(`SELECT set_config('chittu.child_id', $1, false)`, [value]);
-      }
+      await makeFamily({ parentEmail: `noscope-${_label}@example.com` });
       // must return zero rows, NOT raise: an invalid-uuid error is a 500 where a
       // clean empty result is the correct fail-closed answer
-      const rows = await pg.query(`SELECT id FROM child`);
-      await pg.exec('RESET ROLE');
+      const rows = await asAppRole((tx) =>
+        tx.query('SELECT id FROM child'), value);
       expect(rows.rows).toHaveLength(0);
     });
 
   it('cannot UPDATE or DELETE the audit chain even with grants', async () => {
     const fam = await makeFamily({ parentEmail: 'append@example.com' });
-    await pg.exec('SET ROLE chittu_app');
-    await pg.query(`SELECT set_config('chittu.child_id', '${fam.childId}', false)`);
     let err: Error | null = null;
-    try { await pg.query(`DELETE FROM audit_event`); } catch (e) { err = e as Error; }
-    await pg.exec('RESET ROLE');
+    try {
+      await asAppRole((tx) => tx.query('DELETE FROM audit_event'), fam.childId);
+    } catch (e) { err = e as Error; }
     expect(err).not.toBeNull();
   });
 
-  it('has NO access to the training corpus at all', async () => {
-    await pg.exec('SET ROLE chittu_app');
-    let err: Error | null = null;
-    try { await pg.query(`SELECT * FROM training_example`); } catch (e) { err = e as Error; }
-    await pg.exec('RESET ROLE');
-    expect(err?.message).toMatch(/permission denied/i);
-  });
-
-  it('has NO access to transcript grants or admin users', async () => {
-    await pg.exec('SET ROLE chittu_app');
-    for (const t of ['transcript_grant', 'admin_user']) {
+  it.each(['training_example', 'training_run', 'dataset_export',
+           'transcript_grant', 'admin_user'])(
+    'has NO access to %s — the absence of a grant is the control', async (table) => {
       let err: Error | null = null;
-      try { await pg.query(`SELECT * FROM ${t}`); } catch (e) { err = e as Error; }
-      expect(err?.message, t).toMatch(/permission denied/i);
-    }
-    await pg.exec('RESET ROLE');
-  });
+      try {
+        await asAppRole((tx) => tx.query(`SELECT * FROM ${table}`));
+      } catch (e) { err = e as Error; }
+      expect(err?.message, `${table} was readable`).toMatch(/permission denied/i);
+    });
 });

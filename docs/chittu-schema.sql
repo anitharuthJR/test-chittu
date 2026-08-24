@@ -551,8 +551,17 @@ CREATE TABLE transcript_grant (
 -- cannot read another child's data.
 -- =============================================================================
 
-CREATE ROLE chittu_app  NOLOGIN;
-CREATE ROLE chittu_ops  NOLOGIN;   -- metering + registries only
+-- Roles are CLUSTER-level, not schema-level, so they survive a DROP SCHEMA and
+-- a plain CREATE ROLE fails the second time this file is applied. Wrapped so the
+-- schema is re-runnable — which is what lets the same suite run against a throw-
+-- away schema on a shared Postgres.
+DO $$ BEGIN
+  CREATE ROLE chittu_app NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE ROLE chittu_ops NOLOGIN;   -- metering + registries only
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TABLE child   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session ENABLE ROW LEVEL SECURITY;
@@ -898,6 +907,22 @@ COMMIT;
 -- =============================================================================
 
 BEGIN;
+
+-- USAGE ON SCHEMA first. Table grants are useless without it: a role that cannot
+-- see the schema gets "relation does not exist", not "permission denied", which
+-- reads like a missing table rather than a missing privilege.
+--
+-- This was missed because everything was tested in `public`, and `public` grants
+-- USAGE to PUBLIC by default — so the omission was invisible until the suite ran
+-- against a real server in a named schema. Deployed into anything but `public`,
+-- the application role would simply not work.
+--
+-- current_schema() rather than a literal, so the same file is correct in
+-- production and in a throwaway test schema.
+DO $$ BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO chittu_app, chittu_ops',
+                 current_schema());
+END $$;
 
 GRANT SELECT, INSERT, UPDATE ON
   parent, parent_pin, child, child_data_key,

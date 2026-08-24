@@ -66,6 +66,13 @@ export interface PgOptions {
   readonly connectionString: string;
   readonly max?: number;
   readonly applicationName?: string;
+  /**
+   * Raw libpq options applied to EVERY connection, e.g.
+   * `-c search_path=test_ab12`. Set per-connection rather than per-session
+   * because a pool hands out new connections at will, and a search_path set on
+   * one of them is not set on the next.
+   */
+  readonly options?: string;
 }
 
 /** Production. Lazily imports `pg` so tests never load a driver they do not use. */
@@ -75,6 +82,7 @@ export async function createPgPool(opts: PgOptions): Promise<DbPool> {
     connectionString: opts.connectionString,
     max: opts.max ?? 10,
     application_name: opts.applicationName ?? 'chittu-api',
+    ...(opts.options ? { options: opts.options } : {}),
   });
   return {
     async query(sql, params) {

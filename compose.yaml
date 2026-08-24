@@ -1,0 +1,30 @@
+# Postgres 16 + pgvector, for running the suite against the real thing.
+#
+# NOT required for day-to-day work: without DATABASE_URL the tests run on
+# PGlite, which is real Postgres compiled to WASM and needs no container. This
+# exists to close the three gaps PGlite cannot: pgvector, genuine concurrency,
+# and a server binary rather than an in-process one.
+#
+#   docker compose up -d          (OrbStack works identically — it is a drop-in)
+#   pnpm test:pg
+#
+services:
+  postgres:
+    # pgvector's own image, so CREATE EXTENSION vector is available. Pinned to
+    # 16 because that is the version chittu-architecture.md §2.2 commits to.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chittu
+      POSTGRES_PASSWORD: chittu
+      POSTGRES_DB: chittu_test
+    ports:
+      - '55432:5432'      # not 5432, so it cannot collide with a local install
+    tmpfs:
+      # A test database has nothing worth surviving a restart, and running on
+      # tmpfs makes the suite noticeably faster.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chittu -d chittu_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
