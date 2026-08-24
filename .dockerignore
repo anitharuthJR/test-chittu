@@ -1,0 +1,26 @@
+# Everything the image must never contain, or that would bust the build cache.
+node_modules
+**/node_modules
+.git
+.github
+logs
+test-results
+playwright-report
+
+# The local-model kit: multi-GB adapters, a python venv, and training data that
+# has no business in a runtime image.
+llm-kit
+
+# Prototype, docs and archives — read by humans, not served by the API.
+prototype
+archive
+docs/council
+docs/research
+safety-corpus
+
+# Local secrets and machine state. .env is listed even though it should never
+# exist here: an image that bakes one is a credential in a registry.
+.env
+.env.*
+.claude
+.DS_Store
