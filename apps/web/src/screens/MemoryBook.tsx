@@ -37,7 +37,7 @@ export function MemoryBook(
   async function forget(m: Memory): Promise<void> {
     if (s === null) return;
     try {
-      await api.forget(s.sessionId, m.id, by);
+      await api.forget(s.sessionId, m.id);
       memories.value = memories.value.filter((x) => x.id !== m.id);
     } catch {
       setError("I couldn't forget that just now.");

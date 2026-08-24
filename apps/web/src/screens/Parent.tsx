@@ -9,16 +9,21 @@
  * parent surface that displays invented reassurance is worse than one that
  * displays nothing: the whole product claim is that a parent can *check*.
  *
- * The PIN is verified server-side (`POST /v1/consent/:id/pin/verify`), which is
- * the point — the prototype checked it in client JavaScript and any child who
- * opened devtools could read it. Five wrong tries, then a lockout the server
- * holds; this screen only reports what it is told.
+ * The PIN is verified server-side (`POST /v1/parent/pin/verify`), which is the
+ * point — the prototype checked it in client JavaScript and any child who opened
+ * devtools could read it. Five wrong tries, then a lockout the server holds;
+ * this screen only reports what it is told.
+ *
+ * A correct PIN issues a 15-minute httpOnly parent-session cookie, and the two
+ * destructive actions on this page — erasing the account and lifting a crisis
+ * lock — require it server-side. Before that existed, erasing an account needed
+ * only a consent id, and the client was keeping one where a child could read it.
  */
 
 import { useState } from 'preact/hooks';
 import type { Api } from '../api';
 import { ApiError } from '../api';
-import { consentId, crisisLock, forgetConsent, session } from '../store';
+import { crisisLock, forgetConsent, session } from '../store';
 
 export function ParentGate(
   { api, onUnlocked, onBack }:
@@ -30,12 +35,15 @@ export function ParentGate(
 
   async function submit(e: Event): Promise<void> {
     e.preventDefault();
-    const id = consentId.value;
-    if (id === null || working) return;
+    if (working) return;
     setWorking(true);
     setMsg(null);
     try {
-      const r = await api.verifyPin(id, pin);
+      // No consent id is sent. The server reads the consent cookie, and on a
+      // correct PIN issues a second, short-lived cookie that the destructive
+      // routes require. Nothing about that is visible to this component, which
+      // is the point: it cannot forge what it cannot see.
+      const r = await api.verifyPin(pin);
       if (r.ok) { setPin(''); onUnlocked(); return; }
       setMsg(r.note ?? 'That PIN is not right.');
     } catch (e2) {
@@ -102,20 +110,25 @@ export function ParentDashboard(
       const r = await api.ackCrisis(s.sessionId);
       crisisLock.value = r.crisisLock;
       setNote('Chat is unlocked. Please stay nearby.');
-    } catch {
-      setNote("Couldn't unlock just now.");
+    } catch (e) {
+      setNote(e instanceof ApiError && e.code === 'PARENT_REQUIRED'
+        ? 'That took a while — please enter your PIN again to unlock.'
+        : "Couldn't unlock just now.");
     }
   }
 
   async function revoke(): Promise<void> {
-    const id = consentId.value;
-    if (id === null) return;
     try {
-      const r = await api.revoke(id);
+      const r = await api.revoke();
       setNote(`Consent revoked. ${r.sessionsEnded} live session${r.sessionsEnded === 1 ? '' : 's'} ended and everything has been erased.`);
       forgetConsent();
-    } catch {
-      setNote("Couldn't revoke just now. Please try again.");
+    } catch (e) {
+      // PARENT_REQUIRED means the 15-minute parent session lapsed while this
+      // page sat open. Say that, rather than "try again" at someone who would
+      // keep trying.
+      setNote(e instanceof ApiError && e.code === 'PARENT_REQUIRED'
+        ? 'That took a while — please enter your PIN again to erase the account.'
+        : "Couldn't revoke just now. Please try again.");
     }
   }
 

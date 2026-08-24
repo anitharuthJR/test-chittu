@@ -330,22 +330,72 @@ port and `bootstrapDb()` already support it.
 
 ## The client (apps/web)
 
-### NEEDS A DECISION — the consent token is a bearer credential in localStorage
+### FIXED — the consent token is no longer in JavaScript's hands
 
-`POST /v1/consent/:id/finalize` returns `consentToken` in the response body, and
-the client stores it in `localStorage` so a child does not have to be re-enrolled
-on every reload. Whoever holds that string can open a session as that child.
+`finalize` now sets `chittu_consent` as an **httpOnly, SameSite=Strict** cookie
+(`Secure` outside dev) and returns only the ledger. The token appears in no
+response body, and `document.cookie` is empty in a signed-in browser — verified
+in the running app, not only in a test.
 
-What it does *not* unlock matters for sizing the risk: the parent surface is
-behind a server-verified PIN, and row-level security means it cannot reach
-another family's data. The exposure is a **shared device**, not the network.
+The client can no longer answer "am I signed in?" from memory, so it asks
+`GET /v1/consent/status`. That turned the routing gate from two states into
+three, and the third one is the interesting one: **`unknown` renders neither the
+chat nor the consent form.** Showing the chat before the answer arrives would be
+the Law 02 failure; showing the seven-step form to a family who already finished
+it would be its own bug. An unreachable API resolves to "not signed in", because
+a server that cannot be asked has not said yes.
 
-The fix is small and belongs on the server: set the token as an `httpOnly`,
-`SameSite=Strict`, `Secure` cookie at `finalize`, and read it from the cookie in
-`POST /v1/session`. The client then holds nothing at all, which is the stated
-goal of §1. This was left as a deliberate, recorded gap rather than done
-half-way, because a cookie the client can still also read is worse than either
-end of the choice. **Decide before the first non-dev consent rail goes live.**
+`POST /v1/session` has **no body fallback** — presenting the token in the body is
+a 400. Two ways in would have made the safe one optional.
+
+### FIXED — anyone with a consent id could erase a child's account
+
+Found while doing the above, and worse than the thing it was found next to.
+`DELETE /v1/consent/:id` authenticated **nothing**: a consent id was sufficient
+to erase a family's entire record. The client was keeping one in `localStorage`,
+so the child could read it, and so could anything that had ever seen it.
+
+Fixed by making PIN verification issue a second cookie. `POST /v1/parent/pin/verify`
+mints `chittu_parent` — an HMAC over `consentId|expiry` under the same
+deterministic index key the blind indexes use, so there is no table and no
+migration — and the destructive routes require it:
+
+| route | before | now |
+|---|---|---|
+| `DELETE /v1/consent` | nothing | consent cookie **+ live parent session** |
+| `POST /session/:id/crisis/ack` | nothing, dev-only | consent cookie **+ live parent session for that consent** |
+| `DELETE /session/:id/memories/:id` | `?by=` believed from the query string | `deleted_by` **derived** from the parent cookie |
+
+Fifteen minutes, and leaving the dashboard calls `POST /v1/parent/signout`, so
+walking away does not leave a quarter of an hour of authority on the sofa.
+
+This also closes the §4.5 note that said the crisis unlock "MUST be behind PIN
+verification before this ships — that binding is not wired yet". It is wired, so
+the route no longer needs its `env !== 'prod'` guard and no longer has one.
+
+**Verified from inside a child's own authenticated browser session:** with a
+valid consent cookie, `fetch('/v1/session/…/crisis/ack', {method:'POST'})` and
+`fetch('/v1/consent', {method:'DELETE'})` both return 403 `PARENT_REQUIRED`, and
+the chat stays locked.
+
+### NOTED — the parent session cannot be revoked before it expires
+
+It is signed, not stored, which is why it needs no table. The cost is that a
+minted session stays valid for its fifteen minutes even if the parent signs out
+on another device. Erasing the consent makes the id inside it resolve to nothing,
+which covers the case that matters; if a revocable parent session is ever wanted,
+it needs a row and a migration.
+
+### NOTED — `fingerprint()` lowercases, which is wrong for anything but an index
+
+`packages/db/src/crypto.ts` trims and lowercases before hashing. That is correct
+for `parent.email_hash`, and it is why `mintParentSession` does **not** use it —
+a signature where `A` and `a` agree is not a signature. `cookies.test.ts` pins
+that difference so nobody "simplifies" the two together.
+
+It also means `consent_record.token_hash` is a hash of a *lowercased* base64url
+token: about 223 bits of entropy rather than 256. Not a practical weakness, but
+surprising enough to write down.
 
 ### NEEDS A DECISION — fonts must be self-hosted before launch
 

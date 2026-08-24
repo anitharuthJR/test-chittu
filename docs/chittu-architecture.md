@@ -749,15 +749,17 @@ Every route is JSON-Schema validated at the edge. `POST /turn` is the whole pipe
 |---|---|---|
 | `POST` | `/v1/consent/draft` | returns `draftId`; nothing exists yet |
 | `POST` | `/v1/consent/:id/verify` | dispatches to the jurisdiction adapter |
-| `POST` | `/v1/consent/:id/finalize` | seals the ledger, issues `consent_token` |
-| `DELETE` | `/v1/consent/:id` | revoke and erase (W5); idempotent |
-| `POST` | `/v1/session` | opens a session — **refuses without an active consent** |
+| `POST` | `/v1/consent/:id/finalize` | seals the ledger, sets the `chittu_consent` **httpOnly** cookie. Returns no token — a credential in a body is readable by every script on the page |
+| `GET` | `/v1/consent/status` | three-state answer for the client's routing gate; carries no id and no credential |
+| `DELETE` | `/v1/consent` | revoke and erase (W5); idempotent. **Requires a live parent session** — this authenticated nothing until 2026-08 |
+| `POST` | `/v1/session` | opens a session — **refuses without a consent cookie that resolves to an active consent**. No body fallback |
 | `POST` | `/v1/session/:id/turn` | the pipeline; buffered, never streamed (§4.2) |
 | `POST` | `/v1/session/:id/read` | reading-coach scoring |
 | `GET` `DELETE` | `/v1/memories` `/v1/memories/:id` | child- and parent-usable |
-| `POST` | `/v1/parent/pin/verify` | server-side, Redis lockout, sealed on every attempt |
+| `POST` | `/v1/parent/pin/verify` | server-side, durable lockout, sealed on every attempt. On success mints `chittu_parent`, a 15-minute signed httpOnly cookie |
+| `POST` | `/v1/parent/signout` | ends the parent session without touching the child's |
 | `GET` | `/v1/parent/dashboard` | band-aware: topics only for teens |
-| `POST` | `/v1/parent/crisis/:sessionId/ack` | the only unlock path in the system |
+| `POST` | `/v1/session/:id/crisis/ack` | the only unlock path in the system; **requires a parent session for that consent** |
 | `GET` | `/v1/parent/seal/verify` | recomputes the chain, returns pass/fail + count |
 | `GET` | `/v1/helplines/:country` | cached; P0 alert if registry is stale |
 
