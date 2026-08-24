@@ -65,12 +65,48 @@ afterAll(async () => { await fixture.close(); });
 // ---------------------------------------------------------------------------
 
 describe('invariant 1 — a flag can never hold a child’s words', () => {
+  /**
+   * `table_schema = current_schema()` is load-bearing, not tidiness.
+   *
+   * On real Postgres every fixture gets its own throwaway schema so test files
+   * can run in parallel (packages/db/src/testing.ts). information_schema spans
+   * ALL of them, so an unfiltered query returned this table's columns once per
+   * live fixture — observed as `['assist_topic','assist_topic','note_key',
+   * 'note_key']` against a two-element expectation, on a run where nothing about
+   * the schema had changed. It passed on PGlite, which has one schema, and
+   * failed intermittently on Postgres depending on which fixtures overlapped.
+   *
+   * The dangerous version of that is not the noise. It is someone "fixing" the
+   * flake by de-duplicating the result, which would also swallow a genuinely
+   * new free-text column on `flag` — the exact thing this invariant exists to
+   * catch. Filter, never dedupe.
+   */
+  const FLAG_TEXT_COLUMNS = `
+    SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'flag'
+       AND table_schema = current_schema()
+       AND data_type IN ('text','character varying')`;
+
   it('has no free-text column at all on flag', async () => {
-    const r = await db.query<{ column_name: string }>(
-      `SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'flag' AND data_type IN ('text','character varying')`);
+    const r = await db.query<{ column_name: string }>(FLAG_TEXT_COLUMNS);
     // note_key and assist_topic are the only text columns, and both are constrained
     expect(r.rows.map((x) => x.column_name).sort()).toEqual(['assist_topic', 'note_key']);
+  });
+
+  it('the schema filter does work — a decoy flag table elsewhere is not counted', async () => {
+    // Build the exact thing that broke it: another schema holding a `flag`
+    // table with a free-text column. Without the filter this test sees three
+    // columns and the invariant above reports a violation that is not there.
+    await fixture.exec(`CREATE SCHEMA IF NOT EXISTS decoy_ns`);
+    await fixture.exec(
+      `CREATE TABLE IF NOT EXISTS decoy_ns.flag (child_words text, note_key text)`);
+    try {
+      const r = await db.query<{ column_name: string }>(FLAG_TEXT_COLUMNS);
+      expect(r.rows.map((x) => x.column_name).sort()).toEqual(['assist_topic', 'note_key']);
+      expect(r.rows.map((x) => x.column_name)).not.toContain('child_words');
+    } finally {
+      await fixture.exec(`DROP SCHEMA decoy_ns CASCADE`);
+    }
   });
 
   it('refuses a note_key that is not vetted wording', async () => {
