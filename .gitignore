@@ -9,8 +9,14 @@ __pycache__/
 # MLX fine-tune outputs (large binaries — regenerate with llm-kit/train.sh)
 llm-kit/adapters/
 
+# Archived gate-passing adapters (large binaries, keep out of git)
+llm-kit/adapters-archive/
+
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 
-# Archived gate-passing adapters (large binaries, keep out of git)
-llm-kit/adapters-archive/
+# Node / Playwright
+node_modules/
+test-results/
+playwright-report/
+live-harness.log
