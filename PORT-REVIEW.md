@@ -477,12 +477,47 @@ The duplicate inherits one known hole, pinned as a test: only the literal
 contents survive as prose. **The kernel has the same hole.** Fix it there; the
 client must not diverge unilaterally or the pin becomes the thing that breaks.
 
-### NOTED — four parent panels are absent, not mocked
+### FIXED — the four absent parent panels are built
 
-The dashboard shows transcripts, safety flags, assist flags, the learning queue
-and helplines as "not built yet", naming the endpoint each needs. That is
-deliberate. A parent dashboard filled with plausible sample data would defeat the
-one claim the product actually makes — that a parent can *check*.
+`GET /v1/parent/dashboard`, `GET /v1/parent/sessions/:id/transcript` and
+`GET /v1/helplines/:country` now back all seven W4 panels with real data. Every
+one is behind the parent session cookie except the helplines, which are
+deliberately open: a child in trouble must not need an adult to unlock a
+helpline first.
+
+Two panels **say something** rather than showing an empty box, which is the
+"don't mock it" principle pointed the other way. The safety panel states that it
+carries a category and never a quote; the learning panel states that there is no
+per-child list because `learning_insight` has no foreign key to a child. An
+empty box reads as "nothing has happened yet" in both cases, and in the second
+that would be actively misleading.
+
+### FIXED — the crisis panel was invisible to a parent on their own phone
+
+Found by loading the dashboard rather than by any test. The panel read
+`crisisLock` from the in-memory signal that only a turn in *this browser tab*
+sets, and the unlock button targeted `session.value` — null whenever a parent
+opens the dashboard on their own device.
+
+So the one case the panel exists for — a parent checking on a paused chat from
+somewhere other than the child's tablet — showed nothing, and had it shown
+something the button would have done nothing. Both now come from the dashboard
+payload, which is the server's answer. `App.test.tsx` builds exactly that
+situation: `session.value` null, server reporting a locked session, and asserts
+`ackCrisis` is called with the id the server named.
+
+### NOTED — the teen carve-out is two controls, and only one was tested
+
+`teen_bodies_are_never_stored` is a CHECK on `message.band`; the transcript route
+decides from `session.band`. Those can disagree — a band change mid-session, or a
+bug writing the wrong band — and in that gap the database has nothing to say, so
+the route re-applies the rule itself.
+
+Deleting that re-application changed **nothing observable**, because the CHECK
+already nulls teen bodies in every case the tests produced. A guard whose removal
+is silent is not a guard, so there is now a test that inserts the row the
+database permits and the route must still withhold: a `builder` message, with a
+real encrypted body, inside a `thinker`'s session.
 
 ### NOTED — Vitest 2.1 and Vite 6 disagree about types
 

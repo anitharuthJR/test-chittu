@@ -12,6 +12,7 @@ import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
 import { randomBytes } from 'node:crypto';
 import { createTestDb, localKeyProvider, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
+import { createStore } from './store.js';
 import { CONSENT_COOKIE, PARENT_COOKIE } from './cookies.js';
 import type { ProviderRouter } from './providers.js';
 
@@ -921,5 +922,228 @@ describe('GET /v1/consent/status', () => {
     expect(res.json<{ active: boolean }>().active).toBe(false);
     const cleared = res.cookies.find((c) => c.name === CONSENT_COOKIE);
     expect(cleared?.value, 'stop presenting a credential that means nothing').toBe('');
+  });
+});
+
+describe('the parent dashboard', () => {
+  it('refuses without a parent session, in the same shape for everyone', async () => {
+    const { cookie } = await grantConsent();
+    // Signed in as the CHILD — which is what the browser normally is.
+    const asChild = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(cookie),
+    });
+    expect(asChild.statusCode).toBe(403);
+    expect(asChild.json<{ code: string }>().code).toBe('PARENT_REQUIRED');
+
+    const asNobody = await app.inject({ method: 'GET', url: '/v1/parent/dashboard' });
+    expect(asNobody.statusCode).toBe(403);
+  });
+
+  it('reports stats a parent can act on', async () => {
+    const { cookie, parent, sessionId } = await openSessionAsParent();
+    router.verdict = {
+      label: 'SAFE', memory: { category: 'PET', fact: 'has a cat named Mani' }, assist: null,
+    };
+    await say(sessionId, 'my cat is called Mani');
+    await say(sessionId, 'why is the sky blue');
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(cookie, parent),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const d = res.json<{
+      child: { firstName: string; band: string };
+      stats: { sessions: number; messages: number; memories: number };
+      sessions: { id: string; msgCount: number }[];
+      memories: { fact: string }[];
+    }>();
+
+    expect(d.child.firstName).toBe('Meera');
+    expect(d.child.band).toBe('builder');
+    expect(d.stats.sessions).toBe(1);
+    expect(d.stats.messages).toBe(2);
+    expect(d.stats.memories).toBe(1);
+    expect(d.sessions[0]!.id).toBe(sessionId);
+    expect(d.memories[0]!.fact).toBe('has a cat named Mani');
+  });
+
+  it('carries local helplines, so a crisis panel is never a dead end', async () => {
+    const { cookie, parent } = await openSessionAsParent({ country: 'IN' });
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(cookie, parent),
+    });
+    const h = res.json<{ helplines: { lines: { name: string; contact: string }[] } }>();
+    expect(h.helplines.lines.length).toBeGreaterThan(0);
+    for (const l of h.helplines.lines) expect(l.contact).toBeTruthy();
+  });
+
+  it('one family sees nothing of another', async () => {
+    const theirs = await openSessionAsParent();
+    router.verdict = {
+      label: 'SAFE', memory: { category: 'PET', fact: 'has a dog named Rex' }, assist: null,
+    };
+    await say(theirs.sessionId, 'my dog is rex');
+
+    const mine = await openSessionAsParent();
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(mine.cookie, mine.parent),
+    });
+    const d = res.json<{ memories: unknown[]; sessions: { id: string }[] }>();
+    expect(d.memories).toHaveLength(0);
+    expect(d.sessions.map((s) => s.id)).not.toContain(theirs.sessionId);
+    expect(res.body).not.toContain('Rex');
+  });
+
+  it('never carries a child\'s words in a flag', async () => {
+    // The doctrine that is easiest to break by accident: a flag names a
+    // CATEGORY and vetted template wording, never what was typed.
+    const { cookie, parent, sessionId } = await openSessionAsParent();
+    await say(sessionId, 'my neighbour touches me and says it is our little secret');
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(cookie, parent),
+    });
+    const d = res.json<{ flags: { safety: { category: string; body: string }[] } }>();
+    expect(d.flags.safety.length).toBeGreaterThan(0);
+
+    // Nothing distinctive from the child's sentence may appear anywhere in the
+    // response — not in a flag, not in a session summary, not in the stats.
+    for (const word of ['neighbour', 'touches', 'little secret']) {
+      expect(res.body.toLowerCase()).not.toContain(word);
+    }
+  });
+
+  it('says plainly that no per-child learning queue exists', async () => {
+    // `learning_insight` has no FK to child by design, so there is nothing of
+    // this child's to show. An empty panel would be read as "nothing yet".
+    const { cookie, parent } = await openSessionAsParent({ learnOn: true });
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/dashboard', headers: jar(cookie, parent),
+    });
+    const l = res.json<{ learning: { optedIn: boolean; perChildQueueExists: boolean } }>().learning;
+    expect(l.optedIn).toBe(true);
+    expect(l.perChildQueueExists).toBe(false);
+  });
+});
+
+describe('the teen carve-out', () => {
+  it('gives a parent the full transcript for a BUILDER', async () => {
+    const { cookie, parent, sessionId } = await openSessionAsParent({ band: 'builder' });
+    await say(sessionId, 'why is the sky blue');
+
+    const res = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${sessionId}/transcript`,
+      headers: jar(cookie, parent),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const t = res.json<{ bodiesIncluded: boolean; turns: { role: string; body: string | null }[] }>();
+    expect(t.bodiesIncluded).toBe(true);
+    expect(t.turns.find((x) => x.role === 'child')?.body).toBe('why is the sky blue');
+  });
+
+  it('gives a THINKER\'s parent topics only, and says so', async () => {
+    const { cookie, parent, sessionId } = await openSessionAsParent({ band: 'thinker' });
+    await say(sessionId, 'why is the sky blue');
+
+    const res = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${sessionId}/transcript`,
+      headers: jar(cookie, parent),
+    });
+    const t = res.json<{
+      band: string; bodiesIncluded: boolean; note: string | null;
+      turns: { role: string; body: string | null; topic: string | null }[];
+    }>();
+
+    expect(t.band).toBe('thinker');
+    expect(t.bodiesIncluded).toBe(false);
+    expect(t.note).toMatch(/topics-only/i);
+    expect(t.turns.length).toBeGreaterThan(0);
+    for (const turn of t.turns) expect(turn.body).toBeNull();
+    // And the words are not hiding anywhere else in the payload.
+    expect(res.body).not.toContain('why is the sky blue');
+  });
+
+  /**
+   * The API-level carve-out, proven independently of the database.
+   *
+   * `teen_bodies_are_never_stored` is a CHECK on `message.band`, while the
+   * route decides from `session.band`. Those can disagree — a band change
+   * mid-session, or a bug writing the wrong band — and in that gap the database
+   * has nothing to say. This builds exactly that row and asserts the API still
+   * withholds it.
+   *
+   * Without this test, deleting the `teen ? null :` in the route changed
+   * nothing observable, which is a good definition of an untested guard.
+   */
+  it('withholds a teen\'s body even when one exists in the table', async () => {
+    const { cookie, parent, sessionId } = await openSessionAsParent({ band: 'thinker' });
+
+    const store = createStore(pool, keys);
+    const childId = (await pool.query<{ child_id: string }>(
+      `SELECT child_id FROM session WHERE id = $1`, [sessionId])).rows[0]!.child_id;
+
+    // band='builder' on a message inside a thinker's session: the CHECK permits
+    // it, so a real encrypted body lands in the table.
+    await store.withChild(childId, (tx) => store.child.addMessage(
+      tx, sessionId, childId, 'builder', 'child',
+      'a sentence a teenager typed', null, 'chat', {}));
+
+    const raw = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM message
+        WHERE session_id = $1 AND body_enc IS NOT NULL`, [sessionId]);
+    expect(raw.rows[0]!.n, 'the fixture must actually store a body').toBe(1);
+
+    const res = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${sessionId}/transcript`,
+      headers: jar(cookie, parent),
+    });
+    const t = res.json<{ bodiesIncluded: boolean; turns: { body: string | null }[] }>();
+    expect(t.bodiesIncluded).toBe(false);
+    for (const turn of t.turns) expect(turn.body).toBeNull();
+    expect(res.body).not.toContain('a sentence a teenager typed');
+  });
+
+  it('refuses a transcript without a parent session', async () => {
+    const { cookie, sessionId } = await openSessionAsParent();
+    const res = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${sessionId}/transcript`,
+      headers: jar(cookie),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404s another family\'s session rather than revealing it exists', async () => {
+    const theirs = await openSessionAsParent();
+    const mine = await openSessionAsParent();
+    const real = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${theirs.sessionId}/transcript`,
+      headers: jar(mine.cookie, mine.parent),
+    });
+    const fake = await app.inject({
+      method: 'GET', url: '/v1/parent/sessions/99999999-9999-4999-8999-999999999999/transcript',
+      headers: jar(mine.cookie, mine.parent),
+    });
+    expect(real.statusCode).toBe(404);
+    expect(real.body).toBe(fake.body);
+  });
+});
+
+describe('GET /v1/helplines/:country', () => {
+  it('is reachable WITHOUT any cookie', async () => {
+    // A child in trouble must not need an adult to unlock a helpline first.
+    const res = await app.inject({ method: 'GET', url: '/v1/helplines/IN' });
+    expect(res.statusCode).toBe(200);
+    const r = res.json<{ country: string; lines: { name: string; contact: string }[] }>();
+    expect(r.country).toBe('IN');
+    expect(r.lines.length).toBeGreaterThan(0);
+  });
+
+  it('accepts lower case', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/helplines/in' })).statusCode).toBe(200);
+  });
+
+  it('404s a country with no verified lines rather than inventing one', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/helplines/ZZ' });
+    expect(res.statusCode).toBe(404);
   });
 });

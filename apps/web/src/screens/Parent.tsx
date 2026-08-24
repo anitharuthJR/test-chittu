@@ -1,13 +1,15 @@
 /**
  * The parent surface: a PIN gate, then what the API can actually answer.
  *
- * **On what is missing, and why it is missing rather than mocked.** The
- * architecture (§4, W4) specifies a seven-panel dashboard. Four of those panels
- * — transcripts, safety flags, assist flags, the learning queue — need
- * `GET /v1/parent/dashboard`, which does not exist yet. They are named below as
- * "not built" instead of being filled with plausible-looking data, because a
- * parent surface that displays invented reassurance is worse than one that
- * displays nothing: the whole product claim is that a parent can *check*.
+ * All seven panels of W4, backed by `GET /v1/parent/dashboard`. Nothing here is
+ * sample data — the whole product claim is that a parent can *check*, and a
+ * dashboard showing invented reassurance would defeat it.
+ *
+ * Two panels say something rather than showing nothing, which is the same
+ * principle pointed the other way. The safety panel explains that it carries a
+ * category and never a quote; the learning panel explains that there is no
+ * per-child list because the insight table has no link back to a child. An
+ * empty box would be read as "nothing has happened yet" in both cases.
  *
  * The PIN is verified server-side (`POST /v1/parent/pin/verify`), which is the
  * point — the prototype checked it in client JavaScript and any child who opened
@@ -20,10 +22,13 @@
  * only a consent id, and the client was keeping one where a child could read it.
  */
 
-import { useState } from 'preact/hooks';
-import type { Api } from '../api';
+import { useEffect, useState } from 'preact/hooks';
+import type { Api, DashboardResponse } from '../api';
 import { ApiError } from '../api';
 import { crisisLock, forgetConsent, session } from '../store';
+import {
+  StatsPanel, SafetyPanel, AssistPanel, HelplinePanel, LearningPanel, ConversationsPanel,
+} from './dashboard-panels';
 
 export function ParentGate(
   { api, onUnlocked, onBack }:
@@ -89,6 +94,23 @@ export function ParentDashboard(
   const [seal, setSeal] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [d, setD] = useState<DashboardResponse | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api.dashboard()
+      .then((r) => { if (live) setD(r); })
+      .catch((e: unknown) => {
+        if (!live) return;
+        // The 15-minute parent session can lapse while this page sits open.
+        // Saying which of the two happened is more use than "try again".
+        setLoadErr(e instanceof ApiError && e.code === 'PARENT_REQUIRED'
+          ? 'That took a while — please enter your PIN again.'
+          : "Couldn't load the dashboard just now.");
+      });
+    return () => { live = false; };
+  }, [api]);
 
   async function verifySeal(): Promise<void> {
     const s = session.value;
@@ -103,13 +125,29 @@ export function ParentDashboard(
     }
   }
 
+  /**
+   * Which session is actually locked, from the SERVER's answer.
+   *
+   * The first version read `session.value` — the session this browser tab
+   * opened — which is null whenever a parent opens the dashboard on their own
+   * phone. That is the main case this panel exists for, and the unlock button
+   * silently did nothing in it.
+   */
+  const lockedSession = d?.sessions.find((x) => x.crisisLock)?.id ?? session.value?.sessionId ?? null;
+  /** Same reason: the local signal is only set by a turn in THIS tab. */
+  const isLocked = (d?.stats.crisisLocked ?? false) || crisisLock.value;
+
   async function unlockCrisis(): Promise<void> {
-    const s = session.value;
-    if (s === null) return;
+    if (lockedSession === null) {
+      setNote('There is no paused conversation to unlock.');
+      return;
+    }
     try {
-      const r = await api.ackCrisis(s.sessionId);
+      const r = await api.ackCrisis(lockedSession);
       crisisLock.value = r.crisisLock;
       setNote('Chat is unlocked. Please stay nearby.');
+      // Re-read, so the panel disappears and the flags reflect the acknowledgement.
+      setD(await api.dashboard());
     } catch (e) {
       setNote(e instanceof ApiError && e.code === 'PARENT_REQUIRED'
         ? 'That took a while — please enter your PIN again to unlock.'
@@ -141,7 +179,7 @@ export function ParentDashboard(
 
       {note !== null && <p class="notice" role="status">{note}</p>}
 
-      {crisisLock.value && (
+      {isLocked && (
         <section class="card card--crisis">
           <h3>⚠️ Chat is paused</h3>
           <p>
@@ -154,6 +192,24 @@ export function ParentDashboard(
             I've spoken with them — unlock
           </button>
         </section>
+      )}
+
+      {loadErr !== null && <p class="field__error" role="alert">{loadErr}</p>}
+      {d === null && loadErr === null && <p class="sub">Loading…</p>}
+
+      {/*
+        Summary before detail. A dashboard is scanned, not read top-to-bottom:
+        the paused-chat panel above is the only thing that needs acting on right
+        now, then the overview, then what needs attention, then the detail
+        someone came looking for.
+      */}
+      {d !== null && (
+        <>
+          <StatsPanel d={d} />
+          <SafetyPanel d={d} />
+          <AssistPanel d={d} />
+          <ConversationsPanel d={d} api={api} />
+        </>
       )}
 
       <section class="card">
@@ -176,20 +232,13 @@ export function ParentDashboard(
         {seal !== null && <p class="notice" role="status">{seal}</p>}
       </section>
 
-      <section class="card card--muted">
-        <h3>Not built yet</h3>
-        <p class="sub">
-          These are specified and deliberately empty rather than filled with sample data —
-          a parent dashboard that shows invented reassurance defeats its own purpose.
-        </p>
-        <ul class="todo">
-          <li>Full transcripts (with the teen carve-out) — needs <code>GET /v1/parent/dashboard</code></li>
-          <li>Safety flags — category only, never quoted words</li>
-          <li>Assist flags — moments that deserve a grown-up</li>
-          <li>Learning-loop review queue</li>
-          <li>Local crisis helplines — needs <code>GET /v1/helplines/:country</code></li>
-        </ul>
-      </section>
+
+      {d !== null && (
+        <>
+          <HelplinePanel d={d} />
+          <LearningPanel d={d} />
+        </>
+      )}
 
       <section class="card card--danger">
         <h3>Revoke consent and erase everything</h3>

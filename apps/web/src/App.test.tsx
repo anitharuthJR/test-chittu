@@ -21,6 +21,24 @@ import {
   consentState, profile, session, messages, memories, crisisLock, busy, mode,
 } from './store';
 
+/** Minimal but structurally real — the panels read every one of these. */
+export const DASHBOARD = {
+  child: { firstName: 'Meera', band: 'builder' as const, country: 'IN' as const, board: 'CBSE' },
+  consent: {
+    law: 'DPDP', method: 'dev_stub', status: 'active',
+    issuedAt: '2026-08-01T00:00:00.000Z', expiresAt: null,
+    scopes: { memory: true, learning: false },
+  },
+  stats: {
+    sessions: 0, messages: 0, spines: 0, memories: 0,
+    crisisLocked: false, firstSeen: null, lastSeen: null,
+  },
+  sessions: [], memories: [],
+  flags: { safety: [], assist: [], gate: [] },
+  helplines: { name: 'India', law: 'DPDP', consent: 'parental', lines: [] },
+  learning: { optedIn: false, perChildQueueExists: false },
+};
+
 const ACTIVE = {
   active: true as const, band: 'builder' as const,
   country: 'IN' as const, childFirstName: 'Meera',
@@ -43,6 +61,9 @@ function stubApi(overrides: Partial<Api> = {}): Api {
     turn: vi.fn(),
     seal: vi.fn(),
     memories: vi.fn(async () => ({ memories: [] })),
+    dashboard: vi.fn(async () => DASHBOARD),
+    transcript: vi.fn(),
+    helplines: vi.fn(),
     forget: vi.fn(),
     ackCrisis: vi.fn(),
     ...overrides,
@@ -205,6 +226,46 @@ describe('the parent PIN gate', () => {
     const back = await screen.findByRole('button', { name: /back to chittu/i });
     fireEvent.click(back);
     await waitFor(() => expect(api.signOutParent).toHaveBeenCalled());
+  });
+
+  /**
+   * The case this panel exists for: a parent opening the dashboard on their OWN
+   * phone, where no chat session was ever opened in this tab.
+   *
+   * The first version read the crisis state from the in-memory signal that only
+   * a turn in this tab sets, and the session id from `session.value` — null
+   * here. So the panel did not render, and had it rendered the unlock button
+   * would have done nothing. Both now come from the dashboard payload.
+   */
+  it('shows a paused chat to a parent who never opened one in this tab', async () => {
+    globalThis.history.pushState({}, '', '/parent');
+    const locked = {
+      ...DASHBOARD,
+      stats: { ...DASHBOARD.stats, crisisLocked: true },
+      sessions: [{
+        id: 'locked-session', band: 'builder' as const,
+        startedAt: '2026-08-24T18:00:00.000Z', endedAt: null,
+        msgCount: 4, crisisLock: true,
+      }],
+    };
+    const api = signedIn({
+      verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+      dashboard: vi.fn(async () => locked),
+      ackCrisis: vi.fn(async () => ({ crisisLock: false })),
+    });
+    render(<App api={api} />);
+
+    const input = await screen.findByLabelText(/parent pin/i);
+    fireEvent.input(input, { target: { value: '4917' } });
+    fireEvent.click(screen.getByRole('button', { name: /unlock/i }));
+
+    // session.value is null — nothing opened a chat in this tab.
+    expect(session.value).toBeNull();
+    const ack = await screen.findByRole('button', { name: /spoken with them/i });
+    fireEvent.click(ack);
+
+    // Targets the session the SERVER said is locked.
+    await waitFor(() => expect(api.ackCrisis).toHaveBeenCalledWith('locked-session'));
   });
 
   it('says the session lapsed rather than "try again" when erasure needs a fresh PIN', async () => {

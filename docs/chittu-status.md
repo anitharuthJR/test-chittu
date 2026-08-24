@@ -77,12 +77,12 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Consent engine** | Ledger, six adapters, scrypt PIN, lockout. G1 **not** cleared: only `dev_stub` completes | `packages/consent` |
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
-| **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + dashboard | `apps/web` |
-| **Tests** | **804**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels | `apps/web` |
+| **Tests** | **830**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is still a stub that
 classifies every turn SAFE, so the API refuses to start with `NODE_ENV=production`. Four parent
-dashboard panels are absent (deliberately, not mocked). Every open question is in `PORT-REVIEW.md`,
+Every open question is in `PORT-REVIEW.md`,
 which is the companion to this file for Phase 1 and should be read with it.
 
 **One real vulnerability was found and fixed here (2026-08-24):** `DELETE /v1/consent/:id`
