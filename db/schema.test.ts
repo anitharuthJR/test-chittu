@@ -301,7 +301,7 @@ describe('training corpus cannot hold a child’s words', () => {
   it('refuses a shape below the k-anonymity floor', async () => {
     await rejects(
       `INSERT INTO training_signal (shape, shape_hash, observed_layer, failure_class, k_sessions)
-       VALUES ('my <pet> died and i feel <emotion>', '\\x02',
+       VALUES ('my <PET> died and i feel <EMOTION>', '\\x02',
                'L2_CLASSIFIER', 'OVER_REFUSAL', 24)`,
       [], /k_sessions/i);
   });
@@ -309,9 +309,49 @@ describe('training corpus cannot hold a child’s words', () => {
   it('accepts an abstracted shape at or above the floor', async () => {
     const r = await db.query(
       `INSERT INTO training_signal (shape, shape_hash, observed_layer, failure_class, k_sessions)
-       VALUES ('my <pet> died and i feel <emotion>', '\\x03',
+       VALUES ('my <PET> died and i feel <EMOTION>', '\\x03',
                'L2_CLASSIFIER', 'OVER_REFUSAL', 25) RETURNING id`);
     expect(r.rows).toHaveLength(1);
+  });
+
+  /**
+   * A ten-digit Indian mobile number, straight into the column the schema
+   * comment calls the thing that stops raw prose reaching it.
+   *
+   * The original CHECK was `^[a-z0-9 <>_?'-]+$`, and 0-9 is in that class, so
+   * every digit string on earth matched it. Nobody noticed because
+   * `training_signal` has had zero writers since it was written — the constraint
+   * had never been asked a question it could get wrong.
+   */
+  it('refuses a bare digit run — a phone number is not a shape', async () => {
+    await rejects(
+      `INSERT INTO training_signal (shape, shape_hash, observed_layer, failure_class, k_sessions)
+       VALUES ('9876543210', '\\x04',
+               'L2_CLASSIFIER', 'OVER_REFUSAL', 40)`,
+      [], /shape_is_abstracted/i);
+  });
+
+  /**
+   * The placeholder vocabulary as three documents write it — architecture
+   * §11.3, this schema's own worked example, and docs/chittu-model-plan.md §2 —
+   * all of which spell it in capitals, which the old CHECK rejected. The
+   * example in the comment above `shape` could not be inserted into the column
+   * it was documenting.
+   */
+  it('accepts the placeholder vocabulary the abstractor emits', async () => {
+    const r = await db.query(
+      `INSERT INTO training_signal (shape, shape_hash, observed_layer, failure_class, k_sessions)
+       VALUES ('my <PET> died and i feel <EMOTION>', '\\x05',
+               'L2_CLASSIFIER', 'OVER_REFUSAL', 25) RETURNING id`);
+    expect(r.rows).toHaveLength(1);
+  });
+
+  it('refuses a placeholder that is not in the abstractor vocabulary', async () => {
+    await rejects(
+      `INSERT INTO training_signal (shape, shape_hash, observed_layer, failure_class, k_sessions)
+       VALUES ('my <DIAGNOSIS> is <SCHOOL>', '\\x06',
+               'L2_CLASSIFIER', 'OVER_REFUSAL', 40)`,
+      [], /shape_is_abstracted/i);
   });
 
   it('has no origin value meaning "a real child said this"', async () => {
@@ -340,6 +380,73 @@ describe('training corpus cannot hold a child’s words', () => {
                                      authored_by, split)
        VALUES ('AUTHORED', 'crisis', 'vaazhkai venam', 'CRISIS', '\\x20', 'grace', 'eval_holdout')`,
       [], /training_example_no_leak|unique|duplicate/i);
+  });
+});
+
+describe('the k-anonymity floor is a column, not a convention', () => {
+  /**
+   * The floor is usually described as "the application refuses to render a
+   * shape below 25". This is stronger: below the floor there is no shape in the
+   * database to render. The counter row exists, the text does not.
+   */
+  it('refuses to hold a shape below the floor', async () => {
+    await rejects(
+      `INSERT INTO signal_counter (shape_hash, shape, k_sessions, observed_layer)
+       VALUES ('\\x31', 'my <PET> died and i feel <EMOTION>', 24, 'L2_CLASSIFIER')`,
+      [], /shape_only_above_floor/i);
+  });
+
+  it('holds the count with no shape at all, which is the normal state', async () => {
+    const r = await db.query(
+      `INSERT INTO signal_counter (shape_hash, k_sessions, sightings, observed_layer)
+       VALUES ('\\x32', 24, 31, 'L5_SANDBOX') RETURNING shape`);
+    expect(r.rows[0]).toEqual({ shape: null });
+  });
+
+  it('accepts the shape once the floor is reached', async () => {
+    const r = await db.query(
+      `INSERT INTO signal_counter (shape_hash, shape, k_sessions, observed_layer)
+       VALUES ('\\x33', 'my <PET> died and i feel <EMOTION>', 25, 'L5_SANDBOX')
+       RETURNING shape`);
+    expect(r.rows[0]).toEqual({ shape: 'my <PET> died and i feel <EMOTION>' });
+  });
+
+  it('refuses raw prose in the counter too, not only in training_signal', async () => {
+    await rejects(
+      `INSERT INTO signal_counter (shape_hash, shape, k_sessions, observed_layer)
+       VALUES ('\\x34', 'My hamster Barnaby died on Tuesday.', 40, 'L5_SANDBOX')`,
+      [], /counter_shape_is_abstracted/i);
+  });
+
+  /**
+   * The same check metering-repo.test.ts makes, for the same reason: a column
+   * added here that could carry a sentence, a session id or a child id has to
+   * be argued for in this test first.
+   */
+  it('has no column that could name a child, a session or a message', async () => {
+    const r = await db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name IN ('signal_counter', 'signal_contributor')`);
+    const cols = r.rows.map((x) => x.column_name).sort();
+    expect(cols).toEqual([
+      'band', 'contributor', 'country', 'failure_class', 'first_seen_at',
+      'k_sessions', 'last_seen_at', 'observed_layer', 'observed_token',
+      'promoted_to', 'shape', 'shape_hash', 'shape_hash', 'sightings',
+    ]);
+  });
+
+  it('has no foreign key into anything a child owns', async () => {
+    const r = await db.query<{ n: string }>(
+      `SELECT count(*)::text AS n
+         FROM information_schema.table_constraints tc
+         JOIN information_schema.constraint_column_usage ccu
+           ON ccu.constraint_name = tc.constraint_name
+        WHERE tc.table_schema = current_schema()
+          AND tc.table_name IN ('signal_counter', 'signal_contributor')
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND ccu.table_name IN ('session', 'child', 'parent', 'message')`);
+    expect(r.rows[0]!.n).toBe('0');
   });
 });
 

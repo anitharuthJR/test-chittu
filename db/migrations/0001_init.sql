@@ -7,7 +7,6 @@
 -- other — and read the comments in it before altering any table, because the
 -- doctrine here is enforced by CONSTRAINTS, not by convention.
 -- =============================================================================
-
 -- =============================================================================
 -- CHITTU (சிட்டு) — Phase 1 database schema
 -- Postgres 16 + pgvector.  Tulifo Private Limited.
@@ -760,15 +759,99 @@ CREATE TABLE training_signal (
 
   CONSTRAINT signal_decided_needs_reviewer
     CHECK (state = 'PENDING_HUMAN_REVIEW' OR reviewed_by IS NOT NULL),
-  -- The abstractor's output vocabulary only. Rejects raw prose reaching this
-  -- column by any route: no capitals, no punctuation beyond placeholders.
+  -- The abstractor's output vocabulary only: space-separated tokens, each
+  -- either a lowercase word or one of exactly six placeholders. Rejects raw
+  -- prose reaching this column by any route.
+  --
+  -- THIS IS A WHITELIST, and it did not start as one. The first version was
+  -- `^[a-z0-9 <>_?'-]+$`, which reads like a filter and is not one: `0-9` is in
+  -- that class, so '9876543210' — a ten-digit Indian mobile number, the single
+  -- highest-value thing a child could type — matched it and stored cleanly. The
+  -- same class has no A-Z, so the worked example three lines above ('my <PET>
+  -- died…') could not be inserted into the column it was documenting. Both were
+  -- invisible for as long as this table had zero writers: a constraint is only
+  -- tested by code that tries to write through it.
+  --
   -- NB: Postgres regex bounds max out at 255, so the length lives in its own
   -- check rather than a {1,300} repetition — which is a compile error, and one
   -- that a syntax-only parse will happily accept.
   CONSTRAINT shape_is_abstracted
-    CHECK (shape ~ '^[a-z0-9 <>_?''-]+$' AND length(shape) BETWEEN 1 AND 300)
+    CHECK (shape ~ '^([a-z][a-z0-9''-]*|<(NAME|PLACE|PET|NUM|EMOTION|OOV)>)( ([a-z][a-z0-9''-]*|<(NAME|PLACE|PET|NUM|EMOTION|OOV)>))*$'
+           AND length(shape) BETWEEN 1 AND 300)
 );
 CREATE INDEX signal_triage_idx ON training_signal(failure_class, state, k_sessions DESC);
+
+-- ---------------------------------------------------------------------------
+-- THE COUNTER THAT STANDS IN FRONT OF training_signal.
+--
+-- A shape seen fewer than 25 times is a counter, not a readable row — and the
+-- way that is enforced here is stronger than "the application refuses to render
+-- it". `shape` IS NULL until the floor is crossed. The abstractor holds the
+-- text in memory during the turn that crosses it and writes it then; below the
+-- floor there is nothing in this database to render, redact or leak, because
+-- nothing was ever stored.
+--
+-- No foreign key to session, child or message, exactly as `training_signal` has
+-- none. `signal_contributor` below is how 25 DISTINCT sessions are counted
+-- without this table being able to name one.
+-- ---------------------------------------------------------------------------
+CREATE TABLE signal_counter (
+  shape_hash      bytea PRIMARY KEY,          -- keyed HMAC; not reversible from a wordlist
+  shape           text,                       -- NULL below the floor. See above.
+  k_sessions      integer NOT NULL DEFAULT 0 CHECK (k_sessions >= 0),
+  -- Total observations, not de-duplicated. `k_sessions` stops counting at the
+  -- floor because its contributor rows are deleted there; this keeps rising, so
+  -- a triage queue can still order by "how often is this happening".
+  sightings       integer NOT NULL DEFAULT 0 CHECK (sightings >= 0),
+
+  -- ALL FIVE ARE NULLABLE, and NULL here means "not always the same", not
+  -- "unknown". The row is keyed on the shape alone, so one row aggregates every
+  -- session that produced it; a facet is kept only while every sighting agrees,
+  -- and goes NULL for good the first time one disagrees. Recording the FIRST
+  -- band instead would read as "this is a builder thing" when all it means is
+  -- that a builder got there first.
+  --
+  -- failure_class is nullable for a second reason too: the runtime fills it in
+  -- only for the two failures it can name without deciding what SHOULD have
+  -- happened. The rest is a human's judgement, supplied at promotion.
+  observed_layer  pipeline_layer,
+  observed_token  text CHECK (observed_token IN ('CRISIS','SPINE','UNSAFE','PII','NONE')),
+  failure_class   failure_class,
+  band            band,
+  country         jurisdiction,
+
+  first_seen_at   timestamptz NOT NULL DEFAULT now(),
+  last_seen_at    timestamptz NOT NULL DEFAULT now(),
+  promoted_to     uuid REFERENCES training_signal(id) ON DELETE SET NULL,
+
+  -- The k-anonymity floor, as a constraint rather than as a query somebody
+  -- remembers to write. 25 here and 25 on training_signal.k_sessions.
+  CONSTRAINT shape_only_above_floor CHECK (shape IS NULL OR k_sessions >= 25),
+  CONSTRAINT counter_shape_is_abstracted
+    CHECK (shape IS NULL OR (shape ~ '^([a-z][a-z0-9''-]*|<(NAME|PLACE|PET|NUM|EMOTION|OOV)>)( ([a-z][a-z0-9''-]*|<(NAME|PLACE|PET|NUM|EMOTION|OOV)>))*$'
+                            AND length(shape) BETWEEN 1 AND 300))
+);
+CREATE INDEX signal_counter_ready_idx ON signal_counter(k_sessions DESC)
+  WHERE promoted_to IS NULL AND shape IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- How "25 DISTINCT sessions" is counted without storing which sessions.
+--
+-- `contributor` is HMAC(key, domain || shape_hash || session_id). Scoping it to
+-- the shape is the whole design: the same session contributing to two different
+-- shapes produces two unrelated values, so these rows cannot be joined together
+-- into "the list of shapes this child produced" — which is the profile the
+-- counter exists to avoid building.
+--
+-- Rows are DELETED when a shape reaches the floor, and no more are inserted
+-- after that, so this table holds at most 25 rows per shape and shrinks as
+-- shapes promote.
+-- ---------------------------------------------------------------------------
+CREATE TABLE signal_contributor (
+  shape_hash   bytea NOT NULL,
+  contributor  bytea NOT NULL,
+  PRIMARY KEY (shape_hash, contributor)
+);
 
 -- ---------------------------------------------------------------------------
 -- What actually trains. Every row is written by a human or a teacher model and
@@ -838,6 +921,9 @@ CREATE INDEX training_run_promoted_idx ON training_run(promoted_at DESC)
   WHERE retired_at IS NULL;
 
 GRANT SELECT ON training_signal, training_example, training_run TO chittu_ops;
+-- Ops can read the counter, which above the floor means reading `shape`. Below
+-- it there is nothing to read: the column is NULL.
+GRANT SELECT ON signal_counter TO chittu_ops;
 
 COMMIT;
 
@@ -953,6 +1039,13 @@ GRANT SELECT ON flag_note_template, helpline_registry, market, deployment,
 -- metering is written by the runtime and read only by the ops console
 GRANT INSERT ON metering TO chittu_app;
 GRANT USAGE, SELECT ON SEQUENCE metering_id_seq TO chittu_app;
+
+-- The runtime COUNTS shapes. It does not promote them: promotion writes
+-- training_signal, and the absence below is the control that keeps the runtime
+-- out of the training corpus. A shape reaching the floor is where the runtime's
+-- job ends and a human's begins.
+GRANT SELECT, INSERT, UPDATE ON signal_counter TO chittu_app;
+GRANT SELECT, INSERT ON signal_contributor TO chittu_app;
 
 -- NOTE the absences, which are the control: chittu_app is granted nothing on
 -- training_signal, training_example, training_run, dataset_export, admin_user

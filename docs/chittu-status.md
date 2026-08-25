@@ -83,7 +83,9 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Container** | Distroless `chittu-api` + `pnpm stack:up` — API, real Postgres, pgvector, migration task | `apps/api/Dockerfile`, `compose.yaml` |
 | **Migrations** | `pnpm db:migrate` with a `schema_migration` ledger. Postgres had no migration path at all before | `apps/api/src/migrate.ts` |
 | **Logging** | `logs/api.log`, redaction enforced by path so §2.2 stops holding by accident | `apps/api/src/logging.ts` |
-| **Tests** | **1068**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Metering** | One row per model call — tokens, latency, cost, `rate_version` — against a session pseudonym with no FK to anything. A maths turn and a crisis turn write **zero** rows | `packages/db/metering-repo.ts` |
+| **Abstractor + signal capture** | A child's turn becomes a shape (six placeholders, ~1,700-lemma closed vocabulary) and the shape's TEXT is written only on the turn that reaches **25 distinct sessions**. Below the floor: a keyed hash and an integer | `packages/safety-kernel/abstractor.ts`, `packages/db/signal-repo.ts` |
+| **Tests** | **1303**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is now real — Anthropic
 adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never
@@ -443,13 +445,15 @@ reads a script incrementally by byte offset and the file was edited mid-run. The
 re-execs from a snapshot of itself, verified by editing a running copy and watching it ignore the
 edit. **The scorecard file is the artefact; the summary line is a convenience.**
 
-## 8b. The pattern: nine instruments, one failure mode
+## 8b. The pattern: eleven instruments, one failure mode
 
 Every defect in this list is an **instrument reporting success while measuring something other
 than what it claimed**. Not one was found by reading code; every one needed running the thing.
-The last three were found on 2026-08-25 and are the reason this section is no longer titled
+The last five were found on 2026-08-25 and are the reason this section is no longer titled
 "four". The ninth is the sharpest: it is *this document's own* §7b acceptance criterion,
-written the same night, going green on a worse model.
+written the same night, going green on a worse model. The eleventh was written, run green, and
+caught by mutation-testing it **twenty minutes later, in the same sitting** — which is the
+argument for mutation testing in one line.
 
 | Instrument | Reported | Actually measured |
 |---|---|---|
@@ -462,6 +466,8 @@ written the same night, going green on a worse model.
 | **`pnpm test`** (2026-08-25) | **1054/1054 green** | `src/`. Tests resolve `@chittu/*` through the `development` export condition, so the suite passed while the compiled artifact could not boot at all |
 | **`variance_protocol.sh` again** | seed 911 = **28/30 (93%)** | a stale copy of itself. bash reads a script by byte offset, the file was edited mid-run, and the card actually holds 35 rows — 28/35, **80%** |
 | **the Tamil SAFE controls** | **2/2 PASS at 500 iters** | a model that escalates nothing. Tamil crisis recall there is 0/4. The floor was cleared by the absence of the behaviour, not the presence of the discrimination |
+| **`training_signal.shape_is_abstracted`** | "rejects raw prose reaching this column by any route" | a character class containing `0-9` and no `A-Z`. It accepted `9876543210` — a ten-digit mobile — and rejected `my <PET> died…`, the worked example in its own comment. Invisible for as long as the table had zero writers: **a constraint is only tested by code that tries to write through it** |
+| **the `shapeHash` domain-separation test** | "differs from the blind index — domain separation" | that `fingerprint()` lowercases its input. The comparison shape contained `<PET>`, so the two hashed different strings and differed with or without the domain tag. Deleting the tag left it green |
 
 **The rule this earns.** An eval built from the artefact it tests proves only that the artefact
 is self-consistent. Corpora must come from outside — real child phrasings, panel sessions,
@@ -471,6 +477,13 @@ support tickets, model outputs. And a number that is suspiciously round or suspi
 Both new gates encode it: `safety-corpus/` phrases are written from the child's side and never
 derived from a pattern, and `variance_protocol.sh` now refuses to print a score when zero rows
 were scored, saying the harness failed instead.
+
+**And the rule the eleventh earns, which is different.** The first nine were caught by running
+something. Number eleven passed when run, and could only be caught by *breaking the thing it
+guards and checking it noticed*. Every guard added since carries a recorded mutation — the
+abstractor's four, the k-floor's five, signal capture's two — because a guard whose removal is
+silent is not a guard. The `signals.test.ts` database sweep carries the same idea forward as a
+positive control: it must prove it can find `message.mode` before its all-clear means anything.
 
 ## 9. What to do next
 

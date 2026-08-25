@@ -187,6 +187,27 @@ export interface TurnRequest {
   readonly mode: Mode;
 }
 
+/**
+ * What the runtime OBSERVED go wrong on a turn, for training-signal capture.
+ *
+ * This is not part of `TurnResponse` and never reaches a child's browser. It
+ * travels alongside it, from the pipeline to the API, and its only consumer is
+ * the abstractor path in `apps/api`.
+ *
+ * THE FIELDS ARE OBSERVATIONS, NOT JUDGEMENTS. `layer` and `observedToken` are
+ * facts about which layer acted. `failureClass` is set ONLY for the two things
+ * the runtime can honestly name on its own — a classifier that could not be
+ * parsed, and an output filter that fired. Everything else in the
+ * `failure_class` enum (OVER_REFUSAL, WRONG_TOKEN, HALLUCINATION…) requires
+ * someone to decide what SHOULD have happened, and a runtime that guessed at
+ * those would fill the triage queue with confident fiction.
+ */
+export interface TurnSignal {
+  readonly layer: PipelineLayer;
+  readonly observedToken: 'CRISIS' | 'SPINE' | 'UNSAFE' | 'PII' | 'NONE';
+  readonly failureClass: 'CLASSIFIER_PARSE' | 'L6_CATCH' | null;
+}
+
 export interface TurnResponse {
   readonly blocks: readonly Block[];
   /** Human-readable provenance, shown in the trace strip. */

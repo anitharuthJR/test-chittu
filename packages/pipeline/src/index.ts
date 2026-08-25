@@ -18,7 +18,7 @@
 
 import type {
   Band, ClassifierOutcome, Country, Flag, Memory, Mode, PipelineLayer,
-  RouteContext, TurnResponse,
+  RouteContext, TurnResponse, TurnSignal,
 } from '@chittu/contracts';
 import { MEMORY_CATEGORIES, isClassifierFailure } from '@chittu/contracts';
 import {
@@ -101,6 +101,12 @@ export interface PipelinePorts {
 export interface TurnOutcome {
   readonly state: SessionState;
   readonly response: TurnResponse;
+  /**
+   * What went observably wrong, for training-signal capture. Deliberately NOT
+   * on `TurnResponse`: that type is the wire, and a child's browser has no
+   * business knowing which layer caught what.
+   */
+  readonly signal?: TurnSignal;
 }
 
 /** The fallback when the sandbox errors or L6 rejects a reply. */
@@ -114,6 +120,12 @@ export const SAFE_FALLBACK =
 interface Walk {
   readonly layers: PipelineLayer[];
   readonly flags: Flag[];
+  /**
+   * Last write wins. A turn whose classifier was unavailable AND whose sandbox
+   * then caught a CRISIS has both observations true, and the later one is the
+   * more specific: it says the last line of defence is what stopped it.
+   */
+  signal?: TurnSignal;
 }
 
 /**
@@ -142,16 +154,16 @@ async function reply(
     flags: [...state.flags, ...walk.flags],
     history: [...state.history, { role: 'assistant', content: flat }],
   };
-  return {
-    state: next,
-    response: {
-      blocks,
-      trace,
-      layers: [...walk.layers],
-      crisisLock: next.crisisLock,
-      flags: [...walk.flags],
-    },
+  const response: TurnResponse = {
+    blocks,
+    trace,
+    layers: [...walk.layers],
+    crisisLock: next.crisisLock,
+    flags: [...walk.flags],
   };
+  return walk.signal === undefined
+    ? { state: next, response }
+    : { state: next, response, signal: walk.signal };
 }
 
 /** Memory saves are allowlisted in code, not only in the prompt (CLAUDE.md). */
@@ -303,6 +315,9 @@ async function continueAfterMaths(
 
   if (isClassifierFailure(outcome)) {
     clsNote = 'FAST-PATH-ONLY';
+    walk.signal = {
+      layer: 'L2_CLASSIFIER', observedToken: 'NONE', failureClass: 'CLASSIFIER_PARSE',
+    };
   } else if (outcome.label !== 'SAFE') {
     // The classifier can escalate on its own — indirect crisis is exactly what
     // L1 cannot see. Torn cases resolve to CRISIS upstream, in the classifier.
@@ -358,6 +373,10 @@ async function continueAfterMaths(
         kind: 'SAFETY', category: fx.flagCategory, noteKey: fx.flagKey, at: ports.now(),
       });
     }
+    // The sandbox is the LAST line: L1 and L2 both let this through. That is a
+    // fact worth counting, and it is not the same as saying they were wrong —
+    // which is why `failureClass` stays null and a human decides at triage.
+    walk.signal = { layer: 'L5_SANDBOX', observedToken: token, failureClass: null };
     const body = kind === 'crisis'
       ? crisisMain(afterCls.band, afterCls.country, afterCls.helplines)
       : spineFor(fx.spine as 'pii' | 'unsafe' | 'identity' | 'secret', afterCls.band);
@@ -376,6 +395,7 @@ async function continueAfterMaths(
     walk.flags.push({
       kind: 'SAFETY', category: 'OUTPUT-FILTER', noteKey: 'OUTPUT_FILTER', at: ports.now(),
     });
+    walk.signal = { layer: 'L6_FILTER', observedToken: 'NONE', failureClass: 'L6_CATCH' };
     // Drop the poisoned turn from history so it cannot seed the next reply.
     return await reply(
       { ...afterCls, history: afterCls.history.slice(0, -1) },

@@ -107,6 +107,15 @@ file and 0001 is regenerated. That keeps the reviewed compliance artifact and th
 thing that actually runs from drifting apart, which they did within one session
 of having two files.
 
+**One exception has already been needed, and it is worth knowing why.** On
+2026-08-25 a wrong CHECK on `training_signal.shape` was fixed in the schema file
+and 0001 regenerated — and that fix reaches a fresh boot and *never* reaches a
+Postgres somebody migrated last week, because `pnpm db:migrate` keeps a ledger
+and skips a file it has applied. `0005_signal_counter.sql` is the replay for
+anything already past 0001: the same changes, written to be a no-op on a
+database that came from the new one. Prefer this pattern over hoping nobody has
+a dev database.
+
 **The moment a database exists that we cannot drop, this inverts:** 0001 freezes,
 migrations become strictly additive and append-only, and the schema file becomes a
 generated snapshot instead. Do not carry the current habit past that point.

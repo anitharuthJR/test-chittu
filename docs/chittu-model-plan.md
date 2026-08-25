@@ -27,19 +27,20 @@ Audited 2026-08-25 against `main`.
 | Per-child clearance via `provider_clearance` | **built** |
 | Compiled `MODEL_CATALOGUE` (config selects, never injects) | **built** — 1 provider, 3 models |
 | `anthropic` adapter, returns `tokensIn`/`tokensOut` | **built** |
-| `metering` table (provider, model, tokens, latency, cost, pseudonym) | schema only — **0 writers** |
-| `training_signal` (shapes, k≥25, human review) | schema only — **0 writers** |
+| `metering` table (provider, model, tokens, latency, cost, pseudonym) | **built** — phase 1, PR #42 |
+| `signal_counter` / `signal_contributor` (k≥25, shape NULL below the floor) | **built** — phase 2 |
+| `training_signal` (shapes, k≥25, human review) | schema only — written by `signalRepo.promote`, whose caller is phase 4 |
 | `training_example` (four-eyes, leak-proof fingerprint) | schema only — **0 writers** |
 | `dataset_export`, `training_run` | schema only — **0 writers** |
 | `learning_insight` | schema only — **0 writers** |
-| The **abstractor** that produces `shape` (§11.3) | **does not exist** |
+| The **abstractor** that produces `shape` (§11.3) | **built** — `@chittu/safety-kernel/abstractor.ts` |
 | `corpus_entry` / `corpus_chunk` + pgvector (RAG) | schema only — **0 writers** |
 | `vision` / `embedding` cells | declared and catalogued, **nothing routes to them** |
 | `chittu-local` (qwen3-4b LoRA) | trains locally; **not deployable**, and see §5 |
 
-**The one-line summary: routing is finished, capture is not started.** Six tables
-exist to hold what we learn from production and not one line of code writes to
-any of them.
+**The one-line summary as of 2026-08-25: routing and capture are done; nothing
+has been triaged.** Phases 1 and 2 are built. What is missing now is a human
+surface (phase 4) and a second provider (phase 3).
 
 ---
 
@@ -103,7 +104,7 @@ cannot reach the column through any code path.
 Ordered cheapest-and-safest first, with each phase de-risking the next. No phase
 depends on a phase after it.
 
-### Phase 1 — Metering (≈1 day)
+### Phase 1 — Metering — **DONE** (PR #42)
 
 Write the `metering` row the adapter already has the data for: provider, model,
 prompt version, tokens in/out, latency, cost, against `session_pseudonym`.
@@ -118,7 +119,7 @@ Ship with: a cost table per (provider, model) in code, a `pnpm verify` lane
 asserting a maths turn and a crisis turn write **zero** metering rows, because
 they make zero model calls.
 
-### Phase 2 — The abstractor + signal capture (≈3–4 days)
+### Phase 2 — The abstractor + signal capture — **DONE**
 
 Build the pure function §11.3 specifies, in `safety-kernel`, unit-tested like any
 other guard:
@@ -139,7 +140,35 @@ must go red.
 *Gate:* this phase does not ship until an independent reviewer tries to
 reconstruct a child sentence from a shape and fails.
 
-### Phase 3 — A second provider (≈2–3 days)
+**What shipped, and the two places it differs from the sketch above.**
+
+- The abstractor is `packages/safety-kernel/src/abstractor.ts`, pure and driven
+  by `vocabulary.ts` (~1,700 authored lemmas, inflected by rule). The gate is
+  executable: `apps/api/src/signals.test.ts` drives twenty-five sessions of a
+  sentence carrying a breed, a pet name, a small town, a rare diagnosis and an
+  age, then greps every plaintext column of every table for any of it. A
+  positive control proves the sweep can find things, because an all-clear from
+  an instrument looking in the wrong place is this repo's most-repeated failure.
+- **The runtime does not write `training_signal`, and could not.** The schema
+  grants `chittu_app` nothing on the training corpus and calls that absence the
+  control. So capture stops at `signal_counter`, and `signalRepo.promote()` —
+  which requires a `failure_class` — is for an operator. Its caller is phase 4.
+- **`failure_class` is NULL for most captures, on purpose.** The runtime fills
+  it in for the two things it can name without deciding what SHOULD have
+  happened: a classifier it could not parse, and an output filter that fired.
+  For a sandbox escalation it records the layer and the token and leaves the
+  judgement to a human. A runtime guessing at OVER_REFUSAL would fill the triage
+  queue with confident fiction.
+
+**One thing found on the way, worth knowing about.** `training_signal`'s
+`shape_is_abstracted` CHECK was `^[a-z0-9 <>_?'-]+$` — which accepted
+`9876543210`, because `0-9` is in that class, and rejected `my <PET> died…`,
+because `A-Z` is not. The column whose comment calls it the thing that stops raw
+prose reaching it would have taken a ten-digit mobile number and refused its own
+documented example. Neither was visible for as long as the table had no writers.
+It is now a whitelist of lowercase words and exactly six placeholders.
+
+### Phase 3 — A second provider (≈2–3 days) — **NEXT**
 
 `MODEL_CATALOGUE` has one provider. Until it has two, the claim that routing is
 provider-agnostic is untested.

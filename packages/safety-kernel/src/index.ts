@@ -24,3 +24,10 @@ export {
 export type { RawClassification } from './classifier.js';
 
 export { parseBlocks, stripBlocks, flatten, ITEM_SEPARATOR } from './blocks.js';
+
+export {
+  abstractShape, MAX_SHAPE_CHARS, PLACEHOLDERS, SHAPE_RE,
+} from './abstractor.js';
+export type { Placeholder } from './abstractor.js';
+export { AUTHORED, BASE, COMMON, EMOTIONS, EMOTION_PHRASES, NAMES, PETS, PLACES }
+  from './vocabulary.js';

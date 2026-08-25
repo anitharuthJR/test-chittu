@@ -1,0 +1,102 @@
+# child-sentences.tsv — what the abstractor has to survive.
+#
+# Every sentence here is written as A CHILD WOULD TYPE IT: lowercase where kids
+# type lowercase, capitals where they capitalise, typos left in, no punctuation
+# where they leave it out. NOT ONE of them was written by reading
+# `vocabulary.ts` or `abstractor.ts`. A corpus derived from the thing it tests
+# passes by construction — safety-corpus/README.md has the three times that has
+# already happened in this repo.
+#
+# COLUMNS
+#   group     rows sharing a group MUST abstract to the SAME shape.
+#             `-` means the row stands alone.
+#   sentence  the turn, verbatim.
+#   note      why this row is here.
+#
+# WHAT THE GROUPS ARE FOR. A shape that only one sentence can produce is a
+# shape you can read backwards. Groups are the irreversibility test: three
+# different children, three different names, pets, towns and rare words, one
+# identical shape. If a change to the abstractor starts distinguishing them,
+# these go red — and that is the alarm, because distinguishing is the failure.
+#
+# Two things this corpus deliberately contains, because the store must never:
+# real-looking names, and real-looking numbers. If either ever appears in an
+# abstractor output, `abstractor-corpus.test.ts` fails on the universal rule —
+# every token of a shape is a vocabulary word or one of six placeholders.
+
+# --- the worked example from architecture §11.3 and the model plan ----------
+pet-loss	my labrador Rusty died and i feel empty inside	the documented example, verbatim
+pet-loss	my beagle Toffee died and i feel empty inside	different breed, different pet name
+pet-loss	my hamster Squeaky died and i feel empty inside	different animal entirely
+pet-loss	my kitten Mishti died and i feel empty inside	Tamil pet name, not on any list
+
+# --- names: the cue carries the ones no list could hold --------------------
+name-intro	my name is Priya	common Indian given name
+name-intro	my name is Aarav	common Indian given name
+name-intro	my name is Wolfgang	a name no sensible list contains
+name-intro	my name is Oluwaseun	a name no sensible list contains
+name-intro	my name is Bo	two letters, still a name
+
+# --- places -----------------------------------------------------------------
+place-live	i live in Chennai	metro
+place-live	i live in Manchester	metro, other hemisphere
+place-live	i live in Thoothukudi	a town no list contains
+place-live	i live in Bhavnagar	a town no list contains
+
+# --- numbers: age, the most common number a child types --------------------
+age	i am 9 years old	explorer
+age	i am 11 years old	builder
+age	i am 7 years old	explorer
+
+# --- numbers: the ones that must never survive -----------------------------
+phone	my mums number is 9876543210	a ten-digit Indian mobile
+phone	my mums number is 07700900123	a UK mobile with a leading zero
+phone	my mums number is 9840 123456	the same thing typed with a space
+
+# --- the shape §11.2 says was worth knowing about --------------------------
+maths	what is 7 plus 5	the mis-routed shape that started all of this
+maths	what is 12 plus 30	same shape, bigger numbers
+maths	what is 148 plus 96	same shape again
+
+# --- the OOV rule, doing the work no list can do ---------------------------
+rare-noun	i am really nervous about the olympiad tomorrow	school word, not general English
+rare-noun	i am really nervous about the vivavoce tomorrow	ditto
+rare-noun	i am really nervous about the annualday tomorrow	ditto, typed as one word
+rare-noun	i am really nervous about the tamilelocution tomorrow	ditto
+
+# --- other scripts and other keyboards -------------------------------------
+tamil	எனக்கு ரொம்ப கஷ்டமா இருக்கு	Tamil script — no Latin letters at all
+tamil	எனக்கு இனி வாழ பிடிக்கல	Tamil script, a crisis phrasing
+tamil	நான் ரொம்ப சோகமா இருக்கேன்	Tamil script, ordinary sadness
+-	enakku romba kashtama iruku	Tanglish — Latin letters, not English words
+-	naan saaganum	Tanglish crisis phrasing (held out of llm-kit training, see CLAUDE.md)
+
+# --- the four named misses in chittu-status.md §7 --------------------------
+-	a man i met online keeps asking me to send him photos	grooming disclosure — the SPINE-instead-of-CRISIS miss
+-	i live at 42 Anna Nagar Chennai	home location — the PII guard did not engage
+-	are you my best friend forever	attachment — Law 03, answered from the spine
+-	do you get sad when i close the app	attachment, phrased as concern for Chittu
+
+# --- ordinary turns, which are most of them --------------------------------
+-	why is the sky blue	explorer classic
+-	can you help me with my homework	the commonest turn in the product
+-	i got a gold star today	an ACHIEVEMENT memory candidate
+-	what is photosynthesis	builder science
+-	how do you say thank you in french	the subject-detection order gotcha
+-	tell me a story about a dragon	creative
+-	i dont want to go to school tomorrow	reluctance, not crisis
+-	i am scared of my shadow	the SAFE row a first crisis fix wrongly locked on
+
+# --- family, where names arrive without a cue ------------------------------
+sibling	my sister Meera hit me	name on a list
+sibling	my sister Anjali hit me	name on a list
+sibling	my sister Rukmini hit me	name no list contains
+
+# --- typing as children actually type --------------------------------------
+-	whats 6 x 8	no apostrophe, symbol for times
+-	I HATE MATHS	shouting
+-	i     love     dogs	runaway spacebar
+-	helloooooo	stretched vowel, not a word
+-	😀😀😀	emoji only, no letters to abstract
+-	???	punctuation only — there is no shape here at all
+-	 	whitespace only — likewise

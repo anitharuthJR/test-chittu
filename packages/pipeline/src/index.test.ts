@@ -327,3 +327,60 @@ describe('the walk itself', () => {
     expect(h.chain.verify().ok).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('what the turn OBSERVED, for training-signal capture', () => {
+  /**
+   * `signal` rides on TurnOutcome, not on TurnResponse. That separation is the
+   * point: the API needs to know which layer caught what, and a child's browser
+   * does not. A test that only checked `signal` would pass just as happily if
+   * the field had been added to the wire type by mistake.
+   */
+  it('is absent on an ordinary turn, and never on the wire', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'why is the sky blue', h.ports);
+    expect(out.signal).toBeUndefined();
+    expect(Object.keys(out.response)).not.toContain('signal');
+  });
+
+  it('records a classifier that could not answer', async () => {
+    const h = harness({ classify: () => Promise.reject(new Error('provider down')) });
+    const out = await runTurn(base, 'tell me about volcanoes', h.ports);
+    expect(out.signal).toEqual({
+      layer: 'L2_CLASSIFIER', observedToken: 'NONE', failureClass: 'CLASSIFIER_PARSE',
+    });
+  });
+
+  it('records the sandbox catching what L1 and L2 both let through', async () => {
+    const h = harness({ generate: 'CRISIS' });
+    const out = await runTurn(base, 'everything feels like too much lately', h.ports);
+    // failureClass is NULL on purpose. "The last line caught it" is a fact;
+    // "the earlier lines were wrong" is a judgement, and belongs to a human.
+    expect(out.signal).toEqual({
+      layer: 'L5_SANDBOX', observedToken: 'CRISIS', failureClass: null,
+    });
+  });
+
+  it('records the output filter firing', async () => {
+    // A Law 03 attachment claim — the thing L6 exists to stop reaching a child.
+    const h = harness({ generate: 'I will always miss you when you go' });
+    const out = await runTurn(base, 'do you think about me', h.ports);
+    expect(out.signal?.failureClass).toBe('L6_CATCH');
+    expect(out.signal?.layer).toBe('L6_FILTER');
+  });
+
+  it('lets the later, more specific observation win', async () => {
+    // Classifier down AND the sandbox escalates. Both are true; the one worth
+    // counting is that the last line of defence is what stopped it.
+    const h = harness({
+      classify: () => Promise.reject(new Error('provider down')),
+      generate: 'PII',
+    });
+    // The turn itself must reach the sandbox, so it has to be one no earlier
+    // guard claims — the harness supplies the escalation, not the text.
+    const out = await runTurn(base, 'can you help me with something', h.ports);
+    expect(out.signal?.layer).toBe('L5_SANDBOX');
+    expect(out.signal?.observedToken).toBe('PII');
+  });
+});

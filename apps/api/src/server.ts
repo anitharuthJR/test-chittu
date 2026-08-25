@@ -17,7 +17,7 @@ import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { runTurn } from '@chittu/pipeline';
-import type { Band, Country, Mode, ModelUsage } from '@chittu/contracts';
+import type { Band, Country, Mode, ModelUsage, TurnSignal } from '@chittu/contracts';
 import { BANDS, COUNTRIES } from '@chittu/contracts';
 import {
   assertActiveConsent, draftConsent, markVerifying, activate, revoke,
@@ -26,13 +26,13 @@ import {
   type ConsentMethod,
 } from '@chittu/consent';
 import type { DbPool, KeyProvider } from '@chittu/db';
-import { meteringRepo, sessionPseudonym } from '@chittu/db';
+import { meteringRepo, sessionPseudonym, signalRepo } from '@chittu/db';
 import { costFor, rateFor } from './providers/rates.js';
 import { type ProviderRouter, stubRouter } from './providers.js';
 import { parseOperators } from './ops/auth.js';
 import { opsRoutes } from './ops/routes.js';
 import { createStore } from './store.js';
-import { REGISTRY } from '@chittu/safety-kernel';
+import { REGISTRY, abstractShape } from '@chittu/safety-kernel';
 import { resolveHelplines } from './helplines/resolve.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
@@ -631,6 +631,14 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
        * metering row is acceptable, and losing an answer is not.
        */
       const usage: ModelUsage[] = [];
+      /**
+       * What the turn observed go wrong, and the two facets a signal keeps.
+       * Collected here for the same reason as `usage`: abstracting a shape and
+       * counting it happens AFTER the commit, so it can never cost a child an
+       * answer, and so the turn's transaction is not held open across it.
+       */
+      let signal: TurnSignal | undefined;
+      let facets: { band: Band; country: Country } | undefined;
 
       const result = await store.withChild(row.child_id, async (tx) => {
         const loaded = await store.loadSession(tx, req.params.id);
@@ -657,6 +665,10 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           now: () => new Date().toISOString(),
           newId: () => randomUUID(),
         });
+        if (out.signal !== undefined) {
+          signal = out.signal;
+          facets = { band: state.band, country: state.country };
+        }
 
         /**
          * What Chittu SAID, flattened for storage.
@@ -709,6 +721,38 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           }
         } catch (e) {
           app.log.warn({ err: e }, 'metering write failed; the turn is unaffected');
+        }
+      }
+
+      /**
+       * SIGNAL CAPTURE (docs/chittu-model-plan.md phase 2).
+       *
+       * The child's sentence is abstracted to a shape and the shape is counted.
+       * The sentence itself never leaves this request: `abstractShape` is a pure
+       * function over a string, and `observe` writes the shape's TEXT only on
+       * the turn that takes it past 25 distinct sessions.
+       *
+       * Nothing is captured on an ordinary turn. `signal` is set only where the
+       * runtime saw something go wrong that it can name without guessing what
+       * SHOULD have happened — which is why a maths turn, a crisis turn and a
+       * good answer all write zero rows, and why `signals.test.ts` asserts that
+       * first.
+       */
+      if (signal !== undefined && facets !== undefined) {
+        try {
+          const shape = abstractShape(req.body.text);
+          if (shape !== null) {
+            await signalRepo.observe(opts.pool, {
+              shape,
+              layer: signal.layer,
+              observedToken: signal.observedToken,
+              failureClass: signal.failureClass,
+              band: facets.band,
+              country: facets.country,
+            }, req.params.id, await opts.keys.indexKey());
+          }
+        } catch (e) {
+          app.log.warn({ err: e }, 'signal capture failed; the turn is unaffected');
         }
       }
 
