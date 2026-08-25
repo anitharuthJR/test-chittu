@@ -80,9 +80,8 @@ try {
         ? { band: flagBand, country: flagCountry } : undefined;
       console.log(ctx === undefined
         ? 'Effective routing (unscoped — pass --country and --band for one child):\n'
-        : `Effective routing for an ${ctx.band} in ${ctx.country}:\n`
-          .replace('for an builder', 'for a builder')
-          .replace('for an thinker', 'for a thinker'));
+        : `Effective routing for ${/^[aeiou]/i.test(ctx.band) ? 'an' : 'a'} `
+          + `${ctx.band} in ${ctx.country}:\n`);
       for (const c of CATEGORIES) {
         const cell = ctx === undefined ? r.cells[c] : cellFor(r, c, ctx);
         const isDefault = cell.provider === DEFAULT_CELLS[c].provider

@@ -3,6 +3,38 @@
 `route()` is the single place a vendor is chosen (architecture §12.3). This is
 how to change it, and what the system will refuse to let you do.
 
+## The console
+
+`/ops` on the API, if the deployment has operators configured:
+
+```
+CHITTU_OPS_TOKENS="arun@tulifo.ai=<32+ chars>,priya@tulifo.ai=<32+ chars>"
+```
+
+**With none configured the routes do not exist** — 404, not 403. A login form on
+a deployment that never meant to have a console is pure attack surface.
+
+The console shows effective routing (with a preview for one band and country),
+the overrides in place, a form to change one, and the history. It ships **no
+JavaScript**: forms post, the server redirects.
+
+`changed_by` comes from the **token's name**, not from a form field — a
+`changed_by` in the body is ignored, and a test posts one to prove it. That is
+stricter than the CLI below, where `who` is an argument you type.
+
+### What the token is, and is not
+
+A shared bearer token is not an account. Rotating one is a redeploy, a leaked
+one is valid until then, and there is no per-request revocation. It is
+proportionate for a team of two or three and **not** proportionate for twenty —
+replace it with real SSO before that is true.
+
+What it cannot do either way: introduce a model (the compiled catalogue decides),
+reach an uncleared vendor (`provider_clearance` still applies per child), or
+make an unexplained change (`reason` is a CHECK constraint). The worst an
+attacker with a token achieves is selecting the wrong *reviewed* model, visibly,
+in an append-only log with a name on it.
+
 ## Look before you touch
 
 ```bash

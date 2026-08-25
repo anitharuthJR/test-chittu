@@ -27,6 +27,8 @@ import {
 } from '@chittu/consent';
 import type { DbPool, KeyProvider } from '@chittu/db';
 import { type ProviderRouter, stubRouter } from './providers.js';
+import { parseOperators } from './ops/auth.js';
+import { opsRoutes } from './ops/routes.js';
 import { createStore } from './store.js';
 import { REGISTRY } from '@chittu/safety-kernel';
 import { resolveHelplines } from './helplines/resolve.js';
@@ -49,6 +51,12 @@ export interface BuildOptions {
   readonly logger?: boolean | object;
   /** Gates dev-only consent methods. Mirrors `deployment.env` in the schema. */
   readonly env?: 'dev' | 'staging' | 'prod';
+  /**
+   * `name=token,...`. When absent or empty the ops console is NOT REGISTERED —
+   * its routes 404 rather than 403. A console that exists everywhere and is
+   * merely protected is a larger surface than one that is not there.
+   */
+  readonly opsTokens?: string;
   /**
    * Requests per minute. Raised by the test suite, which drives dozens of
    * families from one IP and would otherwise spend most of its assertions
@@ -112,6 +120,21 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       return id ?? req.ip ?? 'anonymous';
     },
   });
+
+  /**
+   * The ops console, registered only when operators are configured — see
+   * BuildOptions.opsTokens and ops/routes.ts. `parseOperators` throws on a
+   * malformed or weak entry, so a deployment with a broken CHITTU_OPS_TOKENS
+   * fails to build rather than starting with a console nobody can reach or, far
+   * worse, one anybody can.
+   */
+  const operators = parseOperators(
+    opts.opsTokens === undefined ? {} : { CHITTU_OPS_TOKENS: opts.opsTokens });
+  if (operators.size > 0) {
+    await app.register(opsRoutes({
+      pool: opts.pool, keys: opts.keys, operators, secure: env !== 'dev',
+    }));
+  }
 
   app.get('/health', async () => {
     const r = await opts.pool.query<{ n: number }>('SELECT 1::int AS n');

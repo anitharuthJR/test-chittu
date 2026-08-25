@@ -151,9 +151,22 @@ console.warn(
     : `[chittu] logs -> stdout and ${logDir}/api.log (message bodies redacted)`,
 );
 
+/**
+ * The ops console is opt-in, per deployment, and absent otherwise.
+ *
+ * `CHITTU_OPS_TOKENS="name=token,..."`. With none configured the /ops routes are
+ * not registered at all — 404, not 403 — because a login form on a deployment
+ * that never meant to have a console is pure attack surface.
+ */
+const opsTokens = process.env['CHITTU_OPS_TOKENS'] ?? '';
+console.warn(opsTokens === ''
+  ? '[chittu] ops console: NOT mounted (set CHITTU_OPS_TOKENS to enable)'
+  : `[chittu] ops console: /ops, ${opsTokens.split(',').length} operator(s)`);
+
 const app = await buildServer({
   pool, keys, router: await chooseRouter(), logger: loggerOptions,
   ...(isProd ? { env: 'prod' as const } : {}),
+  ...(opsTokens === '' ? {} : { opsTokens }),
 });
 /**
  * Bind address. Defaults to loopback and must be opted OUT of.
