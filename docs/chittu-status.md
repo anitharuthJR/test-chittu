@@ -60,6 +60,10 @@ Reference implementation: `prototype/chittu-v3.html` (one file, ~1,000 lines of 
 - **Grooming / exploitation detection** at conversation level (Seat 14's threat corpus).
 - **Red-team corpus** run as a release gate.
 - **Own child-speech ASR.** Browser ASR is a placeholder; adult-trained models fail children.
+- **A server-side gate on the composer's microphone.** There cannot be one: speech is transcribed
+  in the browser, so a spoken turn and a typed turn are byte-identical by the time they arrive.
+  `POST /:id/read` is gated because its transcript is ASR output by definition; the composer mic is
+  gated in the client alone. See §2e.
 - **Security & privacy program.** No DPIA, pen test, breach drill, or named-humans ACL.
 - **Accessibility work.** No screen-reader pass, no captions plan, no switch access, no WCAG audit.
 - **Device-floor testing.** Never run on a low-cost Android on 3G.
@@ -129,6 +133,37 @@ test is now parameterised over `COUNTRIES` itself. See PORT-REVIEW.
 authenticated nothing, so a consent id alone could erase a child's entire record — and the client
 was keeping one in `localStorage` where the child could read it. Credentials now live in httpOnly
 cookies and destructive routes require a PIN-minted parent session. See PORT-REVIEW.
+
+### 2e. The two consent scopes that were declared but ungrantable (2026-08-26)
+
+`ConsentScope` has listed `vision` and `voice` since the first commit. Neither could be granted —
+no draft field set them — and neither was read by any code. Decorative permissions, which are worse
+than absent ones because they read as controls in review.
+
+The camera made it urgent. When vision shipped (§2d) it arrived with a working input path and **no
+parental grant at all**: `POST /turn` accepted an image, the button rendered unconditionally, and a
+child's photograph went to a third-party vendor because a button existed. The microphone had been in
+the same state for longer, running under the `chat` grant since the first client, while requirements
+§4.2 says voice is biometric-adjacent under COPPA and needs its own.
+
+Both are now granted explicitly (`visionOn`, `voiceOn`, default OFF) and checked server-side.
+
+**They are NOT symmetrical, and that is the part to carry forward.** An image is UPLOADED, so
+`POST /turn` refuses it. Speech is transcribed **in the browser** and arrives as text — a spoken turn
+and a typed turn are byte-identical by the time they reach us, so no server can tell them apart and
+**the composer's microphone is gated in the client alone.** That is a weaker control than vision's
+and it is recorded rather than left to be assumed equivalent. `POST /:id/read` is the one exception:
+its `transcript` is ASR output by definition and `ReadCoach` offers no typed path.
+
+- **Gates capture, never playback.** TTS speaks Chittu's own words, synthesised on the device.
+  Silencing it would cost a pre-literate child the feature and buy no privacy.
+- **Default OFF for everyone, no grandfathering** — affordable for exactly one reason with an expiry
+  date: no child has ever used this, so there is no installed base to strand. The same change after
+  launch needs a migration and a re-consent flow.
+- **Two guards were SILENT and are now covered.** The `supersede` carry-forward for *both* scopes
+  could be deleted with the whole suite green — a parent granting the camera and later correcting
+  their child's curriculum board would have had it revoked by an unrelated edit. And `ReadCoach`'s
+  gate was silent across every web test.
 
 **Still true, and the only sentence that matters:** no child has ever used any of it.
 

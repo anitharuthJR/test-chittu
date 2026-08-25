@@ -45,6 +45,9 @@ export interface DraftRequest {
   readonly board?: string;
   readonly memoryOn?: boolean;
   readonly learnOn?: boolean;
+  /** A camera and a mic are separate asks. Omitted means NOT granted. */
+  readonly visionOn?: boolean;
+  readonly voiceOn?: boolean;
   readonly method: ConsentMethod;
   readonly pin: string;
   readonly pinConfirm: string;
@@ -82,6 +85,12 @@ export type StatusResponse =
       readonly band: Band;
       readonly country: Country;
       readonly childFirstName: string;
+      /**
+       * What the sealed record permits. Narrowed to the two scopes this client
+       * renders from; the server re-checks both, so this decides what is SHOWN
+       * and never what is allowed.
+       */
+      readonly scopes: { readonly vision: boolean; readonly voice: boolean };
     };
 
 export interface SessionResponse {

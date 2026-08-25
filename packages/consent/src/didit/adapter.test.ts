@@ -20,7 +20,7 @@ const CONFIG = {
 
 const DRAFT = {
   parentName: 'Karthik Rajendran', childFirstName: 'Meera', country: 'IN' as const,
-  band: 'builder' as const, board: 'CBSE', memoryOn: true, learnOn: false,
+  band: 'builder' as const, board: 'CBSE', memoryOn: true, learnOn: false, visionOn: false, voiceOn: false,
 };
 
 /** A decision payload shaped like Didit's, with everything it really returns. */

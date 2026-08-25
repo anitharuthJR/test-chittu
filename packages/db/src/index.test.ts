@@ -25,7 +25,7 @@ const keys = localKeyProvider(master, 'dev');
 const draft: FamilyDraft = {
   parentName: 'Lakshmi', parentEmail: 'lakshmi@example.com',
   childFirstName: 'Meera', country: 'IN', band: 'builder',
-  board: 'CBSE', memoryOn: true, learnOn: false,
+  board: 'CBSE', memoryOn: true, learnOn: false, visionOn: false, voiceOn: false,
 };
 
 beforeAll(async () => {

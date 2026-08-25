@@ -75,6 +75,15 @@ async function open_(app: FastifyInstance) {
     method: 'POST', url: '/v1/consent/draft',
     payload: { parentName: 'P', parentEmail: `v-${randomUUID()}@example.com`,
       childFirstName: 'C', country: 'IN', band: 'builder', method: 'dev_stub',
+      /**
+       * THE CAMERA IS GRANTED HERE, and that is a statement about this suite
+       * rather than about the product. `POST /turn` refuses an image without
+       * the `vision` scope, so every test in this file 403'd the moment that
+       * gate landed — which is the gate working. What these tests are about is
+       * what happens to a picture ONCE it is allowed; the refusal is tested in
+       * `server.test.ts`, including the ungranted case.
+       */
+      visionOn: true,
       pin: '2846', pinConfirm: '2846' } });
   const { consentId, challengeId } = draft.json() as { consentId: string; challengeId: string };
   const fin = await app.inject({

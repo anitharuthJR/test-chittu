@@ -43,6 +43,8 @@ export const DASHBOARD = {
 const ACTIVE = {
   active: true as const, band: 'builder' as const,
   country: 'IN' as const, childFirstName: 'Meera',
+  // Default-deny: this suite asserts the chat surface, not the camera or mic.
+  scopes: { vision: false, voice: false },
 };
 
 function stubApi(overrides: Partial<Api> = {}): Api {

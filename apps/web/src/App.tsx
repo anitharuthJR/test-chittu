@@ -38,6 +38,10 @@ export async function refreshConsent(api: Api): Promise<void> {
     if (s.active) {
       profile.value = {
         band: s.band, country: s.country, childFirstName: s.childFirstName,
+        // `?? false` rather than a bare read: an older server that predates
+        // these fields must mean "not granted", not "undefined is falsy".
+        visionOn: s.scopes?.vision ?? false,
+        voiceOn: s.scopes?.voice ?? false,
       };
       consentState.value = 'active';
     } else {

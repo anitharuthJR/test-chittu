@@ -38,6 +38,9 @@ export interface FamilyDraft {
   readonly board: string;
   readonly memoryOn: boolean;
   readonly learnOn: boolean;
+  /** A camera and a microphone are separate asks. Default-deny at every caller. */
+  readonly visionOn: boolean;
+  readonly voiceOn: boolean;
 }
 
 export interface StoredConsent {

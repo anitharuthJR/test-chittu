@@ -29,6 +29,12 @@ import {
 const ACTIVE = {
   active: true as const, band: 'builder' as const,
   country: 'IN' as const, childFirstName: 'Meera',
+  /**
+   * `vision: true` because this suite IS the camera path — without the grant
+   * `Chat` withholds `onPickImage` and the button is correctly absent, leaving
+   * nothing to test. The refusal itself is covered in `server.test.ts`.
+   */
+  scopes: { vision: true, voice: false },
 };
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';

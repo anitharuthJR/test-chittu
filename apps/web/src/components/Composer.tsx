@@ -69,7 +69,7 @@ export function newRecognition(): Recognition | null {
 }
 
 export function Composer(
-  { onSend, onPickImage, hasImage, disabled, placeholder }: {
+  { onSend, onPickImage, hasImage, disabled, placeholder, canHearVoice }: {
     onSend: (text: string) => void;
     /**
      * A picture the child chose, already read and checked. Optional so the
@@ -83,6 +83,15 @@ export function Composer(
     hasImage?: boolean;
     disabled: boolean;
     placeholder?: string;
+    /**
+     * Whether a grown-up granted the microphone. Absent means NOT granted.
+     *
+     * The camera follows this component's existing rule — no `onPickImage`, no
+     * button — so vision is gated at the call site. The mic needs its own flag
+     * because capability (`speechRecognitionAvailable`) and permission are two
+     * different questions and BOTH must hold.
+     */
+    canHearVoice?: boolean;
   },
 ): preact.JSX.Element {
   const [text, setText] = useState('');
@@ -91,7 +100,15 @@ export function Composer(
   const [note, setNote] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
   const file = useRef<HTMLInputElement | null>(null);
-  const canHear = speechRecognitionAvailable();
+  /**
+   * TWO INDEPENDENT REASONS THE MIC CAN BE ABSENT, and they are not the same
+   * message. The browser may be unable to hear (Firefox, most of Safari), or a
+   * grown-up may not have switched it on. Telling a child to "try Chrome" when
+   * the real answer is "ask a grown-up" sends them to fix the wrong thing —
+   * and the reverse sends a grown-up on an errand that cannot help.
+   */
+  const browserCanHear = speechRecognitionAvailable();
+  const canHear = browserCanHear && canHearVoice === true;
   const canShow = onPickImage !== undefined;
 
   function submit(e: Event): void {
@@ -221,9 +238,14 @@ export function Composer(
 
       {note !== null && <p class="composer__note" role="status">{note}</p>}
 
-      {!canHear && (
+      {!browserCanHear && (
         <p class="composer__novoice">
           Talking to Chittu doesn't work in this browser yet — try Chrome, or type instead.
+        </p>
+      )}
+      {browserCanHear && canHearVoice !== true && (
+        <p class="composer__novoice">
+          A grown-up can switch on talking to Chittu. For now, type away! ⌨️
         </p>
       )}
     </form>

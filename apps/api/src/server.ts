@@ -224,7 +224,8 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     Body: {
       parentName: string; parentEmail: string; childFirstName: string;
       country: Country; band: Band; board?: string;
-      memoryOn?: boolean; learnOn?: boolean; method: ConsentMethod;
+      memoryOn?: boolean; learnOn?: boolean; visionOn?: boolean; voiceOn?: boolean;
+      method: ConsentMethod;
       pin: string; pinConfirm: string;
     };
   }>('/v1/consent/draft', {
@@ -243,6 +244,8 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           band: { type: 'string', enum: [...BANDS] },
           board: { type: 'string', maxLength: 60 },
           memoryOn: { type: 'boolean' },
+          visionOn: { type: 'boolean' },
+          voiceOn: { type: 'boolean' },
           learnOn: { type: 'boolean' },
           method: { type: 'string', minLength: 1, maxLength: 40 },
           pin: { type: 'string', minLength: 4, maxLength: 6 },
@@ -267,7 +270,10 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       childFirstName: b.childFirstName, country: b.country, band: b.band,
       board: b.board ?? 'General',
       // Requirements §4.1: memory defaults ON, learning is opt-IN, default OFF.
+      // Memory defaults ON; the camera and the mic default OFF. Both of those
+      // are separate asks, and a caller that omits the field has not asked.
       memoryOn: b.memoryOn ?? true, learnOn: b.learnOn ?? false,
+      visionOn: b.visionOn ?? false, voiceOn: b.voiceOn ?? false,
     };
     const record = markVerifying(draftConsent(draft, b.method));
     const challenge = await adapter.start(draft);
@@ -426,6 +432,19 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
         band: active.record.band,
         country: active.record.country,
         childFirstName: active.record.childFirstName,
+        /**
+         * NARROWED to the two scopes the child's UI decides anything with. The
+         * full array would name `learning` — an operational choice about
+         * training data — to a browser with no use for it.
+         *
+         * These decide what is DRAWN. `POST /turn` and `POST /:id/read`
+         * re-check the sealed record themselves, so a forged `true` here buys
+         * a button that 403s.
+         */
+        scopes: {
+          vision: active.record.scopes.includes('vision'),
+          voice: active.record.scopes.includes('voice'),
+        },
       });
     } catch {
       dead();
@@ -833,11 +852,36 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     }, async (req, reply) => {
       // Which child this session belongs to must be known BEFORE the scope is
       // set, so this one lookup is unscoped and reads nothing but the mapping.
-      const owner = await opts.pool.query<{ child_id: string; ended_at: string | null }>(
-        `SELECT child_id, ended_at FROM session WHERE id = $1`, [req.params.id]);
+      const owner = await opts.pool.query<{
+        child_id: string; ended_at: string | null; consent_id: string;
+      }>(
+        `SELECT child_id, ended_at, consent_id FROM session WHERE id = $1`, [req.params.id]);
       const row = owner.rows[0];
       if (!row) return reply.code(404).send({ error: 'no such session' });
       if (row.ended_at) return reply.code(409).send({ error: 'session ended' });
+
+      /**
+       * THE VISION CONSENT GATE — before anything reads the image, and before
+       * a byte of it can reach a vendor.
+       *
+       * The route has accepted an image since the camera shipped, with no
+       * grant behind it: a child's photograph went to a third party because a
+       * button existed. Hiding the button is a UI preference; this is the
+       * control.
+       *
+       * Checked ONLY when an image is present, so a family who never granted
+       * the camera still chats normally — the absence of a grant is not a
+       * reason to refuse a text turn.
+       */
+      if (req.body.image) {
+        const consented = await store.consent.byId(opts.pool, row.consent_id);
+        if (!consented?.record.scopes.includes('vision')) {
+          return reply.code(403).send({
+            error: 'a grown-up has not turned on picture sharing',
+            code: 'VISION_NOT_CONSENTED',
+          });
+        }
+      }
 
       /**
        * Usage is COLLECTED during the turn and written after it commits.
@@ -1013,11 +1057,38 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       const passage = passageById(req.body.passageId);
       if (!passage) return reply.code(404).send({ error: 'no such passage' });
 
-      const owner = await opts.pool.query<{ child_id: string; ended_at: string | null }>(
-        `SELECT child_id, ended_at FROM session WHERE id = $1`, [req.params.id]);
+      const owner = await opts.pool.query<{
+        child_id: string; ended_at: string | null; consent_id: string;
+      }>(
+        `SELECT child_id, ended_at, consent_id FROM session WHERE id = $1`, [req.params.id]);
       const row = owner.rows[0];
       if (!row) return reply.code(404).send({ error: 'no such session' });
       if (row.ended_at) return reply.code(409).send({ error: 'session ended' });
+
+      /**
+       * THE VOICE CONSENT GATE — and the ONLY place on this server where one
+       * can exist.
+       *
+       * The asymmetry with vision is real and a reader will otherwise assume
+       * parity. An image is UPLOADED, so `/turn` can refuse it. Speech is
+       * transcribed IN THE BROWSER and arrives as text: a spoken turn and a
+       * typed turn are byte-identical by the time they reach us, so no server
+       * can tell them apart and the composer's microphone is gated in the
+       * client alone. That is a weaker control and it is said here rather than
+       * papered over.
+       *
+       * This route is the exception. It exists to score a child reading ALOUD,
+       * its `transcript` is ASR output by definition, and `ReadCoach`
+       * deliberately offers no typed path — so refusing it without the scope
+       * refuses exactly what the scope governs, with nothing else in the net.
+       */
+      const consented = await store.consent.byId(opts.pool, row.consent_id);
+      if (!consented?.record.scopes.includes('voice')) {
+        return reply.code(403).send({
+          error: 'a grown-up has not turned on talking to Chittu',
+          code: 'VOICE_NOT_CONSENTED',
+        });
+      }
 
       /**
        * Collected exactly as /turn collects it — and expected to stay EMPTY.

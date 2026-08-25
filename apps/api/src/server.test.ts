@@ -1878,3 +1878,93 @@ describe('D5/SEAL — the whole chain, behind the parent gate', () => {
     expect(v.broken).toEqual({ sessionId: id, seq: 2 });
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// THE TWO CONSENT SCOPES — declared from the first commit, grantable by nothing
+// and read by nothing until now.
+//
+// They are NOT symmetrical, and the asymmetry is the point. An image is
+// UPLOADED, so `/turn` can refuse it. Speech is transcribed in the BROWSER and
+// arrives as text — a spoken turn and a typed turn are byte-identical here, so
+// no server can tell them apart and the composer's mic is gated in the client
+// alone. `POST /:id/read` is the one exception: its `transcript` is ASR output
+// by definition, so it is the only server-side voice gate that can exist.
+// ---------------------------------------------------------------------------
+
+describe('the vision scope', () => {
+  // A 1x1 PNG — the smallest thing that is genuinely an image.
+  const PIC = {
+    mimeType: 'image/png',
+    dataBase64:
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  };
+  const showPicture = async (id: string, text = 'what is this?') =>
+    app.inject({
+      method: 'POST', url: `/v1/session/${id}/turn`, payload: { text, image: PIC },
+    });
+
+  it('REFUSES a picture when a grown-up has not granted it', async () => {
+    // The default, and the state the camera shipped in: an input path with no
+    // grant behind it, sending a child's photograph to a third-party vendor.
+    const id = await openSession();
+    const res = await showPicture(id);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ code: string }>().code).toBe('VISION_NOT_CONSENTED');
+  });
+
+  it('accepts a picture once vision is granted', async () => {
+    const id = await openSession({ visionOn: true });
+    expect((await showPicture(id)).statusCode).toBe(200);
+  });
+
+  it('still lets a family without vision chat normally', async () => {
+    const id = await openSession();
+    expect((await say(id, 'why is the sky blue')).status).toBe(200);
+  });
+});
+
+describe('the voice scope', () => {
+  const readAloud = async (id: string, transcript = 'the cat sat on a big red mat') =>
+    app.inject({
+      method: 'POST', url: `/v1/session/${id}/read`,
+      payload: { passageId: 'explorer-1', transcript },
+    });
+
+  it('REFUSES a read-aloud attempt when a grown-up has not granted voice', async () => {
+    const id = await openSession();
+    const res = await readAloud(id);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ code: string }>().code).toBe('VOICE_NOT_CONSENTED');
+  });
+
+  it('accepts it once voice is granted', async () => {
+    const id = await openSession({ voiceOn: true });
+    expect((await readAloud(id)).statusCode).toBe(200);
+  });
+
+  it('still lets a family without voice chat by typing', async () => {
+    // The server cannot tell a typed turn from a spoken one anyway, so the
+    // absence of a mic grant must not refuse text.
+    const id = await openSession();
+    expect((await say(id, 'why is the sky blue')).status).toBe(200);
+  });
+});
+
+describe('what the client is told, and what it decides', () => {
+  it('reports both scopes, and they are INDEPENDENT', async () => {
+    // Added together and one `if` away from being conflated.
+    for (const [grant, want] of [
+      [{}, { vision: false, voice: false }],
+      [{ visionOn: true }, { vision: true, voice: false }],
+      [{ voiceOn: true }, { vision: false, voice: true }],
+      [{ visionOn: true, voiceOn: true }, { vision: true, voice: true }],
+    ] as const) {
+      const { cookie } = await grantConsent(grant);
+      const s = await app.inject({
+        method: 'GET', url: '/v1/consent/status', headers: jar(cookie),
+      });
+      expect(s.json<{ scopes: unknown }>().scopes, JSON.stringify(grant)).toEqual(want);
+    }
+  });
+});

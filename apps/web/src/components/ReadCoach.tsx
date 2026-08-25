@@ -24,9 +24,19 @@ import { speechRecognitionAvailable } from '../store';
  * absence explained — never a button that does nothing.
  */
 export function ReadCoach(
-  { onTranscript, disabled }: {
+  { onTranscript, disabled, canHearVoice }: {
     onTranscript: (transcript: string) => void;
     disabled: boolean;
+    /**
+     * Whether a grown-up granted the microphone.
+     *
+     * Read mode is ENTIRELY mic-driven — there is deliberately no text path to
+     * it — so without the grant there is no reduced version of this panel to
+     * show, only an honest explanation. The server agrees independently:
+     * `POST /:id/read` 403s `VOICE_NOT_CONSENTED`, because its `transcript` is
+     * ASR output by definition.
+     */
+    canHearVoice?: boolean;
   },
 ): preact.JSX.Element {
   const [listening, setListening] = useState(false);
@@ -49,6 +59,14 @@ export function ReadCoach(
     r.onend = () => setListening(false);
     setListening(true);
     r.start();
+  }
+
+  if (canHear && canHearVoice !== true) {
+    return (
+      <p class="composer__novoice">
+        A grown-up can switch on talking to Chittu, and then we can read together! 📕
+      </p>
+    );
   }
 
   if (!canHear) {

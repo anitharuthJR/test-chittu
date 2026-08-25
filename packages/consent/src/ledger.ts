@@ -101,9 +101,23 @@ export function verifySeal(r: ConsentRecord): boolean {
 function scopesFor(draft: ConsentDraft): ConsentScope[] {
   // Voice and vision are NOT granted by default. Requirements §4.2 treats voice
   // as biometric-adjacent under COPPA, so it needs its own explicit grant.
+  //
+  // Until this, that comment described an intention nothing implemented: both
+  // scopes were in the union, neither could be granted, and neither was read.
+  // A decorative permission is worse than an absent one, because it reads as a
+  // control in review — and the camera had a working input path behind it.
+  //
+  // There are deliberately NO `vision_on` / `voice_on` columns to match
+  // `memory_on` and `learn_on`. Those two are legacy redundancy — a boolean
+  // beside a scope saying the same thing — and the scope is the half that is
+  // checked. `consent_record.scopes` is jsonb and already documents
+  // `['chat','voice','vision',...]`, so these grants persist and enter the seal
+  // (`canonicalise` joins `scopes`) with no migration.
   const s: ConsentScope[] = ['chat'];
   if (draft.memoryOn) s.push('memory');
   if (draft.learnOn) s.push('learning');
+  if (draft.visionOn) s.push('vision');
+  if (draft.voiceOn) s.push('voice');
   return s;
 }
 
@@ -215,6 +229,21 @@ export function supersede(
   const scopes: ConsentScope[] = ['chat'];
   if (memoryOn) scopes.push('memory');
   if (learnOn) scopes.push('learning');
+  /**
+   * CARRIED FORWARD FROM THE PREVIOUS SCOPES, not from a boolean.
+   *
+   * This function rebuilds `scopes` from scratch on every supersede, so a scope
+   * with no `changes` field and no column behind it is DROPPED unless it is
+   * copied here — silently, on an unrelated edit. `memory` and `learning` are
+   * safe by accident because they have columns; these two do not, by design.
+   *
+   * The failure that prevents: a parent grants the camera, later corrects their
+   * child's curriculum board, and finds it revoked by an edit that had nothing
+   * to do with it. Mutation-tested — deleting either line was silent across the
+   * whole suite until `index.test.ts` covered it.
+   */
+  if (previous.scopes.includes('vision')) scopes.push('vision');
+  if (previous.scopes.includes('voice')) scopes.push('voice');
   return {
     previous: seal({ ...prev, status: 'superseded' }),
     next: seal({

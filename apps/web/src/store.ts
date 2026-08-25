@@ -77,6 +77,19 @@ export interface Profile {
   readonly band: Band;
   readonly country: Country;
   readonly childFirstName: string;
+  /**
+   * What a grown-up actually granted. DEFAULT-DENY: true only because
+   * `/v1/consent/status` said so, never because the browser assumed it.
+   *
+   * `voiceOn` gates the MICROPHONE — capturing the child's voice — and not the
+   * read-aloud voice. Text-to-speech says Chittu's OWN words, synthesised on
+   * the device, and sends nothing anywhere; what §4.2 calls biometric-adjacent
+   * is the capture, not the playback. Gating TTS on this would silence the
+   * feature that makes Chittu usable by a child who cannot yet read, for a
+   * privacy gain of zero.
+   */
+  readonly visionOn: boolean;
+  readonly voiceOn: boolean;
 }
 
 export const profile = signal<Profile | null>(null);

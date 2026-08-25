@@ -21,7 +21,7 @@ import { ReadCoach } from '../components/ReadCoach';
 import { CrisisPanel } from '../components/CrisisPanel';
 import { modeInfo } from '../catalog';
 import {
-  busy, crisisLock, memories, messages, mode, nextId, push, session,
+  busy, crisisLock, memories, messages, mode, nextId, profile, push, session,
   speechSynthesisAvailable, lite,
 } from '../store';
 
@@ -370,6 +370,7 @@ export function Chat(
         ? (
           <ReadCoach
             disabled={busy.value || session.value === null || passage === null}
+            canHearVoice={profile.value?.voiceOn ?? false}
             onTranscript={(t) => { void readAloud(t); }}
           />
         )
@@ -378,8 +379,20 @@ export function Chat(
             disabled={locked || busy.value || session.value === null}
             {...(locked ? { placeholder: 'Paused until a grown-up unlocks it' } : {})}
             onSend={(t) => { void send(t); }}
-            onPickImage={pickImage}
-            hasImage={pending !== null}
+            /**
+             * NO GRANT, NO PROP, NO BUTTON — this component's own rule, so the
+             * camera is gated here rather than by a third flag.
+             *
+             * The GRANT is the only thing tested here. A crisis lock is already
+             * handled by `disabled` above, which both controls honour; adding
+             * `&& !locked` here as well would make the button vanish mid-lock
+             * rather than grey out, which is a different (and louder) thing to
+             * do to a child who has just been shown helplines.
+             */
+            {...((profile.value?.visionOn ?? false)
+              ? { onPickImage: pickImage, hasImage: pending !== null }
+              : {})}
+            canHearVoice={profile.value?.voiceOn ?? false}
           />
         )}
     </main>

@@ -84,7 +84,14 @@ async function grantConsent(over: Record<string, unknown> = {}) {
 }
 
 async function openSession(over: Record<string, unknown> = {}) {
-  const { cookie } = await grantConsent(over);
+  /**
+   * VOICE IS GRANTED BY DEFAULT IN THIS SUITE, a statement about the suite and
+   * not about the product. Reading aloud is mic-driven, so `POST /:id/read`
+   * refuses without the `voice` scope and every test here 403'd when that gate
+   * landed. These tests are about the SCORER; the refusal is tested in
+   * `server.test.ts`, including the ungranted case.
+   */
+  const { cookie } = await grantConsent({ voiceOn: true, ...over });
   const res = await app.inject({
     method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {},
   });

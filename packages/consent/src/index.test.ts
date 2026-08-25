@@ -18,7 +18,7 @@ import {
 
 const draft: ConsentDraft = {
   parentName: 'Lakshmi', childFirstName: 'Meera', country: 'IN',
-  band: 'builder', board: 'CBSE', memoryOn: true, learnOn: false,
+  band: 'builder', board: 'CBSE', memoryOn: true, learnOn: false, visionOn: false, voiceOn: false,
 };
 
 async function activeConsent() {
@@ -242,7 +242,7 @@ describe('the ledger', () => {
     for (const tampered of [
       { ...r, band: 'explorer' as const },
       { ...r, memoryOn: false },
-      { ...r, status: 'active' as const, learnOn: true },
+      { ...r, status: 'active' as const, learnOn: true, visionOn: false, voiceOn: false },
       { ...r, law: 'nothing at all' },
     ]) {
       expect(verifySeal(tampered), JSON.stringify(Object.keys(tampered))).toBe(false);
@@ -260,7 +260,7 @@ describe('the ledger', () => {
     const off = await activeConsent();
     expect(off.scopes).not.toContain('learning');
     expect(off.scopes).toContain('memory');
-    const on = await runConsentFlow({ ...draft, learnOn: true }, devStubAdapter(), {});
+    const on = await runConsentFlow({ ...draft, learnOn: true, visionOn: false, voiceOn: false }, devStubAdapter(), {});
     expect(on.record.scopes).toContain('learning');
   });
 
@@ -296,6 +296,43 @@ describe('the ledger', () => {
     expect(verifySeal(previous) && verifySeal(next)).toBe(true);
     // the original record's own seal is untouched history
     expect(first.status).toBe('active');
+  });
+
+  /**
+   * SUPERSEDE REBUILDS `scopes` FROM SCRATCH, so a scope with no `changes`
+   * field and no boolean on the record is dropped unless it is copied forward
+   * explicitly — silently, on a completely unrelated edit.
+   *
+   * `memory` and `learning` are safe by accident: they have columns, so they
+   * are rebuilt from `memoryOn`/`learnOn`. `vision` and `voice` deliberately do
+   * not (the scope IS the truth), which means they depend entirely on two
+   * carry-forward lines. Mutation-tested: deleting either was SILENT across the
+   * whole suite until this test existed.
+   *
+   * The failure it prevents: a parent grants the camera, later corrects their
+   * child's curriculum board, and finds it revoked by an edit that had nothing
+   * to do with it.
+   */
+  it.each([
+    ['vision', { visionOn: true, voiceOn: false }],
+    ['voice', { visionOn: false, voiceOn: true }],
+    ['both', { visionOn: true, voiceOn: true }],
+  ])('carries %s forward across an unrelated supersede', async (_label, grants) => {
+    const a = devStubAdapter();
+    const { record } = await runConsentFlow({ ...draft, ...grants }, a, {});
+    const granted = (['vision', 'voice'] as const).filter((k) => grants[`${k}On`] === true);
+    expect(record.scopes, 'precondition').toEqual(expect.arrayContaining(granted));
+
+    // An edit that says nothing about either scope.
+    const { next } = supersede(record, { board: 'ICSE' });
+
+    expect(next.board).toBe('ICSE');
+    expect(next.scopes).toEqual(expect.arrayContaining(granted));
+    // And a scope NOT granted must not appear from nowhere.
+    for (const k of ['vision', 'voice'] as const) {
+      if (!granted.includes(k)) expect(next.scopes).not.toContain(k);
+    }
+    expect(verifySeal(next)).toBe(true);
   });
 });
 

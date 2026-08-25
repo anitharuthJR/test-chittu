@@ -68,12 +68,15 @@ interface Draft {
   pinConfirm: string;
   memoryOn: boolean;
   learnOn: boolean;
+  visionOn: boolean;
+  voiceOn: boolean;
 }
 
 const EMPTY: Draft = {
   parentName: '', parentEmail: '', childFirstName: '', country: 'IN',
   band: null, board: 'General', pin: '', pinConfirm: '',
-  memoryOn: true, learnOn: false,
+  // Memory defaults ON; the other three are separate asks and default OFF.
+  memoryOn: true, learnOn: false, visionOn: false, voiceOn: false,
 };
 
 export function Consent({ api, onDone }: { api: Api; onDone: () => void }): preact.JSX.Element {
@@ -134,6 +137,8 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
         board: d.board,
         memoryOn: d.memoryOn,
         learnOn: d.learnOn,
+        visionOn: d.visionOn,
+        voiceOn: d.voiceOn,
         method,
         pin: d.pin,
         pinConfirm: d.pinConfirm,
@@ -321,7 +326,7 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
 
         {step === 7 && (
           <>
-            <h2>Two choices, both yours</h2>
+            <h2>Four choices, all yours</h2>
             <Toggle
               on={d.memoryOn}
               onChange={(v) => set('memoryOn', v)}
@@ -333,6 +338,18 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
               onChange={(v) => set('learnOn', v)}
               title="Help improve Chittu"
               body="Off unless you turn it on. Raw chats never train models. If you turn this on, a person reviews an anonymised summary first."
+            />
+            <Toggle
+              on={d.visionOn}
+              onChange={(v) => set('visionOn', v)}
+              title="Let your child show Chittu a picture"
+              body="Off unless you turn it on. A photo is sent to be described, then discarded — we never store pictures, and Chittu never identifies people, guesses ages or comments on how anyone looks."
+            />
+            <Toggle
+              on={d.voiceOn}
+              onChange={(v) => set('voiceOn', v)}
+              title="Let your child talk to Chittu"
+              body="Off unless you turn it on. Your child's device turns speech into text and throws the sound away — the recording never leaves the device and we never receive it. This also switches on reading aloud. Chittu can still read its answers out loud either way."
             />
           </>
         )}

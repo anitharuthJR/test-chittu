@@ -21,6 +21,12 @@ import {
 const ACTIVE = {
   active: true as const, band: 'builder' as const,
   country: 'IN' as const, childFirstName: 'Meera',
+  /**
+   * `voice: true` because this suite IS the read-aloud path, and read mode is
+   * entirely mic-driven — without the grant `ReadCoach` correctly renders an
+   * explanation instead of a microphone.
+   */
+  scopes: { vision: false, voice: true },
 };
 
 /** A controllable stand-in for the browser's SpeechRecognition. */
@@ -118,6 +124,35 @@ async function openReadMode() {
   await waitFor(() => expect(screen.getByLabelText('Read this aloud')).toBeTruthy());
   return { api, view };
 }
+
+describe('read mode without the voice grant', () => {
+  /**
+   * Read mode is ENTIRELY mic-driven — `ReadCoach` deliberately offers no typed
+   * path — so an ungranted mic leaves no reduced version of the panel to show,
+   * only an honest explanation. Mutation-tested: deleting the gate in
+   * `ReadCoach` was SILENT across every other web test.
+   *
+   * The server holds the same line independently: `POST /:id/read` 403s
+   * `VOICE_NOT_CONSENTED`, because its transcript is ASR output by definition.
+   */
+  it('explains rather than showing a microphone that cannot be used', async () => {
+    const api = stubApi({
+      status: vi.fn(async () => ({ ...ACTIVE, scopes: { vision: false, voice: false } })),
+    } as Partial<Api>);
+    render(<App api={api} />);
+    await waitFor(() => expect(session.value).not.toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: /read to me/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/a grown-up can switch on/i)).toBeTruthy());
+    // The passage CARD still renders — it is just words on screen. What is
+    // absent is the microphone that would capture the child reading them.
+    expect(screen.queryByLabelText(/read the sentence aloud/i)).toBeNull();
+    expect(screen.queryByText(/tap the mic/i)).toBeNull();
+    // And nothing was sent — there is no transcript to send.
+    expect(api.read).not.toHaveBeenCalled();
+  });
+});
 
 describe('the reading coach screen', () => {
   it('shows a passage card, the mic, and the voice promise on entering read mode', async () => {
