@@ -100,7 +100,14 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 
-pnpm --filter @chittu/web run dev -- --port "$WEB_PORT" --strictPort &
+# NO `--` before these flags. pnpm 11 forwards `--` to the script VERBATIM, so
+# `vite -- --port 5174 --strictPort` makes vite stop reading at the `--`: it
+# falls back to the port in vite.config.ts (5173) and, with --strictPort also
+# lost, auto-increments off it. That is the worst shape of bug, because WEB_PORT
+# then looks like it worked — vite usually lands on the port you asked for by
+# arriving at it one busy port at a time. Observed on pnpm 11.9.0, which this
+# repo pins: without the `--`, vite binds WEB_PORT exactly or exits.
+pnpm --filter @chittu/web run dev --port "$WEB_PORT" --strictPort &
 WEB_PID=$!
 
 echo ""
