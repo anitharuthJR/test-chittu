@@ -21,6 +21,45 @@ pnpm --filter @chittu/api exec tsx src/providers/cli.ts \
   set classifier anthropic:claude-sonnet-5 you@tulifo.ai "haiku missed two red-team prompts, escalating pending review"
 ```
 
+### Scoping it to a country or a band
+
+```bash
+# every child in the UK
+… set sandbox anthropic:claude-opus-5 you@tulifo.ai "UK residency review pending" --country GB
+
+# teenagers in the UK specifically
+… set sandbox anthropic:claude-sonnet-5 you@tulifo.ai "teens need more headroom" --country GB --band thinker
+
+# teenagers everywhere
+… set classifier anthropic:claude-sonnet-5 you@tulifo.ai "escalating after a red-team miss" --band thinker
+```
+
+Most specific wins:
+
+```
+country + band   >   country   >   band   >   unscoped   >   compiled default
+```
+
+**Country outranks band.** Country is where a turn may lawfully be processed;
+band is a judgement about what suits a nine-year-old. When they disagree, the
+legal constraint is not the one to lose.
+
+`show` takes the same flags and answers for one child:
+
+```bash
+… show --country GB --band thinker
+```
+
+### Clearance follows the child, not the deployment
+
+`route()` checks `provider_clearance` for **that child's country**. A vendor
+cleared for India and not the UK now serves Indian children and is refused for
+British ones — previously it was unusable for both, because the router did not
+know the country and had to require clearance everywhere.
+
+A call with no context still gets the old conservative intersection. That is not
+a leftover: a route with no country cannot be checked against one.
+
 Then **restart the API**. Cells are read once at boot, deliberately: routing that
 changes under a turn in flight is worse than routing that needs a restart.
 

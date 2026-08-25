@@ -18,7 +18,7 @@
 
 import type {
   Band, ClassifierOutcome, Country, Flag, Memory, Mode, PipelineLayer,
-  TurnResponse,
+  RouteContext, TurnResponse,
 } from '@chittu/contracts';
 import { MEMORY_CATEGORIES, isClassifierFailure } from '@chittu/contracts';
 import {
@@ -83,7 +83,15 @@ export interface SandboxInput {
 
 /** Everything that touches the world. Injected so turns stay countable. */
 export interface PipelinePorts {
-  classify(text: string, history: SessionState['history']): Promise<ClassifierOutcome>;
+  /**
+   * `ctx` is the band and country of this turn. The classifier cell can be
+   * routed per-band and per-country, and clearance is checked for the child's
+   * own jurisdiction rather than the intersection of every enabled market —
+   * which is what it had to be while this port did not carry a country.
+   */
+  classify(
+    text: string, history: SessionState['history'], ctx: RouteContext,
+  ): Promise<ClassifierOutcome>;
   generate(input: SandboxInput): Promise<string>;
   seal: SealAppender;
   now(): string;
@@ -282,7 +290,8 @@ async function continueAfterMaths(
   walk.layers.push('L2_CLASSIFIER');
   let outcome: ClassifierOutcome;
   try {
-    outcome = await ports.classify(text, state.history);
+    outcome = await ports.classify(text, state.history,
+      { band: state.band, country: state.country });
   } catch {
     // Honest degradation: the turn continues, marked (CLAUDE.md).
     outcome = { label: 'FAST-PATH-ONLY', reason: 'classifier unavailable' };

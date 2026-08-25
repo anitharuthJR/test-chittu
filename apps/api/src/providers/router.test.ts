@@ -16,6 +16,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { anthropicAdapter, ProviderError } from './anthropic.js';
 import { createRouter, RouteRefused, DEFAULT_CELLS } from './router.js';
+import { resolveCells } from './cells.js';
 import type { SessionState } from '@chittu/pipeline';
 import { createTestDb } from '@chittu/db';
 import { readClearance, toJurisdiction } from './clearance.js';
@@ -106,6 +107,48 @@ describe('route()', () => {
 
   it('refuses a cell with no adapter configured', () => {
     expect(() => createRouter({ adapters: {} }).route('classifier')).toThrow(RouteRefused);
+  });
+
+  it('routes on band and country, most specific first', async () => {
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [
+          { category: 'sandbox', provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+          { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'GB' },
+          { category: 'sandbox', provider: 'anthropic', model: 'claude-sonnet-5', country: 'GB', band: 'thinker' },
+        ],
+      }),
+    });
+    expect(r.route('sandbox', { band: 'explorer', country: 'IN' }).model)
+      .toBe('claude-haiku-4-5-20251001');
+    expect(r.route('sandbox', { band: 'explorer', country: 'GB' }).model)
+      .toBe('claude-opus-5');
+    expect(r.route('sandbox', { band: 'thinker', country: 'GB' }).model)
+      .toBe('claude-sonnet-5');
+  });
+
+  it('generate() routes with the band and country of the turn', async () => {
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [{ category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'GB' }],
+      }),
+    });
+    await r.generate({ text: 'hi', state: state({ country: 'GB' }), subject: null });
+    expect(recorded[0]!.body.model).toBe('claude-opus-5');
+    await r.generate({ text: 'hi', state: state({ country: 'IN' }), subject: null });
+    expect(recorded[1]!.body.model).toBe(DEFAULT_CELLS.sandbox.model);
+  });
+
+  it('classify() routes with them too — the whole reason the port changed', async () => {
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [{ category: 'classifier', provider: 'anthropic', model: 'claude-opus-5', band: 'thinker' }],
+      }),
+    });
+    await r.classify('hello', [], { band: 'thinker', country: 'IN' });
+    expect(recorded[0]!.body.model).toBe('claude-opus-5');
+    await r.classify('hello', [], { band: 'explorer', country: 'IN' });
+    expect(recorded[1]!.body.model).toBe(DEFAULT_CELLS.classifier.model);
   });
 
   it('routes homework and learn to their own cells', async () => {
@@ -251,6 +294,40 @@ describe('the vendor\'s own litter is stripped before the pipeline sees it', () 
     // slice, and this adapter only strips tags. L6 runs after this and is what
     // actually stands between the model and the child.
     expect(out).not.toMatch(/<\||<think>/);
+  });
+});
+
+describe('clearance is checked for the CHILD\'s country, not the intersection', () => {
+  /**
+   * Until routing knew the country, a provider was usable only if it was
+   * cleared for EVERY enabled market — the conservative intersection, and a
+   * documented limitation (clearance.ts, PORT-REVIEW). With the country in
+   * hand the question becomes the one the table actually answers.
+   */
+  const clearedByCountry = new Map<string, ReadonlySet<string>>([
+    ['anthropic', new Set(['IN'])],
+  ]);
+
+  it('routes for a child in a country the provider IS cleared for', () => {
+    const r = router({ cleared: new Set<string>(), clearedByCountry });
+    expect(r.route('sandbox', { band: 'builder', country: 'IN' }).provider).toBe('anthropic');
+  });
+
+  it('REFUSES for a child in a country it is not cleared for', () => {
+    const r = router({ cleared: new Set<string>(), clearedByCountry });
+    expect(() => r.route('sandbox', { band: 'builder', country: 'GB' })).toThrow(RouteRefused);
+  });
+
+  it('GB and UK are the same market here too', () => {
+    const ukOnly = new Map<string, ReadonlySet<string>>([['anthropic', new Set(['UK'])]]);
+    const r = router({ cleared: new Set<string>(), clearedByCountry: ukOnly });
+    expect(r.route('sandbox', { band: 'builder', country: 'GB' }).provider).toBe('anthropic');
+  });
+
+  it('falls back to the conservative intersection when the country is unknown', () => {
+    // No context: we do not know who this is for, so the old rule applies.
+    const r = router({ cleared: new Set<string>(), clearedByCountry });
+    expect(() => r.route('sandbox')).toThrow(RouteRefused);
   });
 });
 

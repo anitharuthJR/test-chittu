@@ -9,14 +9,24 @@
  * runs, and is tested, with no key and no network — CI must never need either.
  */
 
-import type { ClassifierOutcome, RouteDecision, RouterCategory } from '@chittu/contracts';
+import type {
+  ClassifierOutcome, RouteContext, RouteDecision, RouterCategory,
+} from '@chittu/contracts';
 import type { SandboxInput } from '@chittu/pipeline';
 
 export interface ProviderRouter {
-  route(category: RouterCategory): RouteDecision;
+  /**
+   * `ctx` is optional here and not in the pipeline port, deliberately. A caller
+   * that genuinely has no turn — a health check, an ops command — should be able
+   * to ask what the unscoped assignment is. It just gets the conservative
+   * clearance rule in exchange, because a route with no country cannot be
+   * checked against a country.
+   */
+  route(category: RouterCategory, ctx?: RouteContext): RouteDecision;
   classify(
     text: string,
     history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[],
+    ctx?: RouteContext,
   ): Promise<ClassifierOutcome>;
   generate(input: SandboxInput): Promise<string>;
 }

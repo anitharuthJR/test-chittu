@@ -28,7 +28,8 @@
  * Config can pick a cell; it cannot make an uncleared vendor callable.
  */
 
-import type { RouterCategory } from '@chittu/contracts';
+import type { Band, Country, RouteContext, RouterCategory } from '@chittu/contracts';
+import { BANDS, COUNTRIES } from '@chittu/contracts';
 import type { DbPool } from '@chittu/db';
 import { CLASSIFIER_PROMPT_VERSION } from '@chittu/safety-kernel';
 import { SANDBOX_PROMPT_VERSION } from '@chittu/pedagogy';
@@ -72,9 +73,27 @@ export interface CellRow {
   readonly category: string;
   readonly provider: string;
   readonly model: string;
+  /** Null/undefined means "any band". */
+  readonly band?: string | null;
+  /** Null/undefined means "any country". */
+  readonly country?: string | null;
+}
+
+export type { RouteContext } from '@chittu/contracts';
+
+/** One assignment and the scope it applies to. */
+export interface ScopedCell {
+  readonly category: RouterCategory;
+  readonly band: Band | null;
+  readonly country: Country | null;
+  readonly cell: CellConfig;
+  readonly origin: CellOrigin;
 }
 
 export interface ResolvedCells {
+  /** Every assignment, scoped or not. `cellFor` reads this. */
+  readonly scoped: readonly ScopedCell[];
+  /** The unscoped view — what applies when band and country are unknown. */
   readonly cells: Readonly<Record<RouterCategory, CellConfig>>;
   readonly origin: Readonly<Record<RouterCategory, CellOrigin>>;
   /** Everything rejected, in words. Empty means the config was fully understood. */
@@ -132,27 +151,40 @@ function parsePair(raw: string, where: string): { provider: string; model: strin
 export function resolveCells(opts: ResolveOptions = {}): ResolvedCells {
   const env = opts.env ?? {};
   const problems: string[] = [];
+  const scoped: ScopedCell[] = [];
 
-  const cells: Record<RouterCategory, CellConfig> = { ...DEFAULT_CELLS };
-  const origin: Record<RouterCategory, CellOrigin> = {
-    classifier: 'default', sandbox: 'default', homework: 'default',
-    curriculum: 'default', vision: 'default', embedding: 'default',
-  };
+  const isBand = (x: string): x is Band => (BANDS as readonly string[]).includes(x);
+  const isCountry = (x: string): x is Country => (COUNTRIES as readonly string[]).includes(x);
 
   // ------------------------------------------------------------------ env ---
+  // CHITTU_CELL_<CATEGORY>[_<COUNTRY>][_<BAND>]. Category names contain no
+  // underscore, so the remaining tokens are unambiguous: each is a country or a
+  // band or neither, and "neither" is reported rather than ignored.
   for (const [key, raw] of Object.entries(env)) {
     if (!key.startsWith(ENV_PREFIX) || raw === undefined || raw === '') continue;
-    const name = key.slice(ENV_PREFIX.length).toLowerCase();
+    const tokens = key.slice(ENV_PREFIX.length).split('_').filter((t) => t !== '');
+    const name = (tokens[0] ?? '').toLowerCase();
     if (!isCategory(name)) {
-      problems.push(`${key}: ${JSON.stringify(name.toUpperCase())} is not a routing category (have: ${CATEGORIES.join(', ')})`);
+      problems.push(`${key}: ${JSON.stringify((tokens[0] ?? '').toUpperCase())} is not a routing category (have: ${CATEGORIES.join(', ')})`);
       continue;
     }
+    let band: Band | null = null;
+    let country: Country | null = null;
+    let bad = false;
+    for (const t of tokens.slice(1)) {
+      if (isCountry(t.toUpperCase())) country = t.toUpperCase() as Country;
+      else if (isBand(t.toLowerCase())) band = t.toLowerCase() as Band;
+      else {
+        problems.push(`${key}: ${JSON.stringify(t)} is neither a country (${COUNTRIES.join(', ')}) nor a band (${BANDS.join(', ')})`);
+        bad = true;
+      }
+    }
+    if (bad) continue;
     const pair = parsePair(raw, key);
     if ('problem' in pair) { problems.push(pair.problem); continue; }
     const v = validate(name, pair.provider, pair.model, key);
     if ('problem' in v) { problems.push(v.problem); continue; }
-    cells[name] = v.cell;
-    origin[name] = 'env';
+    scoped.push({ category: name, band, country, cell: v.cell, origin: 'env' });
   }
 
   // ------------------------------------------------------------------- db ---
@@ -168,15 +200,24 @@ export function resolveCells(opts: ResolveOptions = {}): ResolvedCells {
 
   if (!dbOff) {
     for (const row of rows) {
-      const where = `provider_cell(${row.category})`;
-      if (!isCategory(row.category)) {
-        problems.push(`${where}: not a routing category`);
-        continue;
+      const where = `provider_cell(${row.category}`
+        + `${row.country ? `/${row.country}` : ''}${row.band ? `/${row.band}` : ''})`;
+      if (!isCategory(row.category)) { problems.push(`${where}: not a routing category`); continue; }
+
+      let band: Band | null = null;
+      let country: Country | null = null;
+      if (row.band !== null && row.band !== undefined) {
+        if (!isBand(row.band)) { problems.push(`${where}: ${JSON.stringify(row.band)} is not a band (${BANDS.join(', ')})`); continue; }
+        band = row.band;
       }
+      if (row.country !== null && row.country !== undefined) {
+        if (!isCountry(row.country)) { problems.push(`${where}: ${JSON.stringify(row.country)} is not a country (${COUNTRIES.join(', ')})`); continue; }
+        country = row.country;
+      }
+
       const v = validate(row.category, row.provider, row.model, where);
       if ('problem' in v) { problems.push(v.problem); continue; }
-      cells[row.category] = v.cell;
-      origin[row.category] = 'db';
+      scoped.push({ category: row.category, band, country, cell: v.cell, origin: 'db' });
     }
   }
 
@@ -184,7 +225,21 @@ export function resolveCells(opts: ResolveOptions = {}): ResolvedCells {
     throw new RoutingConfigError(problems);
   }
 
+  // The unscoped view, for callers with no context and for the startup log.
+  const cells: Record<RouterCategory, CellConfig> = { ...DEFAULT_CELLS };
+  const origin: Record<RouterCategory, CellOrigin> = {
+    classifier: 'default', sandbox: 'default', homework: 'default',
+    curriculum: 'default', vision: 'default', embedding: 'default',
+  };
+  for (const e of scoped) {
+    if (e.band === null && e.country === null) {
+      cells[e.category] = e.cell;
+      origin[e.category] = e.origin;
+    }
+  }
+
   return {
+    scoped: Object.freeze(scoped),
     cells: Object.freeze(cells),
     origin: Object.freeze(origin),
     problems: Object.freeze(problems),
@@ -192,11 +247,41 @@ export function resolveCells(opts: ResolveOptions = {}): ResolvedCells {
   };
 }
 
+/**
+ * The cell for one turn. Most specific scope wins:
+ *
+ *   country + band  >  country  >  band  >  unscoped  >  compiled default
+ *
+ * COUNTRY OUTRANKS BAND deliberately. Country is where a turn may lawfully be
+ * processed — a residency or clearance constraint. Band is a judgement about
+ * which model suits a nine-year-old. When the two disagree, the legal
+ * constraint is not the one to lose.
+ *
+ * Ties within a rank go to the last entry, which is a db row over an env one,
+ * matching the precedence everywhere else.
+ */
+export function cellFor(
+  resolved: ResolvedCells, category: RouterCategory, ctx?: RouteContext,
+): CellConfig {
+  let best: CellConfig = DEFAULT_CELLS[category];
+  let bestRank = -1;
+  for (const e of resolved.scoped) {
+    if (e.category !== category) continue;
+    if (e.country !== null && e.country !== ctx?.country) continue;
+    if (e.band !== null && e.band !== ctx?.band) continue;
+    const rank = (e.country !== null ? 2 : 0) + (e.band !== null ? 1 : 0);
+    if (rank >= bestRank) { best = e.cell; bestRank = rank; }
+  }
+  return best;
+}
+
 /** One line per non-default cell, for the startup log. */
 export function describeCells(r: ResolvedCells): string[] {
-  const lines = CATEGORIES
-    .filter((c) => r.origin[c] !== 'default')
-    .map((c) => `  ${c} -> ${r.cells[c].provider}/${r.cells[c].model} (${r.origin[c]})`);
+  const lines = r.scoped.map((e) => {
+    const scope = [e.country, e.band].filter((x) => x !== null).join('/');
+    return `  ${e.category}${scope === '' ? '' : ` [${scope}]`}`
+      + ` -> ${e.cell.provider}/${e.cell.model} (${e.origin})`;
+  });
   if (r.dbIgnored) lines.push('  CHITTU_ROUTING_DB=off — provider_cell rows were NOT applied');
   return lines;
 }
@@ -217,11 +302,21 @@ export function describeCells(r: ResolvedCells): string[] {
  */
 export async function readCells(pool: DbPool): Promise<CellRow[]> {
   try {
-    const { rows } = await pool.query<{ category: string; provider: string; model: string }>(
-      `SELECT DISTINCT ON (category) category, provider, model
+    // Newest per (category, band, country). NULL is its own group, which is
+    // what makes an unscoped row a separate assignment from a scoped one rather
+    // than something a scoped row replaces.
+    const { rows } = await pool.query<{
+      category: string; provider: string; model: string;
+      band: string | null; country: string | null;
+    }>(
+      `SELECT DISTINCT ON (category, band, country)
+              category, provider, model, band, country
          FROM provider_cell
-        ORDER BY category, changed_at DESC, id DESC`);
-    return rows.map((r) => ({ category: r.category, provider: r.provider, model: r.model }));
+        ORDER BY category, band, country, changed_at DESC, id DESC`);
+    return rows.map((r) => ({
+      category: r.category, provider: r.provider, model: r.model,
+      band: r.band, country: r.country,
+    }));
   } catch {
     return [];
   }

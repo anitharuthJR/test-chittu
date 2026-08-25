@@ -102,11 +102,11 @@ async function chooseRouter() {
     // to check against on a laptop, and requiring a seeded table to run `pnpm
     // dev` would only teach people to seed it meaninglessly.
     console.warn('[chittu] provider clearance is NOT enforced outside production.');
-    return createRouter({ adapters, cells });
+    return createRouter({ adapters, cells, scopedCells: resolved });
   }
 
   const markets = await enabledMarkets(pool);
-  const { cleared, partial } = await readClearance(pool, markets);
+  const { cleared, partial, byCountry } = await readClearance(pool, markets);
   if (cleared.size === 0) {
     throw new Error(
       `refusing to start: no provider is cleared for every enabled market `
@@ -118,7 +118,9 @@ async function chooseRouter() {
     console.warn(
       `[chittu] ${provider} is NOT cleared for ${missing.join(', ')} — not routable.`);
   }
-  return createRouter({ adapters, cells, cleared });
+  return createRouter({
+    adapters, cells, cleared, scopedCells: resolved, clearedByCountry: byCountry,
+  });
 }
 
 /**

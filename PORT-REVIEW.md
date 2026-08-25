@@ -655,18 +655,29 @@ deployable yet (§13.2, and the CRISIS 3/8 scorecard), so the cell points at
 Haiku 4.5 today. `DEFAULT_CELLS` says so in a comment; it is a placeholder with
 a name, not a decision.
 
-### NEEDS A DECISION — clearance is per-deployment, not per-child
+### FIXED (2026-08-25) — clearance is now per-child
 
 `provider_clearance` is keyed by `(provider, jurisdiction)`, and the honest
-per-turn check would use the child's own country. `classify()` receives no
-country — the port passes text and history — so the router instead requires a
-provider to be cleared for **every enabled market**, an intersection.
+per-turn check uses the child's own country. `classify()` received no country —
+the port passed text and history — so the router required a provider to be
+cleared for **every enabled market**, an intersection. That erred toward calling
+fewer vendors, which is the safe direction, but it was coarser than the schema
+supports: a vendor cleared for India and not the UK was unusable for Indian
+children too.
 
-That errs toward calling fewer vendors, which is the safe direction, but it is
-coarser than the schema supports: a vendor cleared for India and not the UK is
-unusable for Indian children too. Threading jurisdiction through the port is the
-fix. **Decide before a second market is enabled**, because until then the
-intersection and the correct answer are the same thing.
+The port now carries a `RouteContext` — band and country, and deliberately
+nothing else, because anything else handed to a router is something it could
+then route on. `readClearance` returns `byCountry` alongside the intersection,
+and `route()` asks the question the table actually answers whenever it has a
+context.
+
+The intersection has not been deleted. It is still what a caller with no turn in
+hand gets — a health check, an ops command — because a route with no country
+cannot be checked against one. Two answers, and which you get depends on what
+you know.
+
+Mutation-tested both ways: removing the per-country check, and dropping
+`toJurisdiction` so GB stops matching UK, each fail exactly one test.
 
 ### FIXED — GB and UK were never going to match
 

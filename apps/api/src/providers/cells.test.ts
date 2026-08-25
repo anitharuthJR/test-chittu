@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  MODEL_CATALOGUE, resolveCells, promptVersionFor,
+  MODEL_CATALOGUE, resolveCells, promptVersionFor, cellFor,
 } from './cells.js';
 import { DEFAULT_CELLS } from './router.js';
 import { CLASSIFIER_PROMPT_VERSION } from '@chittu/safety-kernel';
@@ -125,6 +125,103 @@ describe('bad config never fails open', () => {
     expect(() => resolveCells({
       env: { CHITTU_CELL_SANDBOX: 'anthropic:claude-opus-5' }, strict: true,
     })).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Band and country. Added 2026-08-25.
+// ---------------------------------------------------------------------------
+describe('scoped cells — band and country', () => {
+  const IN_THINKER = { band: 'thinker', country: 'IN' } as const;
+  const GB_EXPLORER = { band: 'explorer', country: 'GB' } as const;
+
+  it('an unscoped row still applies to everyone', () => {
+    const r = resolveCells({
+      rows: [{ category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5' }],
+    });
+    expect(cellFor(r, 'sandbox', IN_THINKER).model).toBe('claude-opus-5');
+    expect(cellFor(r, 'sandbox', GB_EXPLORER).model).toBe('claude-opus-5');
+  });
+
+  it('a country-scoped row applies only in that country', () => {
+    const r = resolveCells({
+      rows: [{ category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'GB' }],
+    });
+    expect(cellFor(r, 'sandbox', GB_EXPLORER).model).toBe('claude-opus-5');
+    expect(cellFor(r, 'sandbox', IN_THINKER)).toEqual(DEFAULT_CELLS.sandbox);
+  });
+
+  it('a band-scoped row applies only to that band', () => {
+    const r = resolveCells({
+      rows: [{ category: 'sandbox', provider: 'anthropic', model: 'claude-haiku-4-5-20251001', band: 'explorer' }],
+    });
+    expect(cellFor(r, 'sandbox', GB_EXPLORER).model).toBe('claude-haiku-4-5-20251001');
+    expect(cellFor(r, 'sandbox', IN_THINKER)).toEqual(DEFAULT_CELLS.sandbox);
+  });
+
+  it('country beats band, because residency is a legal constraint and band is a preference', () => {
+    const r = resolveCells({
+      rows: [
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-haiku-4-5-20251001', band: 'thinker' },
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'IN' },
+      ],
+    });
+    expect(cellFor(r, 'sandbox', IN_THINKER).model).toBe('claude-opus-5');
+  });
+
+  it('the most specific row wins over both', () => {
+    const r = resolveCells({
+      rows: [
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'IN' },
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-sonnet-5', country: 'IN', band: 'thinker' },
+      ],
+    });
+    expect(cellFor(r, 'sandbox', IN_THINKER).model).toBe('claude-sonnet-5');
+    expect(cellFor(r, 'sandbox', { band: 'explorer', country: 'IN' }).model).toBe('claude-opus-5');
+    expect(cellFor(r, 'sandbox', GB_EXPLORER).model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('no context falls back to the unscoped assignment', () => {
+    const r = resolveCells({
+      rows: [
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'IN' },
+      ],
+    });
+    expect(cellFor(r, 'sandbox', undefined).model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('a scoped row still cannot introduce an uncatalogued model', () => {
+    const r = resolveCells({
+      rows: [{ category: 'sandbox', provider: 'anthropic', model: 'not-a-model', country: 'IN' }],
+    });
+    expect(cellFor(r, 'sandbox', IN_THINKER)).toEqual(DEFAULT_CELLS.sandbox);
+    expect(r.problems.join(' ')).toMatch(/not-a-model/);
+  });
+
+  it('an unknown band or country is rejected, not silently scoped to nothing', () => {
+    const r = resolveCells({
+      rows: [
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'ZZ' },
+        { category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', band: 'wizard' },
+      ],
+    });
+    expect(r.problems).toHaveLength(2);
+    expect(r.problems.join(' ')).toMatch(/ZZ/);
+    expect(r.problems.join(' ')).toMatch(/wizard/);
+  });
+
+  it('env scoping: CHITTU_CELL_SANDBOX_GB and _GB_THINKER', () => {
+    const r = resolveCells({
+      env: {
+        CHITTU_CELL_SANDBOX_GB: 'anthropic:claude-opus-5',
+        CHITTU_CELL_SANDBOX_GB_THINKER: 'anthropic:claude-sonnet-5',
+      },
+    });
+    expect(cellFor(r, 'sandbox', GB_EXPLORER).model).toBe('claude-opus-5');
+    expect(cellFor(r, 'sandbox', { band: 'thinker', country: 'GB' }).model).toBe('claude-sonnet-5');
+    expect(cellFor(r, 'sandbox', IN_THINKER)).toEqual(DEFAULT_CELLS.sandbox);
   });
 });
 

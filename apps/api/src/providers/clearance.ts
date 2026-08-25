@@ -6,12 +6,19 @@
  * turns it off **without a code change or a deploy** — which is the whole
  * reason `route()` exists as a single choke point (§12.3).
  *
- * The rule applied here is the conservative one: a provider is usable only if
- * it is cleared for **every enabled market**. It is not per-child today, and
- * that is a real limitation rather than an oversight — `classify()` receives no
- * country, so finer-grained routing needs the jurisdiction threaded through the
- * port. Recorded in PORT-REVIEW. The intersection errs toward calling fewer
- * vendors, which is the safe direction to err in.
+ * TWO ANSWERS, and which one you get depends on what the caller knows.
+ *
+ * `byCountry` is what the table actually says: provider -> the jurisdictions it
+ * is cleared for. The router uses it whenever the turn's band and country are
+ * known, which is every child turn since routing gained a RouteContext.
+ *
+ * `cleared` is the conservative intersection — usable only if cleared for EVERY
+ * enabled market. It remains the answer for a caller with no turn in hand (a
+ * health check, an ops command), because a route with no country cannot be
+ * checked against one. It used to be the answer for every turn, since
+ * `classify()` received no country; that was a real limitation and PORT-REVIEW
+ * recorded it. It is no longer the common path, and the intersection still errs
+ * toward calling fewer vendors, which is the safe direction to err in.
  */
 
 import { toJurisdiction, type DbPool } from '@chittu/db';
@@ -24,6 +31,15 @@ export interface ClearanceReport {
   readonly markets: readonly string[];
   /** Providers with SOME clearance but not for every market, and where they fail. */
   readonly partial: Readonly<Record<string, readonly string[]>>;
+  /**
+   * provider -> the jurisdictions it is cleared for.
+   *
+   * This is what the table actually says, and the router now uses it whenever
+   * the turn's country is known. `cleared` above is the intersection across
+   * every enabled market — the conservative answer you are forced into when the
+   * country is unknown, which used to be every turn.
+   */
+  readonly byCountry: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /**
@@ -35,7 +51,7 @@ export async function readClearance(
   pool: DbPool, markets: readonly string[],
 ): Promise<ClearanceReport> {
   if (markets.length === 0) {
-    return { cleared: new Set(), markets, partial: {} };
+    return { cleared: new Set(), markets, partial: {}, byCountry: new Map() };
   }
 
   // Explicit placeholders rather than `= ANY($1)`: the PGlite driver does not
@@ -63,7 +79,7 @@ export async function readClearance(
     if (missing.length === 0) cleared.add(provider);
     else partial[provider] = missing;
   }
-  return { cleared, markets, partial };
+  return { cleared, markets, partial, byCountry: byProvider };
 }
 
 /** Markets we have actually turned on. */

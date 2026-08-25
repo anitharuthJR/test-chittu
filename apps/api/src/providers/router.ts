@@ -23,6 +23,8 @@
 import type {
   ClassifierOutcome, ClassifierResult, ProviderAdapter, RouteDecision, RouterCategory,
 } from '@chittu/contracts';
+import { cellFor, type ResolvedCells, type RouteContext } from './cells.js';
+import { toJurisdiction } from './clearance.js';
 import {
   CLASSIFIER_SYSTEM, CLASSIFIER_PROMPT_VERSION, parseClassifier,
 } from '@chittu/safety-kernel';
@@ -92,6 +94,18 @@ export interface RouterOptions {
    * production, and `main.ts` is where that is checked.
    */
   readonly cleared?: ReadonlySet<string>;
+  /**
+   * Per-jurisdiction clearance: provider -> the markets it is cleared for.
+   *
+   * When the turn's country is known this is the check that runs, and it is the
+   * question `provider_clearance` actually answers. `cleared` above stays as
+   * the fallback for a route with no context — an intersection across every
+   * enabled market, which is what you must fall back to when you do not know
+   * who the turn is for.
+   */
+  readonly clearedByCountry?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Scoped cell assignments. Falls back to `cells` / DEFAULT_CELLS. */
+  readonly scopedCells?: ResolvedCells;
   /** Classifier window size. §5: three messages. */
   readonly historyWindow?: number;
 }
@@ -100,29 +114,50 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
   const cells = opts.cells ?? DEFAULT_CELLS;
   const window = opts.historyWindow ?? 3;
 
-  function route(category: RouterCategory): RouteDecision {
-    const cell = cells[category];
-    if (opts.cleared !== undefined && !opts.cleared.has(cell.provider)) {
+  function route(category: RouterCategory, ctx?: RouteContext): RouteDecision {
+    const cell = opts.scopedCells !== undefined
+      ? cellFor(opts.scopedCells, category, ctx)
+      : cells[category];
+
+    /**
+     * Clearance, and which question we are able to ask.
+     *
+     * With a country in hand we ask the one `provider_clearance` answers: is
+     * this vendor cleared HERE. Without one we cannot, so we fall back to the
+     * conservative intersection — cleared for every enabled market — which is
+     * what the router did for every turn before it knew the country.
+     *
+     * `toJurisdiction` because contracts says GB and the enum says UK, and the
+     * mismatch fails silently in the dangerous direction.
+     */
+    if (ctx !== undefined && opts.clearedByCountry !== undefined) {
+      const markets = opts.clearedByCountry.get(cell.provider);
+      if (markets === undefined || !markets.has(toJurisdiction(ctx.country))) {
+        throw new RouteRefused(
+          category, cell.provider, `not cleared for ${ctx.country}`);
+      }
+    } else if (opts.cleared !== undefined && !opts.cleared.has(cell.provider)) {
       throw new RouteRefused(category, cell.provider, 'not cleared for this jurisdiction');
     }
+
     if (opts.adapters[cell.provider] === undefined) {
       throw new RouteRefused(category, cell.provider, 'no adapter configured');
     }
     return { provider: cell.provider, model: cell.model, promptVersion: cell.promptVersion };
   }
 
-  function adapterFor(category: RouterCategory): {
+  function adapterFor(category: RouterCategory, ctx?: RouteContext): {
     adapter: ProviderAdapter; decision: RouteDecision;
   } {
-    const decision = route(category);
+    const decision = route(category, ctx);
     return { adapter: opts.adapters[decision.provider]!, decision };
   }
 
   return {
     route,
 
-    async classify(text, history) {
-      const { adapter, decision } = adapterFor('classifier');
+    async classify(text, history, ctx) {
+      const { adapter, decision } = adapterFor('classifier', ctx);
 
       // The window is the child's OWN recent turns, numbered, exactly as the
       // prompt describes. Patterns across messages are the point: escalating
@@ -160,7 +195,10 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
       const category: RouterCategory = state.mode === 'homework' ? 'homework'
         : state.mode === 'learn' ? 'curriculum'
         : 'sandbox';
-      const { adapter, decision } = adapterFor(category);
+      // The band and country are already on the state; routing just had no way
+      // to see them until now.
+      const { adapter, decision } = adapterFor(
+        category, { band: state.band, country: state.country });
 
       const system = sandboxSystemPrompt({
         band: state.band,

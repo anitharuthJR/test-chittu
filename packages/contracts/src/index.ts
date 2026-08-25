@@ -205,6 +205,18 @@ export interface TurnResponse {
 export type RouterCategory =
   | 'classifier' | 'sandbox' | 'homework' | 'curriculum' | 'vision' | 'embedding';
 
+/**
+ * Who a turn is, as far as routing is concerned.
+ *
+ * Deliberately only these two. The router needs to pick a vendor; anything else
+ * handed to it is something it could then route on, and a routing layer that
+ * can see the child is a profiling layer.
+ */
+export interface RouteContext {
+  readonly band: Band;
+  readonly country: Country;
+}
+
 export interface RouteDecision {
   readonly provider: string;
   readonly model: string;
