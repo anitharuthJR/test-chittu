@@ -9,6 +9,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { ClassifierOutcome, TurnResponse } from '@chittu/contracts';
+import { COUNTRIES } from '@chittu/contracts';
+import { verifySeal } from '@chittu/consent';
 import { randomBytes } from 'node:crypto';
 import { createTestDb, localKeyProvider, helplineRepo, SESSION_STALE_AFTER_HOURS, type DbPool } from '@chittu/db';
 import { buildServer } from './server.js';
@@ -448,6 +450,93 @@ describe('Law 02 — consent before existence', () => {
     router.verdict = { label: 'SAFE', memory: { category: 'PET', fact: 'has a cat' }, assist: null };
     const turn = await say(sid, 'i have a cat');
     expect(turn.body.memorySaved).toBeUndefined();
+  });
+});
+
+/**
+ * Every market, not just India.
+ *
+ * `COUNTRIES` has six values and this suite exercised ONE. That is the whole
+ * reason a British family could not sign up for months: `child.country` and
+ * `consent_record.jurisdiction` are the `jurisdiction` enum, which spells the
+ * United Kingdom `UK` while contracts spells it `GB`, so `'GB'::jurisdiction`
+ * raised and `setErrorHandler` turned it into a generic 500. Nothing was wrong
+ * with the code that could be seen — the market was simply never tried.
+ *
+ * Parameterised over `COUNTRIES` itself, so a seventh market is covered on the
+ * day it is added rather than on the day it fails.
+ */
+describe('consent works in every market in COUNTRIES', () => {
+  it.each([...COUNTRIES])('%s can complete a draft', async (country) => {
+    const d = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'Lakshmi', parentEmail: `market-${country}-${++seq}@example.com`,
+        childFirstName: 'Meera', country, band: 'builder', board: 'CBSE',
+        method: 'dev_stub', pin: '4917', pinConfirm: '4917',
+      },
+    });
+    expect(d.statusCode, `${country}: ${d.body}`).toBe(201);
+  });
+
+  it.each([...COUNTRIES])('%s round-trips as the ISO spelling, not the enum\'s', async (country) => {
+    const { cookie } = await grantConsent({ country });
+    const st = await app.inject({
+      method: 'GET', url: '/v1/consent/status', headers: jar(cookie),
+    });
+    expect(st.statusCode, st.body).toBe(200);
+    // The database's spelling must not escape. `UK` is not a `Country`, and a
+    // client that received one would index `REGISTRY['UK']` and get undefined —
+    // which is the crisis script's helpline lookup.
+    expect(st.json<{ active: boolean; country: string }>().country).toBe(country);
+  });
+
+  it('gives a British child British helplines, through the whole pipeline', async () => {
+    const id = await openSession({ country: 'GB' });
+    const turn = await say(id, 'i want to die');
+    expect(turn.body.crisisLock).toBe(true);
+    // From `REGISTRY.GB` — reached only if the record came back spelled `GB`.
+    expect(shown(turn.body)).toMatch(/Childline|116 123|0800 1111/i);
+  });
+
+  /**
+   * The seal is computed over the DOMAIN record, and `canonicalise` puts
+   * `jurisdiction` in the hash. So the enum's spelling must never reach the
+   * record: converting on the way in and not on the way out would round-trip
+   * `UK` into a field that was sealed as `GB` and silently break every British
+   * family's ledger check.
+   */
+  it('keeps the consent seal intact across a GB round trip', async () => {
+    const { consentId, cookie } = await grantConsent({ country: 'GB' });
+    const stored = await createStore(pool, keys).consent.byId(pool, consentId);
+    expect(stored, 'the consent must be readable').not.toBeNull();
+    expect(stored!.record.country).toBe('GB');
+    expect(stored!.record.jurisdiction).toBe('GB');
+    expect(verifySeal(stored!.record), 'seal must still verify').toBe(true);
+    expect(cookie).toBeTruthy();
+  });
+
+  /**
+   * The SECOND write to a `jurisdiction` column, and the quieter one:
+   * `signal_counter.country` is written inside a try/catch that logs and
+   * carries on, so a GB child's signal capture failed with no symptom at all.
+   */
+  it('captures a signal for a GB child instead of failing silently', async () => {
+    const id = await openSession({ country: 'GB' });
+    // A signal is only written where a LATER layer caught what an earlier one
+    // missed — here the sandbox escalating a turn L1 and L2 let through.
+    router.generate = async () => 'CRISIS';
+    await say(id, 'everything feels like a lot lately');
+
+    const row = await pool.query<{ country: string; band: string }>(
+      `SELECT country::text AS country, band::text AS band FROM signal_counter
+        ORDER BY first_seen_at DESC LIMIT 1`);
+    expect(row.rows[0], 'a signal must have been captured').toBeDefined();
+    // Stored in the COLUMN's vocabulary. Unconverted this raised inside the
+    // caller's try/catch, which logs and carries on — so the row was simply
+    // absent and nothing said why.
+    expect(row.rows[0]!.country).toBe('UK');
+    expect(row.rows[0]!.band).toBe('builder');
   });
 });
 

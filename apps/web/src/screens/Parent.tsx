@@ -28,6 +28,7 @@ import { ApiError } from '../api';
 import { crisisLock, forgetConsent, nextId, push, session } from '../store';
 import {
   StatsPanel, SafetyPanel, AssistPanel, HelplinePanel, LearningPanel, ConversationsPanel,
+  MathsHarnessPanel, CertificationPanel,
 } from './dashboard-panels';
 
 export function ParentGate(
@@ -293,6 +294,17 @@ export function ParentDashboard(
         </div>
         {seal !== null && <p class="notice" role="status">{seal}</p>}
       </section>
+
+      {/*
+        D5's last two nodes. Both sit with the seal card rather than with the
+        stats: this is the "can I check this myself?" half of the dashboard, and
+        the harness and the checklist answer the same question the seal does.
+
+        Neither takes `d` — they call their own endpoints, so a slow probe or a
+        failed chain check cannot delay or blank the panels above.
+      */}
+      <MathsHarnessPanel api={api} />
+      <CertificationPanel api={api} />
 
 
       {d !== null && (

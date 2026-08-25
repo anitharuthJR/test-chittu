@@ -20,6 +20,7 @@ import type {
   ConsentMethod, ConsentRecord, ConsentScope, VerificationEvidence,
 } from '@chittu/consent';
 import type { Db, DbPool } from './client.js';
+import { fromJurisdiction, toJurisdiction, type Jurisdiction } from './jurisdiction.js';
 import { encrypt, fingerprint, type KeyProvider } from './crypto.js';
 
 export interface FamilyDraft {
@@ -59,8 +60,11 @@ function rowToRecord(r: ConsentRow, childFirstName: string): ConsentRecord {
     childFirstName,
     band: r.band,
     board: r.board,
-    country: r.jurisdiction,
-    jurisdiction: r.jurisdiction,
+    // Both fields carry the ISO spelling. `jurisdiction` is in `canonicalise`
+    // and therefore in the seal hash, so handing back the column's spelling
+    // would break the ledger check for every British family.
+    country: fromJurisdiction(r.jurisdiction),
+    jurisdiction: fromJurisdiction(r.jurisdiction),
     law: r.law,
     method: r.method,
     status: r.status,
@@ -78,7 +82,13 @@ function rowToRecord(r: ConsentRow, childFirstName: string): ConsentRecord {
 
 interface ConsentRow {
   id: string; version: number; supersedes: string | null;
-  jurisdiction: Country; law: string; method: ConsentMethod;
+  /**
+   * The COLUMN's vocabulary, not the domain's. Declared `Country` until
+   * 2026-08-25, which is what let `rowToRecord` hand `'UK'` out as a `Country`
+   * and still compile. Typed honestly, nothing can reach a `Country` field
+   * without `fromJurisdiction`.
+   */
+  jurisdiction: Jurisdiction; law: string; method: ConsentMethod;
   status: ConsentRecord['status']; scopes: unknown;
   memory_on: boolean; learn_on: boolean; band: Band; board: string;
   issued_at: string | null; expires_at: string | null;
@@ -130,7 +140,7 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
           `INSERT INTO child (parent_id, first_name_enc, band, board, country)
            VALUES ($1, $2, $3, $4, $5) RETURNING id`,
           [parentId, encrypt(draft.childFirstName, dek.plaintext),
-           draft.band, draft.board, draft.country]);
+           draft.band, draft.board, toJurisdiction(draft.country)]);
         const childId = c.rows[0]!.id;
 
         await tx.query(
@@ -143,7 +153,8 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
              (id, parent_id, child_id, version, jurisdiction, law, method, status,
               scopes, memory_on, learn_on, band, board, seal_hash)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-          [record.id, parentId, childId, record.version, record.jurisdiction, law,
+          [record.id, parentId, childId, record.version,
+           toJurisdiction(record.jurisdiction), law,
            method, record.status, JSON.stringify(record.scopes), record.memoryOn,
            record.learnOn, record.band, record.board, record.sealHash]);
 

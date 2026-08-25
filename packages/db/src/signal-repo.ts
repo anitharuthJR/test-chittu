@@ -30,6 +30,7 @@
 
 import { createHmac } from 'node:crypto';
 import type { Db, DbPool } from './client.js';
+import { toJurisdiction } from './jurisdiction.js';
 import { contentFingerprint } from './crypto.js';
 
 /**
@@ -177,7 +178,14 @@ export const signalRepo = {
            ${agreeing('band')},
            ${agreeing('country')}
          RETURNING k_sessions, shape`,
-        [h, o.layer, o.observedToken, o.failureClass, o.band, o.country]);
+        // `signal_counter.country` is the `jurisdiction` enum, and the caller
+        // hands us an ISO `Country`. Unconverted, a British child's capture
+        // raised `invalid input value for enum` inside the caller's try/catch,
+        // which logs and carries on — the quietest of the two GB failures, and
+        // the one with no symptom at all. `promote` copies this column into
+        // `training_signal.country` unchanged, so converting here is enough.
+        [h, o.layer, o.observedToken, o.failureClass, o.band,
+         o.country === null ? null : toJurisdiction(o.country)]);
       const row = c.rows[0]!;
 
       // Past the floor the shape is stored and the contributors are gone, so

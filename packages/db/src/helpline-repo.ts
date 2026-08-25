@@ -18,23 +18,17 @@
  */
 
 import type { Db, DbPool } from './client.js';
+import { toJurisdiction } from './jurisdiction.js';
 
 export type HelplineStatus = 'verified' | 'stale' | 'P0_WRONG_NUMBER';
 
-/**
- * `Country` in contracts uses GB — the ISO code. The `jurisdiction` enum uses
- * UK — what the legislation is called. Same market, two spellings.
- *
- * Every query against a `jurisdiction` column goes through this. It is not a
- * nicety: `'GB'::jurisdiction` raises `invalid input value for enum`, and
- * `resolveHelplines` catches errors and falls back — so without this mapping a
- * British child would silently run on the compiled-in numbers forever, and the
- * only symptom would be a log line nobody reads. It broke the import the first
- * time it was exercised.
+/*
+ * `toJurisdiction` used to be DECLARED here, and called from here and nowhere
+ * else. That is exactly how a British family ended up unable to complete
+ * consent: a mapping filed under "helplines" is a mapping the consent repo has
+ * no reason to look for. It now lives in `jurisdiction.ts` and the package
+ * exports it from there — see the note in that file.
  */
-export function toJurisdiction(country: string): string {
-  return country === 'GB' ? 'UK' : country;
-}
 
 export interface HelplineLine {
   readonly name: string;

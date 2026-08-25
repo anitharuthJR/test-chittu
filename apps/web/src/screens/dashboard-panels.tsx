@@ -8,8 +8,11 @@
  * `bodiesIncluded` rather than checking the band itself.
  */
 
-import { useState } from 'preact/hooks';
-import type { Api, DashboardResponse, ParentFlag, SessionSummary, TranscriptResponse } from '../api';
+import { useEffect, useState } from 'preact/hooks';
+import type {
+  Api, CertificationResponse, DashboardResponse, HarnessResponse,
+  ParentFlag, SessionSummary, TranscriptResponse,
+} from '../api';
 
 const when = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -227,6 +230,143 @@ export function ConversationsPanel(
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+
+/**
+ * D5/HARNESS — "run 5 live checks vs truth", on demand.
+ *
+ * It does not run on load. A parent pressing the button and watching the
+ * answers appear is the demonstration; a result already sitting there when the
+ * page opened is indistinguishable from a picture of a result.
+ *
+ * Every number shown comes from the server. The only thing decided here is
+ * whether a row gets a tick or a cross, and that is read from `ok` rather than
+ * recomputed — a client that graded the answers itself would be a second
+ * implementation of the thing under test.
+ */
+export function MathsHarnessPanel({ api }: { api: Api }): preact.JSX.Element {
+  const [r, setR] = useState<HarnessResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+
+  async function run(): Promise<void> {
+    setRunning(true); setErr(null); setR(null);
+    try { setR(await api.mathsCheck()); }
+    catch { setErr("Couldn't run the check just now."); }
+    finally { setRunning(false); }
+  }
+
+  return (
+    <section class="card">
+      <h3>🎯 Check Chittu&rsquo;s maths</h3>
+      <p class="sub">
+        Sums are worked out by a calculator built into Chittu, not guessed by an AI.
+        This runs five of them right now and compares each answer with the right one.
+      </p>
+      <button type="button" class="btn btn--secondary" disabled={running}
+        onClick={() => { void run(); }}>
+        {running ? 'Checking…' : 'Run five checks'}
+      </button>
+
+      {err !== null && <p class="field__error" role="alert">{err}</p>}
+
+      {r !== null && (
+        <div class="harness" role="status">
+          <ul class="harness__list">
+            {r.items.map((i) => (
+              <li key={i.shown} class={`harness__row harness__row--${i.ok ? 'ok' : 'bad'}`}>
+                <span class="harness__mark" aria-hidden="true">{i.ok ? '✓' : '✗'}</span>
+                <span class="harness__sum">{i.shown}</span>
+                <span class="harness__got">
+                  {/* Never blank: "no answer" must not look like a quiet pass. */}
+                  Chittu said {i.got === null ? 'nothing' : i.got}
+                </span>
+                <span class="harness__truth">right answer {i.truth}</span>
+              </li>
+            ))}
+          </ul>
+          <p class={`harness__score${r.ok ? '' : ' harness__score--bad'}`}>
+            <b>{r.passed} of {r.total} correct.</b>
+          </p>
+          <p class="sub">{r.note}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * D5/CERT — the readiness checklist.
+ *
+ * The prototype's version was nine hand-written rows, six of them badged
+ * BUILT-IN. This one renders what the server probed out of the running system,
+ * and it renders the server's own words for each status — including
+ * "Written down, not switched on", which is the honest label for the schema's
+ * database-role separation: declared, inert, and protecting nobody today.
+ *
+ * The rows that say "Not done" are not failures of this panel. They are the
+ * reason it can be trusted.
+ */
+export function CertificationPanel({ api }: { api: Api }): preact.JSX.Element {
+  const [r, setR] = useState<CertificationResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api.certification()
+      .then((x) => { if (live) setR(x); })
+      .catch(() => { if (live) setErr("Couldn't check these just now."); });
+    return () => { live = false; };
+  }, [api]);
+
+  return (
+    <section class="card">
+      <h3>🏅 What is actually in place</h3>
+      <p class="sub">
+        Chittu is built to the criteria a children&rsquo;s certifier (kidSAFE, KORA-class)
+        would ask about. Each line below was checked against the running system a moment
+        ago &mdash; including the lines that say we have not done something.
+      </p>
+
+      {err !== null && <p class="field__error" role="alert">{err}</p>}
+      {r === null && err === null && <p class="sub">Checking…</p>}
+
+      {r !== null && (
+        <>
+          <p class="certsum">
+            <b>{r.summary.enforced} in place</b> · {r.summary.partial} partly ·{' '}
+            {r.summary.declarative} written down but not switched on ·{' '}
+            {r.summary.absent} not done
+          </p>
+          <ul class="certlist">
+            {r.controls.map((c) => (
+              <li key={c.id} class={`certrow certrow--${c.status}`}>
+                <button
+                  type="button"
+                  class="certrow__head"
+                  aria-expanded={open === c.id}
+                  onClick={() => setOpen(open === c.id ? null : c.id)}
+                >
+                  <span class="certrow__title">{c.title}</span>
+                  {/* The server's word for the status, never one of ours. */}
+                  <span class={`certrow__badge certrow__badge--${c.status}`}>{c.label}</span>
+                </button>
+                <p class="certrow__detail">{c.detail}</p>
+                {open === c.id && (
+                  <p class="certrow__evidence">
+                    <b>What we checked:</b> {c.evidence}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p class="sub">{r.note}</p>
+        </>
+      )}
     </section>
   );
 }

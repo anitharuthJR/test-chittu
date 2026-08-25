@@ -78,7 +78,7 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Consent engine** | Ledger, six adapters, scrypt PIN, lockout. G1 **not** cleared: only `dev_stub` completes | `packages/consent` |
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
-| **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels | `apps/web` |
+| **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels, plus D5's maths harness and certification checklist | `apps/web` |
 | **Safety corpus** | Natural child phrasings, gating L1 crisis recall at 100%. Raised it from 51% | `safety-corpus/` |
 | **Disengagement** | Seat 38's "kids stopped talking to it", with a repo query feeding it. Graduation vs abandonment, and the return type carries no child id so nothing can target a child | `packages/disengagement` |
 | **Container** | Distroless `chittu-api` + `pnpm stack:up` — API, real Postgres, pgvector, migration task | `apps/api/Dockerfile`, `compose.yaml` |
@@ -94,9 +94,34 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never
 made a live call: there is no key in this environment, so it is verified against a local
 stand-in over real HTTP. The L2 classifier cell points at Haiku 4.5 as a placeholder for the
-self-hosted `chittu-local` that §12.2 says nobody sells. Four parent
-Every open question is in `PORT-REVIEW.md`,
+self-hosted `chittu-local` that §12.2 says nobody sells. Every open question is in `PORT-REVIEW.md`,
 which is the companion to this file for Phase 1 and should be read with it.
+
+**D5's last two nodes landed 2026-08-25**, and both deviate from the prototype deliberately.
+The **maths harness** (`GET /v1/parent/maths-check`) grades the DETERMINISTIC engine, not a
+model: the prototype's version sent five sums to Anthropic, which audits a path a child's
+arithmetic does not take and spends money from a dashboard button. A test counts the router and
+the number must stay zero; another proves the harness can fail. The **certification checklist**
+(`GET /v1/parent/certification`) is probed out of the running system rather than maintained by
+hand — Postgres roles and policies, the constraint on `message`, this family's consent method
+and helpline-registry state, this child's key custody, and the hash chain recomputed now. It has
+four statuses, and `declarative` exists so the schema's role separation can be reported as what
+it is: declared, inert, protecting nobody. Three rows read "Not done" — the independent audit,
+the clinical review, the adversarial release gate. See PORT-REVIEW.
+
+**A defect found while writing those tests, and fixed (2026-08-25): a British family could not
+complete consent at all.** `POST /v1/consent/draft` with `country: 'GB'` returned 500 —
+`consent-repo.ts` wrote `draft.country` straight into `child.country` and
+`consent_record.jurisdiction`, both the `jurisdiction` enum, which spells the market `UK`. One of
+six markets was unreachable. A second write (`signal_counter.country`) failed the same way inside a
+try/catch that logs and carries on, so a British child's signal capture failed with no symptom at
+all. **The two vocabularies are both correct and stay separate** — `Country` is ISO ("where the
+family is"), `jurisdiction` is a legal regime ("which law applies"), and `EU` is a regime with no
+ISO code — so the fix is a boundary, not a migration: `packages/db/src/jurisdiction.ts`, with the
+row types declared `Jurisdiction` so a raw column value cannot reach a `Country` field without
+converting. Nothing converts on the domain side: `canonicalise` puts `jurisdiction` in the consent
+seal. It survived because every fixture in the API suite used `IN` and only `IN`; the regression
+test is now parameterised over `COUNTRIES` itself. See PORT-REVIEW.
 
 **One real vulnerability was found and fixed here (2026-08-24):** `DELETE /v1/consent/:id`
 authenticated nothing, so a consent id alone could erase a child's entire record — and the client

@@ -666,3 +666,72 @@ button:disabled { cursor: default; opacity: .55; }
 @media (min-width: 600px) {
   .stats { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---- D5: the maths harness ------------------------------------------------
+   Monospace and a fixed grid so the sums line up as a column a parent can scan
+   down. The prototype used the same face for the same reason. */
+.harness {
+  margin-top: 12px; background: var(--paper);
+  border: 2px solid var(--night-12); border-radius: 12px; padding: 10px 12px;
+}
+.harness__list { list-style: none; font-family: var(--font-mono); font-size: 12.5px; }
+.harness__row {
+  display: grid; grid-template-columns: 1.2em 5.5em 1fr; gap: 4px 8px;
+  align-items: baseline; padding: 6px 0;
+  border-bottom: 1px dashed var(--night-12);
+}
+.harness__row:last-child { border-bottom: none; }
+.harness__mark { font-weight: 800; }
+.harness__row--ok .harness__mark { color: var(--leaf); }
+.harness__row--bad .harness__mark { color: var(--signal); }
+.harness__sum { font-weight: 800; }
+.harness__truth { grid-column: 3; color: var(--night-60); }
+.harness__score { margin-top: 8px; font-size: 14px; color: var(--leaf); }
+.harness__score--bad { color: var(--signal); }
+
+/* ---- D5: the certification checklist --------------------------------------
+   Four statuses, four colours, and `declarative` deliberately does NOT get the
+   green one: "written down, not switched on" is not a pass, and a badge that
+   looked like one would undo the whole point of probing for it. */
+.certsum {
+  margin-top: 10px; font-size: 13px; color: var(--night-60); line-height: 1.6;
+}
+.certlist { list-style: none; margin-top: 10px; }
+.certrow {
+  border-left: 4px solid var(--night-12); background: var(--paper);
+  border-radius: 0 10px 10px 0; padding: 9px 12px; margin-bottom: 8px;
+}
+.certrow--enforced    { border-left-color: var(--leaf); }
+.certrow--partial     { border-left-color: var(--sun); }
+.certrow--declarative { border-left-color: var(--night-30); }
+.certrow--absent      { border-left-color: var(--signal); }
+.certrow__head {
+  display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline;
+  justify-content: space-between; width: 100%;
+  background: none; border: none; padding: 0; text-align: left;
+  min-height: var(--tap); cursor: pointer;
+}
+.certrow__title { font-weight: 800; font-size: 13.5px; color: var(--night); }
+/* A row expands to show what was actually read. Without a marker the button is
+   invisible as a button, and the evidence is the half of this panel that makes
+   the badge worth anything. */
+.certrow__title::after {
+  content: ' ›'; display: inline-block; color: var(--night-30);
+  transition: transform .15s ease;
+}
+.certrow__head[aria-expanded="true"] .certrow__title::after { transform: rotate(90deg); }
+.certrow__badge {
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+  border-radius: 6px; padding: 2px 7px; border: 1px solid var(--night-12);
+}
+.certrow__badge--enforced    { background: var(--leaf-soft); color: var(--leaf); }
+.certrow__badge--partial     { background: var(--sun-soft); color: var(--night); }
+.certrow__badge--declarative { background: var(--white); color: var(--night-60); }
+.certrow__badge--absent      { background: var(--coral-soft); color: var(--signal); }
+.certrow__detail { margin-top: 5px; font-size: 12.5px; line-height: 1.6; }
+.certrow__evidence {
+  margin-top: 7px; font-size: 12px; line-height: 1.6; color: var(--night-60);
+  background: var(--white); border: 1px solid var(--night-12);
+  border-radius: 8px; padding: 7px 9px;
+}

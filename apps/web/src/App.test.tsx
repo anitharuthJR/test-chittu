@@ -72,6 +72,18 @@ function stubApi(overrides: Partial<Api> = {}): Api {
     turn: vi.fn(),
     seal: vi.fn(),
     wholeSeal: vi.fn(),
+    // D5's two nodes. `certification` is called on mount by the dashboard, so a
+    // stub without it throws SYNCHRONOUSLY inside an effect, where no `.catch`
+    // can reach it — the failure lands as an uncaught exception in whichever
+    // test happened to be running.
+    mathsCheck: vi.fn(async () => ({
+      items: [], passed: 0, total: 0, ok: true, note: 'no AI was asked',
+    })),
+    certification: vi.fn(async () => ({
+      checkedAt: '2026-08-25T10:00:00.000Z',
+      summary: { enforced: 0, partial: 0, declarative: 0, absent: 0 },
+      controls: [], note: 'checked against this running system',
+    })),
     memories: vi.fn(async () => ({ memories: [] })),
     dashboard: vi.fn(async () => DASHBOARD),
     transcript: vi.fn(),

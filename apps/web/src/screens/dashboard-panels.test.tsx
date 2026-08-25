@@ -16,7 +16,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 import type { Api, DashboardResponse, TranscriptResponse } from '../api';
 import {
   StatsPanel, SafetyPanel, AssistPanel, HelplinePanel, LearningPanel, ConversationsPanel,
+  MathsHarnessPanel, CertificationPanel,
 } from './dashboard-panels';
+import type { CertificationResponse, HarnessResponse } from '../api';
 
 const base: DashboardResponse = {
   child: { firstName: 'Meera', band: 'builder', country: 'IN', board: 'CBSE' },
@@ -189,5 +191,140 @@ describe('LearningPanel', () => {
     }} />);
     expect(screen.getByText(/raw conversations never train models/i)).toBeTruthy();
     expect(screen.getByText(/at least 25/i)).toBeTruthy();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// D5's last two nodes.
+// ---------------------------------------------------------------------------
+
+const harness = (over: Partial<HarnessResponse> = {}): HarnessResponse => ({
+  items: [
+    { shown: '7 × 8', truth: 56, got: 56, inTheLesson: true, ok: true },
+    { shown: '48 ÷ 6', truth: 8, got: 8, inTheLesson: true, ok: true },
+  ],
+  passed: 2, total: 2, ok: true,
+  note: 'No AI was asked: sums are done by a calculator built into Chittu.',
+  ...over,
+});
+
+describe('MathsHarnessPanel', () => {
+  it('shows nothing until the parent runs it — a result on load is a picture', () => {
+    const api = { mathsCheck: vi.fn(async () => harness()) } as unknown as Api;
+    render(<MathsHarnessPanel api={api} />);
+    expect(api.mathsCheck).not.toHaveBeenCalled();
+    expect(screen.queryByText(/correct/i)).toBeNull();
+  });
+
+  it('runs five checks and shows each answer beside the right one', async () => {
+    const api = { mathsCheck: vi.fn(async () => harness()) } as unknown as Api;
+    render(<MathsHarnessPanel api={api} />);
+    fireEvent.click(screen.getByRole('button', { name: /run five checks/i }));
+    await waitFor(() => expect(screen.getByText(/2 of 2 correct/i)).toBeTruthy());
+    expect(screen.getByText('7 × 8')).toBeTruthy();
+    expect(screen.getByText(/Chittu said 56/)).toBeTruthy();
+    expect(screen.getByText(/right answer 56/)).toBeTruthy();
+  });
+
+  /**
+   * The failure this panel exists to make impossible: a sum the engine did not
+   * answer rendering as a blank, which reads as a pass.
+   */
+  it('says "nothing" when the engine gave no answer, never a blank', async () => {
+    const api = {
+      mathsCheck: vi.fn(async () => harness({
+        items: [{ shown: '7 × 8', truth: 56, got: null, inTheLesson: false, ok: false }],
+        passed: 0, total: 1, ok: false,
+      })),
+    } as unknown as Api;
+    render(<MathsHarnessPanel api={api} />);
+    fireEvent.click(screen.getByRole('button', { name: /run five checks/i }));
+    await waitFor(() => expect(screen.getByText(/Chittu said nothing/)).toBeTruthy());
+    expect(screen.getByText(/0 of 1 correct/i)).toBeTruthy();
+  });
+});
+
+const control = (over: Partial<CertificationResponse['controls'][number]>) => ({
+  id: 'x', title: 'A title', status: 'enforced' as const,
+  label: 'In place', detail: 'A detail.', evidence: 'What was read.', ...over,
+});
+
+const cert = (
+  controls: CertificationResponse['controls'],
+): CertificationResponse => ({
+  checkedAt: '2026-08-25T10:00:00.000Z',
+  summary: {
+    enforced: controls.filter((c) => c.status === 'enforced').length,
+    partial: controls.filter((c) => c.status === 'partial').length,
+    declarative: controls.filter((c) => c.status === 'declarative').length,
+    absent: controls.filter((c) => c.status === 'absent').length,
+  },
+  controls,
+  note: 'Every line above was checked against this running system a moment ago.',
+});
+
+describe('CertificationPanel', () => {
+  /**
+   * The row the panel exists to be honest about. A `declarative` control must
+   * not be dressed as a pass — the schema's database-role separation is
+   * declared, inert, and protecting nobody today.
+   */
+  it('renders the server\'s own words for a declarative control, not a tick', async () => {
+    const api = {
+      certification: vi.fn(async () => cert([control({
+        id: 'database-role-separation',
+        title: 'Separate database accounts limit what each part of Chittu can reach',
+        status: 'declarative',
+        label: 'Written down, not switched on',
+        detail: 'That design is written into the schema and is NOT switched on here.',
+        evidence: 'chittu_app is NOLOGIN; FORCE ROW LEVEL SECURITY is set on 0 tables.',
+      })])),
+    } as unknown as Api;
+    const { container } = render(<CertificationPanel api={api} />);
+    await waitFor(() => expect(screen.getByText(/written down, not switched on/i)).toBeTruthy());
+    // Not styled as a pass, and not counted as one.
+    expect(container.querySelector('.certrow--declarative')).toBeTruthy();
+    expect(container.querySelector('.certrow--enforced')).toBeNull();
+    expect(screen.getByText(/1 written down but not switched on/i)).toBeTruthy();
+  });
+
+  it('shows the evidence only when a parent opens the row', async () => {
+    const api = {
+      certification: vi.fn(async () => cert([control({
+        id: 'teen-words-never-stored', title: 'A teenager\'s messages are never stored',
+        evidence: 'The check "teen_bodies_are_never_stored" is present.',
+      })])),
+    } as unknown as Api;
+    render(<CertificationPanel api={api} />);
+    await waitFor(() => expect(screen.getByText(/never stored/i)).toBeTruthy());
+    expect(screen.queryByText(/teen_bodies_are_never_stored/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /never stored/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/teen_bodies_are_never_stored/)).toBeTruthy());
+  });
+
+  it('renders an absent control as not done, in the server\'s words', async () => {
+    const api = {
+      certification: vi.fn(async () => cert([control({
+        id: 'independent-audit', title: 'An independent auditor has certified Chittu',
+        status: 'absent', label: 'Not done',
+        detail: 'Nobody outside the team has checked that claim.',
+      })])),
+    } as unknown as Api;
+    const { container } = render(<CertificationPanel api={api} />);
+    await waitFor(() => expect(screen.getByText('Not done')).toBeTruthy());
+    expect(container.querySelector('.certrow--absent')).toBeTruthy();
+    expect(screen.getByText(/1 not done/i)).toBeTruthy();
+  });
+
+  /** An unanswered question is not a pass. Same rule as the seal panel. */
+  it('says it could not check rather than showing an empty pass', async () => {
+    const api = {
+      certification: vi.fn(async () => { throw new Error('down'); }),
+    } as unknown as Api;
+    render(<CertificationPanel api={api} />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByText(/couldn't check these just now/i)).toBeTruthy();
   });
 });

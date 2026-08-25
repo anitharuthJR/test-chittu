@@ -170,6 +170,56 @@ export interface RevokeResponse {
  * could hold what a child typed, which mirrors the table having no column for
  * it.
  */
+/**
+ * D5/HARNESS. `got` is null when the engine did not recognise the sum, and that
+ * is never a pass — "no answer" reported as a tick is exactly the failure this
+ * panel exists to make impossible.
+ */
+export interface HarnessItem {
+  readonly shown: string;
+  readonly truth: number;
+  readonly got: number | null;
+  readonly inTheLesson: boolean;
+  readonly ok: boolean;
+}
+
+export interface HarnessResponse {
+  readonly items: readonly HarnessItem[];
+  readonly passed: number;
+  readonly total: number;
+  readonly ok: boolean;
+  readonly note: string;
+}
+
+/**
+ * D5/CERT. `declarative` is the status that matters: the control is written
+ * into the schema and is NOT switched on. The client renders the server's own
+ * `label` rather than inventing one, so a status can never be shown as better
+ * than the server said it was.
+ */
+export type ControlStatus = 'enforced' | 'partial' | 'declarative' | 'absent';
+
+export interface Control {
+  readonly id: string;
+  readonly title: string;
+  readonly status: ControlStatus;
+  readonly label: string;
+  readonly detail: string;
+  readonly evidence: string;
+}
+
+export interface CertificationResponse {
+  readonly checkedAt: string;
+  readonly summary: {
+    readonly enforced: number;
+    readonly partial: number;
+    readonly declarative: number;
+    readonly absent: number;
+  };
+  readonly controls: readonly Control[];
+  readonly note: string;
+}
+
 export interface ParentFlag {
   readonly kind: 'SAFETY' | 'ASSIST' | 'GATE';
   readonly category: string;
@@ -378,6 +428,18 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
      * cookie alone is a child.
      */
     wholeSeal: () => go<WholeSealResponse>('/v1/parent/seal'),
+
+    /**
+     * D5/HARNESS — five sums through the deterministic engine, graded against
+     * known answers. Requires a live parent session. Reaches no model.
+     */
+    mathsCheck: () => go<HarnessResponse>('/v1/parent/maths-check'),
+
+    /**
+     * D5/CERT — the readiness checklist, probed from this running system.
+     * Requires a live parent session: it enumerates the deployment's gaps.
+     */
+    certification: () => go<CertificationResponse>('/v1/parent/certification'),
 
     /** The child's own turns, for repainting after a reload. */
     ownMessages: (sessionId: string) =>

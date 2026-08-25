@@ -1654,3 +1654,170 @@ promise, repeated in the read panel's microcopy: "heard, checked, and discarded 
 never stored"); only text reaches the API. The production path is our own
 child-speech ASR (Phase 2), with Ello-/Amira-class models as the licensing
 bridge. Nothing in this port should be read as an ASR decision.
+
+---
+
+## The two D5 nodes the port left behind (2026-08-25)
+
+`prototype/chittu-v3.html` had a maths accuracy harness (`:356`) and a
+certification readiness checklist (`:362`) on the parent dashboard. Neither had
+an equivalent in the API or the client. Both now do —
+`GET /v1/parent/maths-check` and `GET /v1/parent/certification`, behind
+`parentContext` like every other parent route — and both deviate from the
+prototype on purpose.
+
+### DELIBERATE — the harness grades the ENGINE, where the prototype graded the model
+
+The prototype's `runMathHarness` (`chittu-v3.html:677`) sent five sums to
+Anthropic and graded the replies, closing with *"this harness audits the model
+used for word problems"*. Ported faithfully, that would have been two defects at
+once:
+
+1. **It audits a code path a child's arithmetic does not take.** `MATH_ENGINE`
+   sits above `L2_CLASSIFIER` in `PIPELINE_ORDER` and returns before either
+   model port is constructed. The product claim — verified elsewhere in the
+   suite by counting — is that a maths turn makes zero vendor calls. A harness
+   that graded a model would be evidence for a claim nobody is making.
+2. **It makes five vendor calls from a dashboard button.** On a page whose whole
+   purpose is a parent checking things, a check that costs money and leaves the
+   building is the wrong shape.
+
+So `runMathsHarness` calls `mathTurn` — the pipeline layer itself, at this
+child's band and board — and grades `lesson.ans` against five answers a person
+wrote down. `certification.test.ts` counts the router: the number must stay
+zero, and a test also proves the harness CAN fail, by handing it a wrong truth.
+
+**The truth column is hand-written and must stay that way.** Deriving it from
+`calc()` would grade the engine against itself and pass unconditionally — the
+fourth instrument in this repo to be caught doing that. A test pins the five
+literals.
+
+The harness also checks that the number reached the child's LESSON, not only
+`lesson.ans`. Grading the answer alone would audit the calculator; the
+`[STEPS]`/pictorial delimiter collision truncated lessons once while every
+computed answer stayed correct.
+
+### DELIBERATE — the checklist is PROBED, and it does not claim the role separation
+
+The prototype's checklist was nine hand-written rows with hand-written badges,
+six of them reading `BUILT-IN`. A checklist that claims a control is in place
+when it is not is worse than no checklist, because it is the document a
+certifier reads instead of the code.
+
+Every row now derives from something read out of the running system in one
+round trip: the roles and policies actually present in Postgres, the constraint
+actually on `message`, the helpline registry's actual state for this family's
+country, the consent method this family actually completed, the key custody on
+this child's row, and the hash chain recomputed now. `summary` is counted from
+the rows rather than maintained beside them.
+
+There are four statuses, and the third exists for one row in particular:
+
+| status | meaning |
+|---|---|
+| `enforced` | something in the system stops it; `evidence` names what |
+| `partial` | built, but not the real thing yet — a stub, or a fallback |
+| `declarative` | **written down and inert** |
+| `absent` | not done; no probe, because saying so IS the honest row |
+
+`database-role-separation` is `declarative`, and its parent-facing label is
+"Written down, not switched on". The evidence reports what was read: both roles
+declared and NOLOGIN, this service connected as the table owner of all five
+child tables, five row-level policies present and `FORCE ROW LEVEL SECURITY` set
+on none of them — therefore inert. It is the same finding as
+"the role separation is DECLARATIVE, not enforced" above, said to a parent. Three
+rows are `absent` and say so plainly: the independent audit, the clinical review
+of the crisis wording, and the adversarial corpus as a release gate.
+
+**The probe resolves through `current_schema()` and `regclass`, never a
+hardcoded `public`.** The first version was pinned to `public` while the test
+fixture builds a throwaway schema, so it reported zero policies and zero owned
+tables — which is *the declarative row's own answer, arrived at by looking in
+the wrong place*. `certification.test.ts` now carries a positive control: the
+evidence must say it found five policies and five owned tables before it is
+allowed to call them inert. Same instrument as `signals.test.ts`' positive
+control, and for the same reason.
+
+### FIXED (2026-08-25) — a British family could not complete consent at all
+
+Found while writing the helpline row's test, which needed a country other than
+`IN` and picked `GB`. `POST /v1/consent/draft` returned **500**.
+
+`consent-repo.ts` inserted `draft.country` straight into `child.country` and
+`record.jurisdiction` straight into `consent_record.jurisdiction`, both of which
+are the `jurisdiction` enum — and that enum spells the United Kingdom `UK` while
+`COUNTRIES` in contracts spells it `GB`. `'GB'::jurisdiction` raises
+`invalid input value for enum`, the error handler turned it into
+`{"error":"something went wrong"}`, and there was no way through. One of six
+markets, unreachable.
+
+**There was a second, quieter write.** `signalRepo.observe` puts the session's
+country into `signal_counter.country` — the same enum — and its call site wraps
+the whole capture in a try/catch that logs and carries on. So for a British
+child it raised, was swallowed, and the row was simply absent. No 500, no
+symptom, nothing that named the cause. The loud failure is the one that got
+found; this is the shape that does not.
+
+#### The decision: the two vocabularies are BOTH correct, so the fix is a boundary
+
+Two options were on the table — apply the mapping on every write and its inverse
+on every read, or add `GB` to the enum and migrate every column to one spelling.
+
+The second is wrong, and the reason is `EU`. The enum is not a list of countries
+with a typo in it; it is a list of **legal regimes**, and `EU` is a regime with
+no ISO country code at all. `Country` answers *where the family is* and
+`jurisdiction` answers *which law applies*, and one regime covers many countries.
+Collapsing them would lose that, in the table (`market`, `provider_clearance`)
+where it is load-bearing.
+
+So the mapping stays — but the old one failed for a reason that had nothing to do
+with being wrong. `toJurisdiction` was correct, and was declared in
+`helpline-repo.ts` and called from `helpline-repo.ts` and nowhere else. **A
+mapping filed under "helplines" is a mapping the consent repo has no reason to
+go looking for.** Three things changed:
+
+1. It moved to `packages/db/src/jurisdiction.ts`, with `fromJurisdiction`
+   alongside it, and the package exports both.
+2. **The row types stopped lying, and that is the actual enforcement.**
+   `ConsentRow.jurisdiction` was declared `Country` — so `rowToRecord` handing a
+   raw `'UK'` out as a `Country` compiled cleanly. It is declared `Jurisdiction`
+   now, and nothing can reach a `Country` field without going through
+   `fromJurisdiction`. A mapping nobody *can* forget beats one everybody is
+   asked to remember.
+3. `fromJurisdiction` **throws on `EU`** rather than guessing. Same rule as
+   `parseClassifier` and the key-provider allowlist: never invent an answer for
+   input you do not fully recognise. A guessed `'GB'` would put a British
+   helpline in front of a child in Dublin.
+
+**Nothing converts on the domain side, and that is load-bearing.**
+`canonicalise` puts `ConsentRecord.jurisdiction` in the seal hash, so the record
+keeps the ISO spelling it was sealed with; the enum's spelling exists only inside
+the column. Converting in and not out would round-trip `UK` into a field sealed
+as `GB` and break every British family's ledger check — a test pins that.
+
+#### Why it survived, and what now stops it
+
+The API suite drafted consent with `country: 'IN'` and only `'IN'`, in every one
+of its fixtures. The code was not subtly wrong; the market was never tried. The
+regression test is parameterised over `COUNTRIES` itself — draft, round-trip the
+ISO spelling back out of `/v1/consent/status`, and for `GB` specifically: British
+helplines through the whole crisis pipeline, an intact consent seal, and a
+signal row actually written. A seventh market is covered on the day it is added
+rather than on the day it fails.
+
+`jurisdiction.test.ts` reads `CREATE TYPE jurisdiction` out of
+`db/migrations/0001_init.sql` and asserts the TypeScript list matches it value
+for value — a list retyped beside a schema is a list that drifts from it, and
+the drift is invisible until an INSERT raises.
+
+Mutation-tested, per CLAUDE.md: reverting the `child.country` write fails 5
+tests, reverting the `rowToRecord` read fails 4, and reverting the
+`signal_counter` write fails 1.
+
+#### Still open
+
+`HelplineRow.country` and `ReadySignal.country` are still `string`, carrying the
+enum's spelling to the sweep job and the ops console. Both surfaces are
+jurisdiction-oriented and neither value is ever compared against a `Country`, so
+this is a looseness rather than a defect — but it is the same class, and typing
+them `Jurisdiction` is the tidy-up.

@@ -39,6 +39,8 @@ import { passageById } from '@chittu/reading-coach';
 import { resolveHelplines } from './helplines/resolve.js';
 import { embedderFor, type Embedder } from './corpus/embed.js';
 import { groundingPort } from './corpus/ground.js';
+import { runMathsHarness } from './maths-harness.js';
+import { buildCertification } from './certification.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
   setParentCookie, clearParentCookie, parentFor,
@@ -1018,6 +1020,57 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     return reply.send({
       ok: v.ok, sessions: v.sessions, records: v.records, broken: v.broken,
     });
+  });
+
+  // ---- the two D5 nodes the port left behind ------------------------------
+
+  /**
+   * D5/HARNESS — five live sums, graded against answers a person wrote down.
+   *
+   * Behind the parent gate like every other route here, and it reaches NO
+   * MODEL: `mathTurn` is the same layer a child's arithmetic takes, and it
+   * returns above `L2_CLASSIFIER`. The prototype's harness graded a model
+   * instead, which audited a path a child's sums do not take and made five
+   * vendor calls from a dashboard to do it. `certification.test.ts` counts.
+   *
+   * Run at THIS child's band and board, so a parent is shown the engine as
+   * their child actually has it configured, not a generic one.
+   */
+  app.get('/v1/parent/maths-check', async (req, reply) => {
+    const stored = await parentContext(req);
+    if (!stored) return reply.code(403).send(PARENT_REQUIRED);
+    const c = stored.record;
+    return reply.send(runMathsHarness({
+      band: c.band, board: c.board, kid: c.childFirstName,
+    }));
+  });
+
+  /**
+   * D5/CERT — the readiness checklist, probed rather than maintained.
+   *
+   * Behind the parent gate because it enumerates this deployment's controls and
+   * their gaps: the consent method, the key custody, the state of the helpline
+   * registry and how many conversations there have been. A consent cookie alone
+   * is a CHILD.
+   *
+   * Nothing it returns can carry a child's words — every string is composed
+   * here from counts, role names and constraint names, and a test greps the
+   * whole response for a distinctive sentence a child typed.
+   */
+  app.get('/v1/parent/certification', async (req, reply) => {
+    const stored = await parentContext(req);
+    if (!stored) return reply.code(403).send(PARENT_REQUIRED);
+    const c = stored.record;
+    const seal = await store.audit.verifyChild(stored.childId);
+    return reply.send(await buildCertification({
+      pool: opts.pool,
+      childId: stored.childId,
+      country: c.country,
+      consentMethod: c.method,
+      consentLaw: c.law,
+      seal: { ok: seal.ok, sessions: seal.sessions, records: seal.records },
+      maths: { band: c.band, board: c.board, kid: c.childFirstName },
+    }));
   });
 
   app.get<{ Params: { id: string } }>('/v1/session/:id/seal', async (req, reply) => {

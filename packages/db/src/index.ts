@@ -13,6 +13,7 @@ export * from './child-repo.js';
  */
 export * from './testing.js';
 
+export * from './jurisdiction.js';
 export * from './helpline-repo.js';
 export * from './engagement-repo.js';
 export * from './metering-repo.js';
