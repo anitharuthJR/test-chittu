@@ -1210,14 +1210,67 @@ database said nothing at all, and the fix was only confirmed by tearing the
 container down between runs. Now serialized under a transaction-scoped advisory
 lock; verified across three cold starts.
 
-### NOTED — one prototype Playwright test is flaky under parallel load
+### FIXED (2026-08-25) — the flaky prototype Playwright test, and why it was never luck
 
 `tests/pipeline.spec.js › tapping a chip sends it as the next message` failed
 once during phase 4's verification with the typing indicator (`●●●`) still on
 screen — the assertion outran the reply. Passes 3/3 in isolation, and phase 4
-changed no prototype file. Recorded rather than fixed: it is a
-`expect.poll`-on-the-wrong-condition problem in a suite this change does not
-touch, and guessing at it blind is how a flake becomes two.
+changed no prototype file. Recorded rather than fixed: `expect.poll` on the
+wrong condition, and guessing at it blind is how a flake becomes two.
+
+**It is no longer blind.** It failed twice more inside `pnpm verify` on
+2026-08-25, on a loaded box, and the captured page state names the mechanism:
+
+```
+teach me something
+Pick one!
+↳ SANDBOX (LAW 05) · CLASSIFIER·MODEL·WINDOW(3)
+Volcanoes          <- the CHILD's turn, rendered by the chip tap itself
+●●●                <- the typing indicator; Chittu's reply has not arrived
+```
+
+```js
+const before = await page.locator('#msgs .msg').count();
+await page.locator('#msgs').getByText('Volcanoes', { exact: true }).first().click();
+await expect.poll(() => page.locator('#msgs .msg').count(), { timeout: 10000 })
+  .toBeGreaterThan(before);                       // <- satisfied by the CHILD's message
+expect(await allMessages(page)).toContain('magma rises');   // <- the reply, not yet there
+```
+
+**The wait is structurally incapable of waiting for the thing asserted.** Tapping
+a chip renders the child's own message immediately, so `count > before` is true
+before any model call resolves — the poll returns on the tap, not on the reply.
+Under low load the reply happens to land inside the poll's first interval and the
+test passes for a reason unrelated to what it checks; under load it does not.
+Same shape as §8b's recurring pattern: an instrument reporting success while
+measuring something else.
+
+The fix is to poll the assertion rather than a proxy that becomes true too early:
+
+```js
+await expect.poll(() => allMessages(page), { timeout: 10000 }).toContain('magma rises');
+```
+
+**FIXED, on the owner's instruction.** The wait now polls the asserted text
+(`allMessages` contains `magma rises`), which cannot be satisfied early and
+cannot be off by one again. Two assertions were added while there: the chip's
+text became the child's turn — the claim in the test's NAME, and previously not
+asserted at all — and the count check the original was reaching for, with the
+`+ 1` the shared helper always had.
+
+**Proved by construction rather than by re-rolling the dice.** A throwaway spec
+delayed the second sandbox reply by 1.5s — what a slow machine does — and ran
+both waits against it. The old wait returned immediately with `magma rises`
+absent and `●●●` on screen; the new one waited and found the reply. That is the
+mechanism demonstrated, not a flake caught.
+
+**And a negative result worth recording, because it says what the trigger is
+NOT.** Saturating the CPU (2–3 spinners per core) did not reproduce the failure:
+the OLD wait passed 3/3 under it, as did the new one. So the trigger in `pnpm
+verify` is not raw CPU contention — more likely the cold browser start and page
+cache pressure of running immediately after the 65-file vitest lane and its
+Postgres container. Load was the wrong lever; the delay injection was the right
+one. Anyone tempted to reproduce this by making the box busy should not bother.
 
 ### NOTED — the ops console's identity is a shared bearer token
 

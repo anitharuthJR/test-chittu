@@ -201,9 +201,31 @@ test.describe('Visual grammar renders as UI', () => {
     await say(page, 'teach me something');
     const before = await page.locator('#msgs .msg').count();
     await page.locator('#msgs').getByText('Volcanoes', { exact: true }).first().click();
-    await expect.poll(() => page.locator('#msgs .msg').count(), { timeout: 10000 })
-      .toBeGreaterThan(before);
-    expect(await allMessages(page)).toContain('magma rises');
+
+    /*
+     * POLL THE THING BEING ASSERTED, not a count that rises before it exists.
+     *
+     * This waited on `.msg` count > `before` — but tapping a chip renders the
+     * CHILD's own message immediately, so that condition was satisfied by the
+     * tap itself and the poll returned before any model call resolved. The
+     * assertion then ran against a page still showing the typing indicator.
+     * It was not a race that sometimes lost: the wait was incapable of waiting
+     * for the reply, and passed only when the reply happened to land inside the
+     * first poll interval. On a loaded machine it does not, which made
+     * `pnpm verify` non-deterministic.
+     *
+     * `say()` in helpers.js has always had this right — `before + 1`, "the
+     * child's bubble plus at least one response element". This test hand-rolled
+     * its own wait and dropped the `+ 1`. Polling the assertion is better still,
+     * because it cannot be off by one again and it fails saying what was
+     * missing rather than what failed to be counted.
+     */
+    await expect.poll(() => allMessages(page), { timeout: 10000 })
+      .toContain('magma rises');
+    // The chip's text became the child's turn — the claim in this test's name,
+    // and previously not asserted at all.
+    expect(await allMessages(page)).toContain('Volcanoes');
+    expect(await page.locator('#msgs .msg').count()).toBeGreaterThan(before + 1);
   });
 });
 
