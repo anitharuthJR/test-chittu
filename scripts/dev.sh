@@ -119,9 +119,13 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 echo "starting postgres-dev…"
-# --wait blocks on the healthcheck, so the migration below cannot race the
+# Through the shared preflight, for the same reason `pnpm db:up` goes through
+# it: compose.yaml pins one project for the whole repository, and a leftover
+# per-worktree container holding :55433 otherwise fails here with a Docker
+# driver error that names an endpoint hash instead of the container. `--wait`
+# inside it blocks on the healthcheck, so the migration below cannot race the
 # server's first-boot initdb.
-docker compose --profile dev up -d --wait postgres-dev
+bash scripts/db-up.sh dev
 
 # Migrations are a SEPARATE STEP from booting the API on purpose — see the
 # comment at the top of apps/api/src/migrate.ts. It keeps a ledger, so running

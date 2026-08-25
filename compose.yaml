@@ -21,6 +21,32 @@
 # brings up postgres-dev from this profile — the database only, not the api or
 # migrate services — and runs `pnpm db:migrate` against it from the host.
 #
+# ONE PROJECT FOR THE WHOLE REPOSITORY, not one per worktree.
+#
+# Compose derives its project name from the DIRECTORY unless told otherwise, and
+# this repo is used through 2-3 parallel worktrees (CLAUDE.md). So each worktree
+# declared its own `<dir>-postgres-1` and each tried to publish the same host
+# port: six containers for one logical database, one holding :55432 and five
+# dead, with `pnpm test` and `pnpm verify` failing in five checkouts out of six
+# on a Docker driver error that reads as "Docker is broken" rather than "another
+# worktree already has this". A worse variant was live too — a `postgres-dev`
+# container UP with no published ports at all, a database nothing could reach.
+#
+# Pinning the name means every worktree targets the SAME project, so `up -d
+# --wait` finds the container already healthy and no-ops.
+#
+# Test isolation was never the port's job. `createTestDb` builds a throwaway
+# `t_<hex>` schema per FIXTURE — that is what already lets parallel test files
+# share one server, and it generalises to parallel worktrees unchanged.
+#
+# TWO CONSEQUENCES, both deliberate:
+#   - `pnpm db:down` (`down -v`) now destroys the database for EVERY WORKTREE,
+#     including any mid-run. It was per-directory before; it is repository-wide
+#     now. Still available, still destructive, no longer local.
+#   - A branch that EDITS this file makes `up` recreate the container for
+#     everyone. That is correct — the config genuinely changed — and rare.
+name: chittu
+
 services:
   postgres:
     # pgvector's own image, so CREATE EXTENSION vector is available. Pinned to

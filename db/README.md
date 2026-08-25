@@ -202,6 +202,29 @@ pnpm test        # starts postgres on :55432 itself, then runs the suite
 pnpm db:down     # when you want the container gone
 ```
 
+**One container for the whole repository, not one per worktree.** `compose.yaml`
+pins `name: chittu`, so `pnpm db:up` from any worktree targets the same
+`chittu-postgres-1` and no-ops if it is already healthy. Without that key Compose
+names the project after the DIRECTORY — and with 2-3 parallel worktrees that
+meant several containers for one logical database, all fighting over `:55432`,
+with `pnpm test` and `pnpm verify` failing in every checkout but the winner.
+
+Sharing is safe because isolation was never the port's job: `createTestDb` builds
+a throwaway `t_<hex>` schema per fixture, which is what already lets parallel
+test files share one server.
+
+Two consequences follow, and both are deliberate:
+
+- **`pnpm db:down` is now repository-wide.** It destroys the database for every
+  worktree, including any mid-run. Still there, still destructive, no longer local.
+- **A branch that edits `compose.yaml` makes `up` recreate the container for
+  everyone.** Correct — the config genuinely changed — and rare.
+
+`pnpm db:up` runs `scripts/db-up.sh`, which checks the port first and names the
+container holding it. The bare Docker failure is a driver error quoting an
+endpoint hash, which reads as "Docker is broken" rather than "another worktree
+has this". `scripts/dev.sh` uses the same preflight for `postgres-dev` on `:55433`.
+
 There used to be two lanes: a fast default on PGlite (Postgres compiled to WASM,
 in-process, no container) and a strict `pnpm test:pg` against a real server. The
 fast one was removed on 2026-08-25. It could not do these, and each one is a real

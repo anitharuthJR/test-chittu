@@ -10,7 +10,7 @@
     "test:watch": "pnpm db:up && vitest",
     "test:prototype": "playwright test",
     "dev": "pnpm --filter @chittu/api run dev",
-    "db:up": "docker compose up -d --wait",
+    "db:up": "bash scripts/db-up.sh",
     "db:down": "docker compose down -v",
     "start": "bash scripts/dev.sh",
     "stack:up": "docker compose --profile dev up -d --build --wait",
