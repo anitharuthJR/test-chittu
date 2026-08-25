@@ -634,7 +634,11 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
         // or not at all. A turn that fails halfway must not leave a session
         // half-guarded or a chain with a gap.
         const out = await runTurn(state, req.body.text, {
-          classify: (text, history) => router.classify(text, history),
+          // ctx forwarded, not dropped. A two-argument arrow here silently
+          // disabled per-band and per-country classifier routing AND per-child
+          // clearance, while every router test kept passing because they call
+          // router.classify directly. wiring.test.ts covers the seam.
+          classify: (text, history, ctx) => router.classify(text, history, ctx),
           generate: (input) => router.generate(input),
           seal: store.sealFor(tx, req.params.id),
           now: () => new Date().toISOString(),
