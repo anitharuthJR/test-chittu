@@ -14,7 +14,9 @@
  * lets the client choose something safety-relevant, that is a bug in the call.
  */
 
-import type { Block, Band, Country, Flag, Memory, Mode, PipelineLayer } from '@chittu/contracts';
+import type {
+  Block, Band, Country, Flag, ImageInput, Memory, Mode, PipelineLayer,
+} from '@chittu/contracts';
 
 /** Mirrors `ConsentMethod` in @chittu/consent. Pinned by a test, not by trust. */
 export type ConsentMethod =
@@ -427,10 +429,21 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
     openSession: (mode?: Mode) =>
       go<SessionResponse>('/v1/session', json(mode === undefined ? {} : { mode })),
 
-    /** Buffered, never streamed — L6 matches phrases (§4.2). */
-    turn: (sessionId: string, text: string, mode?: Mode) =>
-      go<TurnResponse>(`/v1/session/${sessionId}/turn`,
-        json(mode === undefined ? { text } : { text, mode })),
+    /**
+     * Buffered, never streamed — L6 matches phrases (§4.2).
+     *
+     * `image` is the picture the child is showing on THIS turn. It is sent and
+     * forgotten: nothing here keeps a reference, the server stores none, and
+     * the next turn carries no picture unless the child shows another one.
+     * There is no "current image" anywhere in this client for the same reason
+     * there is no consent token — a thing that is not held cannot leak.
+     */
+    turn: (sessionId: string, text: string, mode?: Mode, image?: ImageInput) =>
+      go<TurnResponse>(`/v1/session/${sessionId}/turn`, json({
+        text,
+        ...(mode === undefined ? {} : { mode }),
+        ...(image === undefined ? {} : { image }),
+      })),
 
     /**
      * Score a read-aloud attempt. The transcript is TEXT — the browser

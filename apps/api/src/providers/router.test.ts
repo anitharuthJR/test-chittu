@@ -179,6 +179,98 @@ describe('route()', () => {
   });
 });
 
+/**
+ * The `vision` cell has existed in §12.2 since the routing table was written
+ * and nothing ever asked for it — configured and unreachable, which reads as a
+ * working capability in review and is not one.
+ */
+describe('the VISION cell, and the only thing that reaches it', () => {
+  const picture = { mimeType: 'image/png' as const, dataBase64: 'aW1hZ2V6enpieXRlcw' };
+
+  it('a turn with a picture routes to the vision cell', async () => {
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [{ category: 'vision', provider: 'anthropic', model: 'claude-opus-5' }],
+      }),
+    });
+    await r.generate({ text: 'what is this?', state: state(), subject: null, grounding: null,
+      image: picture });
+    expect(recorded[0]!.body.model).toBe('claude-opus-5');
+  });
+
+  it('a turn WITHOUT one does not — the cell is not a new default', async () => {
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [{ category: 'vision', provider: 'anthropic', model: 'claude-opus-5' }],
+      }),
+    });
+    await r.generate({ text: 'why is the sky blue', state: state(), subject: null, grounding: null });
+    expect(recorded[0]!.body.model).toBe(DEFAULT_CELLS.sandbox.model);
+  });
+
+  it('the picture WINS over the mode — a photo of a worksheet still needs eyes', async () => {
+    // The mode still shapes the prompt; it is only the cell that changes.
+    const r = router({
+      scopedCells: resolveCells({
+        rows: [{ category: 'vision', provider: 'anthropic', model: 'claude-opus-5' },
+          { category: 'homework', provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }],
+      }),
+    });
+    await r.generate({ text: 'is this right?', state: state({ mode: 'homework' }),
+      subject: null, grounding: null, image: picture });
+    expect(recorded[0]!.body.model).toBe('claude-opus-5');
+    expect(recorded[0]!.body.system).toMatch(/HOMEWORK MODE/);
+  });
+
+  it('meters as a vision call, not as a sandbox one', async () => {
+    const seen: string[] = [];
+    await router().generate(
+      { text: 'what is this?', state: state(), subject: null, grounding: null, image: picture },
+      (u) => seen.push(u.category));
+    expect(seen).toEqual(['vision']);
+  });
+
+  it('is refused when the vision provider is not cleared for this child\'s country', async () => {
+    const r = router({
+      clearedByCountry: new Map([['anthropic', new Set(['IN'])]]),
+    });
+    await expect(r.generate({ text: 'what is this?', state: state({ country: 'GB' }),
+      subject: null, grounding: null, image: picture })).rejects.toThrow(RouteRefused);
+    expect(recorded, 'a refused route still sent the picture').toEqual([]);
+  });
+
+  it('puts the image on the wire ahead of the text, and only on the last user turn', async () => {
+    // Anthropic's shape. A model that reads "is my drawing good?" before it has
+    // seen the drawing answers a different question.
+    await router().generate({
+      text: 'is my drawing good?',
+      state: state({ history: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'Hi!' },
+        { role: 'user', content: 'is my drawing good?' },
+      ] }),
+      subject: null, grounding: null, image: picture,
+    });
+    const messages = recorded[0]!.body.messages as {
+      role: string; content: string | { type: string; text?: string;
+        source?: { media_type: string; data: string } }[];
+    }[];
+    expect(messages).toHaveLength(3);
+    expect(messages[0]!.content, 'an earlier turn was rewritten').toBe('hello');
+    const last = messages[2]!.content as { type: string; text?: string;
+      source?: { media_type: string; data: string } }[];
+    expect(last[0]!.type).toBe('image');
+    expect(last[0]!.source).toEqual({
+      type: 'base64', media_type: 'image/png', data: picture.dataBase64 });
+    expect(last[1]).toEqual({ type: 'text', text: 'is my drawing good?' });
+  });
+
+  it('a text turn sends plain string content, exactly as before', async () => {
+    await router().generate({ text: 'hello', state: state(), subject: null, grounding: null });
+    expect(recorded[0]!.body.messages.at(-1).content).toBe('hello');
+  });
+});
+
 describe('the request we actually send', () => {
   it('carries the key in a header and never in the body', async () => {
     await router().classify('hello', []);

@@ -1,4 +1,6 @@
 import { useRef, useState } from 'preact/hooks';
+import type { ImageInput, ImageMimeType } from '@chittu/contracts';
+import { IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from '@chittu/contracts';
 import { speechRecognitionAvailable } from '../store';
 
 /**
@@ -25,6 +27,38 @@ export interface Recognition {
   stop(): void;
 }
 
+/**
+ * A picked file, as base64 without the `data:` prefix — the shape the API takes.
+ *
+ * `FileReader` rather than `Blob.arrayBuffer()` + manual base64: the browser
+ * already does this, and a hand-rolled encoder over a 4 MiB buffer is 4 MiB of
+ * string concatenation on a phone.
+ *
+ * Refusals are returned, not thrown, and each one is a sentence a child can
+ * read. The server checks all of this again — this is the courtesy copy, so a
+ * picture that cannot work fails on the device instead of after a 5 MB upload
+ * on a slow connection.
+ */
+export async function readImageFile(file: File): Promise<
+  { ok: true; image: ImageInput } | { ok: false; why: string }
+> {
+  if (!(IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return { ok: false, why: "I can only look at photos and drawings — try a JPG or PNG! 📷" };
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    return { ok: false, why: 'That picture is a bit big — try a smaller one! 📷' };
+  }
+  const dataBase64 = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    // `result` is `data:<mime>;base64,<payload>`; the API wants the payload.
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(new Error('unreadable'));
+    r.readAsDataURL(file);
+  });
+  if (dataBase64 === '') return { ok: false, why: "I couldn't open that picture. Try another?" };
+  return { ok: true, image: { mimeType: file.type as ImageMimeType, dataBase64 } };
+}
+
 export function newRecognition(): Recognition | null {
   const g = globalThis as {
     SpeechRecognition?: new () => Recognition;
@@ -35,16 +69,30 @@ export function newRecognition(): Recognition | null {
 }
 
 export function Composer(
-  { onSend, disabled, placeholder }: {
+  { onSend, onPickImage, hasImage, disabled, placeholder }: {
     onSend: (text: string) => void;
+    /**
+     * A picture the child chose, already read and checked. Optional so the
+     * composer still works everywhere it is used without one; the camera button
+     * is simply absent when nobody is listening for pictures, which is the same
+     * rule the mic follows — a button that does nothing is an overclaim in UI
+     * form (§11.5).
+     */
+    onPickImage?: (image: ImageInput, previewUrl: string) => void;
+    /** True when a picture is already waiting to go with the next message. */
+    hasImage?: boolean;
     disabled: boolean;
     placeholder?: string;
   },
 ): preact.JSX.Element {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
+  /** Our own UI copy for a refused file. Never a safety script. */
+  const [note, setNote] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
+  const file = useRef<HTMLInputElement | null>(null);
   const canHear = speechRecognitionAvailable();
+  const canShow = onPickImage !== undefined;
 
   function submit(e: Event): void {
     e.preventDefault();
@@ -52,6 +100,25 @@ export function Composer(
     if (t === '' || disabled) return;
     setText('');
     onSend(t);
+  }
+
+  /**
+   * The picture is read here and handed UP, still only in memory.
+   *
+   * The input is reset on every path — including the failure paths — so picking
+   * the same file twice in a row fires `change` the second time. Without that,
+   * a child who picked a too-big photo, shrank it and picked it again would get
+   * silence.
+   */
+  async function pickImage(e: Event): Promise<void> {
+    const input = e.currentTarget as HTMLInputElement;
+    const f = input.files?.[0];
+    input.value = '';
+    if (!f || disabled) return;
+    const r = await readImageFile(f);
+    if (!r.ok) { setNote(r.why); return; }
+    setNote(null);
+    onPickImage?.(r.image, URL.createObjectURL(f));
   }
 
   function toggleMic(): void {
@@ -89,6 +156,47 @@ export function Composer(
         onInput={(e) => setText((e.currentTarget as HTMLInputElement).value)}
       />
 
+      {canShow && (
+        <>
+          {/*
+            * A real file input, driven by the button beside it.
+            *
+            * `display: none`, NOT `.visually-hidden` — and the difference is an
+            * accessibility one rather than a cosmetic one. `.visually-hidden`
+            * keeps an element in the accessibility tree, so a screen reader
+            * announced BOTH this input ("Choose File") and the labelled button
+            * that drives it: two controls for one action, one of them unlabelled
+            * boilerplate. Found by reading the a11y tree of the running page,
+            * which is also where the prototype landed (chittu-v3.html:115).
+            *
+            * `capture="environment"` asks a phone for the rear camera and is
+            * ignored on a desktop, which falls back to the file picker — one
+            * control, both devices, no capability sniffing.
+            */}
+          <input
+            ref={file}
+            id="composer-image"
+            class="composer__file"
+            type="file"
+            accept={IMAGE_MIME_TYPES.join(',')}
+            capture="environment"
+            disabled={disabled}
+            onChange={(e) => { void pickImage(e); }}
+          />
+          <button
+            type="button"
+            class={`round cam${hasImage === true ? ' is-armed' : ''}`}
+            aria-label={hasImage === true
+              ? 'Picture ready — type what you want to ask about it'
+              : 'Show Chittu a picture'}
+            disabled={disabled}
+            onClick={() => file.current?.click()}
+          >
+            {hasImage === true ? '\u2705' : '\u{1F4F7}'}
+          </button>
+        </>
+      )}
+
       {canHear && (
         <button
           type="button"
@@ -110,6 +218,8 @@ export function Composer(
       >
         ➤
       </button>
+
+      {note !== null && <p class="composer__note" role="status">{note}</p>}
 
       {!canHear && (
         <p class="composer__novoice">

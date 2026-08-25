@@ -91,6 +91,24 @@ export function MessageLog(
 
           case 'readscore':
             return <p key={m.id} class="readscore">{m.text}</p>;
+
+          case 'childimage':
+            /*
+             * The child's own picture, in their own conversation. `src` is a
+             * blob: URL into this page's memory — nothing was uploaded to a
+             * place this could point at, and nothing survives the tab.
+             *
+             * The alt text says what it is without describing it: this side of
+             * the wire has not seen the picture and must not invent a caption
+             * for a screen reader. Chittu's reply, one message down, is the
+             * description — written by a model that actually looked.
+             */
+            return (
+              <figure key={m.id} class="imgprev">
+                <img src={m.src} alt="The picture you showed Chittu" />
+                <figcaption class="imgprev__note">Not saved</figcaption>
+              </figure>
+            );
         }
       })}
 

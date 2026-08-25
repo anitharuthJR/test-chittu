@@ -40,6 +40,39 @@ describe('the hard rules survive', () => {
     expect(p).toMatch(/a kind "I don't know" beats a made-up answer/);
   });
 
+  /**
+   * THE IMAGES CLAUSE, now that there is an input channel behind it.
+   *
+   * It has been in the prompt since the port (chittu-v3.html:795) with nothing
+   * able to reach it — the `vision` cell was configured and unreachable, so
+   * this was a rule about a thing that could not happen. It can happen now,
+   * which makes each of these a live control rather than a description, and a
+   * deleted prompt line looks like nothing in a diff.
+   */
+  it('keeps the no-people-identification rule — the one that is not negotiable', () => {
+    expect(p).toMatch(/IMAGES:/);
+    expect(p).toMatch(/NEVER identify real people/);
+    // The two adjacent harms, each named separately because a model told only
+    // "do not identify" will happily estimate an age or remark on a body.
+    expect(p).toMatch(/guess ages/);
+    expect(p).toMatch(/comment on bodies\/looks/);
+  });
+
+  it('keeps the CRISIS escalation for an upsetting picture — D4\'s fourth detector', () => {
+    // Without this clause the vision path can accept the input a child in
+    // trouble is most likely to send without words and answer it as though it
+    // were a drawing of a cat. `packages/pipeline/src/vision.test.ts` proves the
+    // token still locks the chat; this proves the model is still asked for it.
+    expect(p).toMatch(
+      /If the picture shows something unsafe or upsetting, reply exactly "CRISIS"/);
+  });
+
+  it('keeps the kind-description half — a picture must still get an answer', () => {
+    // The anti-dodge rule applies to pictures too: refusing to look is not
+    // safety, it is a child showing you their drawing and being ignored.
+    expect(p).toMatch(/describe it kindly and simply, answer their question about it/);
+  });
+
   it('keeps health questions answerable', () => {
     expect(p).toMatch(/HEALTH QUESTIONS/);
     expect(p).toMatch(/these are science, never shameful/);

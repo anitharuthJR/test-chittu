@@ -178,6 +178,56 @@ export type Block =
   | { readonly kind: 'chips'; readonly chips: readonly string[] };
 
 // ---------------------------------------------------------------------------
+// Images — what a child SHOWS Chittu
+// ---------------------------------------------------------------------------
+
+/**
+ * A picture the child is showing Chittu on THIS turn, and only this turn.
+ *
+ * **IT IS NEVER STORED.** Not in `message`, not in `session.runtime_enc`, not
+ * on disk, not in the seal chain. It exists for the length of one request: the
+ * route hands it to the pipeline, the pipeline hands it to the sandbox port,
+ * the adapter puts it on the wire, and the reference is dropped when the turn
+ * returns. That is why this type is NOT on `SessionState` and never can be —
+ * everything on that type is written to `runtime_enc` at the end of the turn.
+ *
+ * The seal chain records that a picture was shown (`INPUT·IMAGE`, with the
+ * prototype's own words "image-shared(not stored)") and never what was in it,
+ * which is the same shape as a flag: the category, never the content.
+ *
+ * ONE IMAGE PER TURN, and only the latest. The prototype bounds context the
+ * same way (chittu-v3.html:1129 strips every image block but the newest);
+ * here it is bounded by construction, because nothing carries an image
+ * forward.
+ */
+export interface ImageInput {
+  readonly mimeType: ImageMimeType;
+  /** Base64, WITHOUT the `data:` URI prefix. */
+  readonly dataBase64: string;
+}
+
+/**
+ * The four formats both providers accept. A closed set for the same reason
+ * every other union here is closed: an unrecognised value must be a refusal,
+ * never a pass-through to a vendor's own parser.
+ */
+export type ImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+export const IMAGE_MIME_TYPES = Object.freeze(
+  ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const,
+);
+
+/** 4 MiB decoded — the prototype's cap (chittu-v3.html:1007), kept for parity. */
+export const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The same cap expressed in base64 characters, which is what a JSON schema can
+ * actually check. Checking the decoded size would mean decoding first, i.e.
+ * allocating whatever was sent before deciding whether it was too big.
+ */
+export const IMAGE_MAX_BASE64_CHARS = Math.ceil(IMAGE_MAX_BYTES / 3) * 4;
+
+// ---------------------------------------------------------------------------
 // Turn I/O — the one endpoint that runs the whole pipeline
 // ---------------------------------------------------------------------------
 
@@ -185,6 +235,12 @@ export interface TurnRequest {
   readonly sessionId: string;
   readonly text: string;
   readonly mode: Mode;
+  /**
+   * A picture the child is showing, for this turn only. Optional, and its
+   * presence changes ONE thing: which cell the sandbox call routes to. It does
+   * not change the layer order, and L1 and L2 still run on `text` first.
+   */
+  readonly image?: ImageInput;
 }
 
 /**
@@ -277,6 +333,18 @@ export interface ModelRequest {
   readonly system: string;
   readonly messages: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[];
   readonly maxTokens?: number;
+  /**
+   * Attached to the LAST user message by the adapter, because that is where a
+   * "look at this" belongs and it keeps `messages` a list of strings.
+   *
+   * It is deliberately NOT a content-part union on `messages`: the two vendors
+   * disagree about the wire (Anthropic wants `source.data` base64 blocks,
+   * OpenAI-compatible endpoints want an `image_url` data URI), and a union here
+   * would force every adapter to re-derive the same thing from a shape one of
+   * them cannot send. Above the port an image is one field; below it, it is
+   * whatever that vendor's protocol says.
+   */
+  readonly image?: ImageInput;
 }
 
 /**

@@ -17,8 +17,12 @@ import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { runTurn } from '@chittu/pipeline';
-import type { Band, Block, Country, Mode, ModelUsage, TurnSignal } from '@chittu/contracts';
-import { BANDS, COUNTRIES } from '@chittu/contracts';
+import type {
+  Band, Block, Country, ImageInput, Mode, ModelUsage, TurnSignal,
+} from '@chittu/contracts';
+import {
+  BANDS, COUNTRIES, IMAGE_MAX_BASE64_CHARS, IMAGE_MIME_TYPES,
+} from '@chittu/contracts';
 import {
   assertActiveConsent, draftConsent, markVerifying, activate, revoke,
   selectAdapter, methodsFor, offersFor, ConsentError, ConsentAdapterError,
@@ -760,18 +764,59 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
 
   // ---- the pipeline. Buffered, never streamed. ----------------------------
 
-  app.post<{ Params: { id: string }; Body: { text: string; mode?: Mode } }>(
+  app.post<{ Params: { id: string }; Body: { text: string; mode?: Mode; image?: ImageInput } }>(
     '/v1/session/:id/turn', {
+      /**
+       * RAISED FOR THIS ROUTE ONLY, not globally.
+       *
+       * Fastify's default body limit is 1 MiB, which a 4 MiB picture exceeds
+       * before any schema gets to look at it. Raising it on the app would raise
+       * it for consent drafts, PIN checks and every ops route — a wider DoS
+       * surface bought for one route's benefit. The envelope over
+       * IMAGE_MAX_BASE64_CHARS covers the JSON around it (the text, the mode,
+       * the quoting) and nothing more, so a body meaningfully larger than one
+       * capped image is refused by the server before it is parsed, and one
+       * slightly over the cap is refused by the schema with a message that says
+       * which field was wrong.
+       */
+      bodyLimit: IMAGE_MAX_BASE64_CHARS + 64 * 1024,
       schema: {
         params: {
           type: 'object', required: ['id'], additionalProperties: false,
           properties: { id: { type: 'string', format: 'uuid' } },
         },
+        /**
+         * `additionalProperties: false` STAYS. The schema is WIDENED — one
+         * named optional field with its own closed sub-schema — rather than
+         * loosened, which is the difference between "we designed for this
+         * field" and "we stopped checking".
+         *
+         * The image sub-schema is closed the same way and for the same reason:
+         * `mimeType` is an enum, so an unrecognised format is a 400 here rather
+         * than a string handed to a vendor's own parser, and `dataBase64` is
+         * length-capped and pattern-checked, so what reaches
+         * `Buffer.from(...,'base64')` anywhere downstream is already known to
+         * be base64 rather than merely hoped to be.
+         */
         body: {
           type: 'object', required: ['text'], additionalProperties: false,
           properties: {
             text: { type: 'string', minLength: 1, maxLength: 2000 },
             mode: { type: 'string', enum: [...MODES] },
+            image: {
+              type: 'object', required: ['mimeType', 'dataBase64'],
+              additionalProperties: false,
+              properties: {
+                mimeType: { type: 'string', enum: [...IMAGE_MIME_TYPES] },
+                dataBase64: {
+                  type: 'string', minLength: 4,
+                  maxLength: IMAGE_MAX_BASE64_CHARS,
+                  // Base64 alphabet only. A `data:` prefix, a URL or a path all
+                  // fail here rather than at a vendor.
+                  pattern: '^[A-Za-z0-9+/]+={0,2}$',
+                },
+              },
+            },
           },
         },
       },
@@ -833,7 +878,7 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           seal: store.sealFor(tx, req.params.id),
           now: () => new Date().toISOString(),
           newId: () => randomUUID(),
-        });
+        }, undefined, req.body.image);
         if (out.signal !== undefined) {
           signal = out.signal;
           facets = { band: state.band, country: state.country };

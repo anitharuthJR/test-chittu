@@ -34,7 +34,7 @@ Reference implementation: `prototype/chittu-v3.html` (one file, ~1,000 lines of 
 | **Parent dashboard** | PIN gate with lockout + flag; stats; safety flags (category only); assistance flags; age-split transcript (full 4–12, topics-only 13–17); memory management; maths harness; certification checklist; seal verify; two-tap revoke. |
 | **Reading coach** | Levelled bank per band, browser ASR, word-by-word green/red scoring, guided practice on misses, accuracy to the dashboard. |
 | **10 modes + visual grammar** | `[BIG]`/`[FACT]`/`[STEPS]`/`[POEM]`/`[QUIZ]`/`[CODE]`/`[CHIPS]` rendered as real UI; chips make it pre-literate friendly. |
-| **Vision + voice** | Image rides as a vision block (latest only, never stored); mic transcribe-and-discard with honest microcopy. |
+| **Vision + voice** | Image rides as a vision block (latest only, never stored); mic transcribe-and-discard with honest microcopy. **The vision half now exists server-side too — see §2b.** |
 | **Verification** | 246/246 assertions green — 48 end-to-end + 169 lexicon sweep + 29 pedagogy. Found and fixed 6 real defects (incl. the seal-chain fork and the `[STEPS]`/pictorial delimiter collision). |
 
 ---
@@ -87,8 +87,9 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Metering** | One row per model call — tokens, latency, cost, `rate_version` — against a session pseudonym with no FK to anything. A maths turn and a crisis turn write **zero** rows | `packages/db/metering-repo.ts` |
 | **Signal triage (`/ops/signals`)** | Above-floor shapes only, ranked by sightings; promote → author an example → a **different** operator approves. Refuses in words when fewer than two operators are configured | `apps/api/src/ops/` |
 | **Reading coach** | D2's RM→RC branch, D3's reading-aloud row, D5's accuracy stat. Bank + scorer ported verbatim; deterministic, local, **zero model calls** (proved by counting, and by the metering table staying empty). One doctrine correction: the transcript passes L1 — the prototype scored before any guard ran. Audio never leaves the browser; browser ASR remains the §4 placeholder | `packages/reading-coach`, `POST /v1/session/:id/read` |
+| **Vision (D2 IMG / D3 pictures / D4's fourth detector)** | A child can show Chittu a picture. It rides ONE turn to the sandbox and is stored nowhere — no `message`, no `runtime_enc`, no disk, no new key in the blob; the seal records only `INPUT·IMAGE` / "image-shared(not stored)". L1 and L2 run on the accompanying text first, so a crisis phrase beside a photo still reaches zero models and the photo is never sent. The sandbox's `CRISIS` token locks the chat from a picture exactly as from words | `packages/pipeline`, `apps/api/src/providers/`, `apps/web/src/components/Composer.tsx` |
 | **Abstractor + signal capture** | A child's turn becomes a shape (six placeholders, ~1,700-lemma closed vocabulary) and the shape's TEXT is written only on the turn that reaches **25 distinct sessions**. Below the floor: a keyed hash and an integer | `packages/safety-kernel/abstractor.ts`, `packages/db/signal-repo.ts` |
-| **Tests** | **1350+**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Tests** | **1801**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is now real — Anthropic
 adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never

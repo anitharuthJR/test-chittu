@@ -1358,6 +1358,108 @@ doc, so "which handle am I on?" cannot be fudged a third time.
 
 ## 11. The four diagram nodes the build half-delivered
 
+### FIXED (2026-08-25) — D4's FOURTH CRISIS DETECTOR had no input channel
+
+D4 draws four detectors converging on one crisis script. Three had an input:
+L1's lexicon, L2's classifier, and the sandbox's escalation token on TEXT. The
+fourth — what the picture shows — had none. `POST /v1/session/:id/turn` took
+`{text, mode}` with `additionalProperties: false`, `apps/web` had no camera
+control, and the router's `vision` cell (§12.2, `claude-sonnet-5`) was requested
+by nothing at all: **configured and unreachable**. That is the same class of
+defect as the CORPUS layer stamp with no retrieval behind it — it reads in
+review as a working capability, and D3's "pictures the child shows" row and D2's
+IMG attach both depended on it.
+
+The prompt was in the same state. Rule IMAGES ("NEVER identify real people,
+guess ages, or comment on bodies/looks … if the picture shows something unsafe
+or upsetting, reply exactly `CRISIS`") has been in `sandbox-prompt.ts` since the
+port, describing a thing that could not happen. It now has tests, because it is
+now a live control.
+
+**The image never becomes state, and the type system is what enforces it.**
+`SessionState` is the value `saveTurn` writes to `message` and
+`session.runtime_enc`, so anything on it is a thing that gets written down. The
+image is therefore a PARAMETER of `runTurn` (fifth positional, beside
+`ReadAttempt`) and a field of `SandboxInput` — neither of which is persisted —
+and there is no field on `SessionState` it could be assigned to. `runtime_enc`
+gains no key, so `teen-carveout.test.ts`'s whole-key-set assertion is untouched:
+the question "what does this new field carry" never had to be argued, because no
+new field was added.
+
+**What IS recorded is that a picture was shown.** The seal chain gets one event,
+`INPUT·IMAGE` / `image-shared(not stored)` — the prototype's own constant
+(chittu-v3.html:1011), carrying no bytes and no description. A turn that reached
+a vendor with no trace at all would be the opposite failure.
+
+**Layer order is unchanged; a branch was added, nothing was moved.** The image is
+read once, at layer 8, and handed to the sandbox port. L1 and L2 run on the
+accompanying text first, which means a crisis phrase typed alongside a picture
+still reaches zero models AND the picture is never sent — the guard fires two
+layers above the sandbox. `runTurn` with a picture walks exactly the layers it
+walks without one, asserted by comparing the two arrays.
+
+**The cell is chosen by the picture, not by the mode.** A child in homework mode
+photographing their worksheet needs a model that can see; the mode still shapes
+the prompt, so the Socratic rules still apply. `vision` is metered as `vision` —
+verified live: one turn produced `vision | anthropic | claude-sonnet-5` beside
+the separate `classifier` row.
+
+**Both adapters put the image on the wire, and the shapes differ.** Anthropic
+wants `{type:'image', source:{type:'base64', media_type, data}}`; every
+OpenAI-compatible endpoint wants `{type:'image_url', image_url:{url:'data:…'}}`.
+Same bytes, different envelope, and neither vendor errors on the other's shape in
+a way that says "you sent the picture wrong" — it just produces a model that
+never saw it, which is indistinguishable from a model that cannot see. Exactly
+the failure the second provider exists to make visible, and the same one
+Anthropic's top-level `system` produces there. Pointing
+`DEFAULT_CELLS.vision` at `local` still means pointing it at a model that can
+actually see; `chittu-baseline` (qwen3:4b) cannot. Same rule as `embed` — **a
+capability is not something a cell assignment can confer** — the difference
+being that `embed` is a separate method and can be refused, while a vision model
+and a text model share `complete()`. That refusal has nowhere to live today and
+is left as a known gap below.
+
+**The route was WIDENED, not loosened.** `additionalProperties: false` stays, on
+the body and on the image sub-schema. `mimeType` is an enum, `dataBase64` is
+length-capped at `IMAGE_MAX_BASE64_CHARS` and pattern-checked to the base64
+alphabet, so a `data:` URI or an unknown format is a 400 here rather than a
+string handed to a vendor's parser. `bodyLimit` is raised on THIS ROUTE ONLY —
+raising it on the app would widen the DoS surface of consent drafts, PIN checks
+and every ops route for one route's benefit.
+
+Verified in the running app on 2026-08-25, against the real Anthropic adapter
+pointed at a local stand-in: the classifier call carried the child's text as a
+plain string with no image; the sandbox call carried `["image","text"]` on the
+last user turn, `image/png`, 444 base64 chars, and those bytes appeared nowhere
+else in the request; the model answered `CRISIS`; the chat locked with the
+scripted spine and India's registry helplines; the flag read `SAFETY /
+CRISIS_DISTRESS` with no topic; and a sweep of every text column in the schema
+for the picture's base64 returned nothing while a positive control found what it
+was meant to.
+
+Mutation-tested, per CLAUDE.md: keeping the picture in the model context fails 5
+tests, sealing the image bytes fails 1, dropping the `vision` routing fails 3,
+an adapter that silently drops the picture fails 1, and loosening the image
+sub-schema fails 3.
+
+#### Still open
+
+- **A provider without vision cannot refuse.** `router.embed()` refuses a
+  provider whose adapter has no `embed`, because an embedding is a separate
+  method. A vision model and a text model share `complete()`, so a `vision` cell
+  pointed at a text-only model sends the picture and gets a reply that ignored
+  it — no error anywhere. Expressing that needs a capability on
+  `ProviderAdapter` that `route()` checks, which is the same shape as the
+  `controlTokens` question and, like it, is not a tidy-up.
+- **One image per turn, and text is required.** The schema takes a single
+  `image` and `text` stays `minLength: 1`, matching the prototype, which will not
+  send on an empty box. A child who wants to show a picture and say nothing has
+  to type something. That is a product decision worth revisiting with children
+  in the room, not a limitation of the pipeline.
+- **The 4 MiB cap is the prototype's, carried over rather than re-decided.**
+  ~5.6 MB of base64 on a low-cost Android on 3G is the device-floor question
+  status §4 says has never been asked. The number should move on evidence.
+
 ### FIXED — D1/H, "Scripted welcome + one warm memory if any"
 
 The prototype opens a session with the memory it holds (`chittu-v3.html:864-871`,

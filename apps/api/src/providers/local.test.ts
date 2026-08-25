@@ -77,6 +77,12 @@ const cells = {
   ...DEFAULT_CELLS,
   classifier: { ...DEFAULT_CELLS.classifier, provider: 'local', model: 'chittu-baseline' },
   sandbox: { ...DEFAULT_CELLS.sandbox, provider: 'local', model: 'chittu-baseline' },
+  // Pointed at this provider so the WIRE can be tested. It does NOT mean
+  // `chittu-baseline` can see — qwen3:4b cannot. Same rule as `embed`: a
+  // capability is not something a cell assignment can confer. What is under
+  // test is that when a model that CAN see is put here, the picture arrives in
+  // the shape that protocol expects.
+  vision: { ...DEFAULT_CELLS.vision, provider: 'local', model: 'chittu-vision-not-real' },
 };
 
 const router = () => createRouter({ adapters: { local: adapter() }, cells });
@@ -123,6 +129,63 @@ describe('the wire is OpenAI-shaped, not Anthropic-shaped', () => {
     await r.classify('hello', []);
     expect(recorded[0]!.headers['authorization']).toBe('Bearer local-secret-not-real');
     expect(JSON.stringify(recorded[0]!.body)).not.toContain('local-secret-not-real');
+  });
+
+  /**
+   * THE SECOND HALF OF THE WIRE DIFFERENCE, and the reason this adapter earns
+   * its keep. Anthropic wants a base64 `source` block; every OpenAI-compatible
+   * server wants an `image_url` data URI. Sending the wrong one produces a model
+   * that never saw the picture — indistinguishable from a model that cannot
+   * see, exactly as Anthropic's top-level `system` produces a model that never
+   * saw its own prompt.
+   */
+  it('sends the picture as an image_url data URI, not as a base64 source block', async () => {
+    await router().generate({
+      text: 'what is this?', state: state(), subject: null, grounding: null,
+      image: { mimeType: 'image/jpeg', dataBase64: 'aW1hZ2V6enpieXRlcw' },
+    });
+    const last = recorded[0]!.body.messages.at(-1) as {
+      role: string; content: { type: string; text?: string; image_url?: { url: string } }[];
+    };
+    expect(last.role).toBe('user');
+    expect(last.content[0]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/jpeg;base64,aW1hZ2V6enpieXRlcw' },
+    });
+    expect(last.content[1]).toEqual({ type: 'text', text: 'what is this?' });
+    // Anthropic's shape must not be anywhere in this body.
+    expect(JSON.stringify(recorded[0]!.body)).not.toContain('"source"');
+    // The system prompt is still messages[0], still a plain string.
+    expect(recorded[0]!.body.messages[0].role).toBe('system');
+    expect(typeof recorded[0]!.body.messages[0].content).toBe('string');
+  });
+
+  it('a text turn still sends plain string content — nothing was rewritten', async () => {
+    await router().generate({ text: 'hello', state: state(), subject: null, grounding: null });
+    expect(recorded[0]!.body.messages.at(-1)).toEqual({ role: 'user', content: 'hello' });
+  });
+
+  it('a CRISIS token still fires when the turn carried a picture', async () => {
+    // The escalation tokens are compared with `===` above the port, so this is
+    // the same path a text turn takes — but the whole point of the vision node
+    // is that it works from a picture, so it is asserted from a picture.
+    respond = () => ({ status: 200, body: chat('<think>the picture shows cuts</think>CRISIS') });
+    const chain = createChain();
+    const r = router();
+    const out = await runTurn(
+      state(), 'what do you think of this?',
+      {
+        classify: async () => ({ label: 'SAFE', memory: null, assist: null }),
+        generate: (i) => r.generate(i),
+        seal: chain,
+        now: () => '2026-08-25T00:00:00.000Z',
+        newId: () => 'id-1',
+      },
+      undefined,
+      { mimeType: 'image/png', dataBase64: 'aW1hZ2V6enpieXRlcw' },
+    );
+    expect(out.response.crisisLock, 'a picture could not lock the chat').toBe(true);
+    expect(JSON.stringify(out.response)).not.toContain('the picture shows cuts');
   });
 });
 

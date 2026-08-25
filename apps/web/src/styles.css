@@ -376,6 +376,38 @@ button:disabled { cursor: default; opacity: .55; }
 }
 @keyframes pulse { 50% { transform: scale(1.08) } }
 
+/* Hidden from sight AND from assistive tech: the labelled camera button is the
+   control, and `.visually-hidden` would have a screen reader announce this as a
+   second, unlabelled one. `display:none` still allows a programmatic .click().
+   The prototype does the same (chittu-v3.html:115). */
+.composer__file { display: none; }
+
+/* The camera. `is-armed` says a picture is waiting to go with the next
+   message — the same state the button's aria-label spells out, because a
+   colour change alone is not a signal every child can see. */
+.cam { background: var(--white); border: 2px solid var(--night-12); }
+.cam.is-armed { background: var(--leaf-soft); border-color: var(--leaf); }
+
+.composer__note {
+  flex-basis: 100%; font-size: 12px; color: var(--night); font-weight: 700;
+  text-align: center; background: var(--coral-soft);
+  border: 2px solid var(--coral); border-radius: 12px; padding: 7px 12px;
+}
+
+/* The child's own picture in their conversation (chittu-v3.html:92). It sits
+   on the child's side, like their words, because it is a thing they said. */
+.imgprev {
+  align-self: flex-end; max-width: min(60%, 260px); margin: 0;
+  border: 3px solid var(--night); border-radius: 16px; overflow: hidden;
+  background: var(--white);
+}
+.imgprev img { display: block; width: 100%; height: auto; }
+.imgprev__note {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--night-60);
+  text-align: center; padding: 4px 0 5px;
+}
+
 /* ------------------------------------------------------ reading coach --- */
 /* The passage card and marks, ported from the prototype (chittu-v3.html:104).
    A miss is underlined as well as tinted — colour alone is not a signal every

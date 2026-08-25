@@ -17,7 +17,7 @@
  */
 
 import type {
-  Band, ClassifierOutcome, Country, Flag, Memory, Mode, PipelineLayer,
+  Band, ClassifierOutcome, Country, Flag, ImageInput, Memory, Mode, PipelineLayer,
   RouteContext, TurnResponse, TurnSignal,
 } from '@chittu/contracts';
 import { MEMORY_CATEGORIES, isClassifierFailure } from '@chittu/contracts';
@@ -107,6 +107,21 @@ export interface SandboxInput {
    * reading it very much does need to.
    */
   readonly grounding: string | null;
+  /**
+   * A picture the child is showing on THIS turn. Absent on almost every turn.
+   *
+   * It arrives here and stops here. `SandboxInput` is the only type in this
+   * package that carries one, and that is the design: `SessionState` is what
+   * gets written to `session.runtime_enc` at the end of a turn, so an image on
+   * it would be an image in the database. There is no field for it there and
+   * there must not be one.
+   *
+   * Its ONE effect on routing is the cell — `vision` rather than `sandbox` —
+   * and the router makes that decision, not this package. Its effect on the
+   * layer order is none: this field is read at layer 8 and nowhere earlier, so
+   * L1 and L2 have already run on the accompanying text.
+   */
+  readonly image?: ImageInput;
 }
 
 /**
@@ -288,6 +303,24 @@ export async function runTurn(
   text: string,
   ports: PipelinePorts,
   read?: ReadAttempt,
+  /**
+   * A picture the child is showing on this turn, or nothing — which is what it
+   * is on almost every turn.
+   *
+   * A FIFTH POSITIONAL ARGUMENT RATHER THAN A FIELD ON `state`, deliberately.
+   * `state` is the thing that comes back out of this function and gets
+   * persisted; anything on it is a thing that gets written down. An image must
+   * not be, so it travels beside the state and never inside it, and the type
+   * system keeps it that way — there is no field on `SessionState` it could be
+   * assigned to.
+   *
+   * It changes NO layer order. It is read once, at layer 8, and passed to the
+   * sandbox port. Everything above — the seal, the crisis lock, L1, the maths
+   * engine, the corpus, L2 — runs on `text` exactly as it does on a turn with
+   * no picture at all, which is why a crisis phrase typed alongside a photo
+   * still reaches zero models.
+   */
+  image?: ImageInput,
 ): Promise<TurnOutcome> {
   const walk: Walk = { layers: [], flags: [] };
 
@@ -296,6 +329,20 @@ export async function runTurn(
   // the chain records what was said even if the turn later throws.
   walk.layers.push('SEAL');
   await ports.seal.append({ role: 'child', layer: 'SEAL', text });
+  /**
+   * THAT a picture was shown is sealed. WHAT was in it is not, and cannot be.
+   *
+   * The text is a constant — the prototype's own words (chittu-v3.html:1011) —
+   * so this line carries no bytes of the image and no description of it. The
+   * seal chain is the record that a turn happened; a picture that reached a
+   * vendor without leaving any trace at all would be worse, and a picture
+   * written INTO the trace would be the thing the whole feature refuses to do.
+   */
+  if (image) {
+    await ports.seal.append({
+      role: 'child', layer: 'INPUT\u00B7IMAGE', text: 'image-shared(not stored)',
+    });
+  }
   /**
    * The turn joins the classifier's window here — before anything decides what
    * to do with it, exactly as the seal does, because the window is a record of
@@ -413,11 +460,11 @@ export async function runTurn(
     // The child changed the subject — release the loop and continue normally.
     walk.layers.push('MATH_ENGINE');
     const released: SessionState = { ...withInput, mathPractice: null };
-    return continueAfterMaths(released, text, ports, walk);
+    return continueAfterMaths(released, text, ports, walk, image);
   }
 
   // ---- 5. DETERMINISTIC MATHS -----------------------------------------
-  return continueAfterMaths(withInput, text, ports, walk);
+  return continueAfterMaths(withInput, text, ports, walk, image);
 }
 
 /**
@@ -429,6 +476,8 @@ async function continueAfterMaths(
   text: string,
   ports: PipelinePorts,
   walk: Walk,
+  /** Carried, not stored. See `runTurn`'s own parameter. */
+  image?: ImageInput,
 ): Promise<TurnOutcome> {
   // ---- 5. MATH ENGINE — pure arithmetic never reaches a model ----------
   if (!walk.layers.includes('MATH_ENGINE')) walk.layers.push('MATH_ENGINE');
@@ -542,7 +591,22 @@ async function continueAfterMaths(
   walk.layers.push('L5_SANDBOX');
   let raw: string;
   try {
-    raw = await ports.generate({ text, state: forModel, subject, grounding });
+    /**
+     * THE ONLY PLACE THE IMAGE IS READ, and the only place it goes.
+     *
+     * Spread rather than assigned, because `exactOptionalPropertyTypes` makes
+     * `image: undefined` a different thing from an absent `image` — and the
+     * router decides the cell from `image !== undefined`, so the difference is
+     * not academic: an explicit undefined would route a text turn to the vision
+     * cell and meter it as one.
+     *
+     * `forModel` beside it carries the TEXT of this turn and never the picture.
+     * That state is what gets returned and persisted; the image is a local
+     * parameter that goes out of scope when this function returns.
+     */
+    raw = await ports.generate({
+      text, state: forModel, subject, grounding, ...(image ? { image } : {}),
+    });
   } catch {
     return await reply(afterCls, walk, ports, SAFE_FALLBACK, `SANDBOX · unavailable · ${clsNote}`);
   }

@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Block, Mode } from '@chittu/contracts';
+import type { Block, ImageInput, Mode } from '@chittu/contracts';
 import { passagesFor, type ReadPassage } from '@chittu/reading-coach';
 import type { Api } from '../api';
 import { ApiError, OfflineError } from '../api';
@@ -32,6 +32,15 @@ export function Chat(
   const [fatal, setFatal] = useState<string | null>(null);
   /** The passage on the current read card. Chosen here, scored by the server. */
   const [passage, setPassage] = useState<ReadPassage | null>(null);
+  /**
+   * The picture waiting to go with the next message, if the child chose one.
+   *
+   * ONE AT A TIME, AND ONLY THE NEXT TURN. Picking a second replaces the first;
+   * sending clears it in `finally`, so a failed turn does not leave a picture
+   * armed for a later, unrelated message. Nothing writes it to `localStorage` —
+   * nothing in this client writes anything there, and a test asserts it.
+   */
+  const [pending, setPending] = useState<{ image: ImageInput; url: string } | null>(null);
   const opening = useRef(false);
 
   // One session per visit. The guard is a ref rather than state because two
@@ -142,10 +151,18 @@ export function Chat(
      */
     if (mode.value === 'read') { readNav(text); return; }
 
+    /**
+     * The picture is claimed HERE, before the await, and cleared in `finally`.
+     *
+     * Reading it inside the try would let a second send pick up the same
+     * picture while the first is still in flight — the same turn's image
+     * attached to two turns.
+     */
+    const shown = pending;
     push({ id: nextId(), role: 'child', text });
     busy.value = true;
     try {
-      const r = await api.turn(s.sessionId, text, mode.value);
+      const r = await api.turn(s.sessionId, text, mode.value, shown?.image);
       push({
         id: nextId(), role: 'chittu',
         blocks: r.blocks, trace: r.trace, layers: r.layers,
@@ -167,7 +184,29 @@ export function Chat(
       });
     } finally {
       busy.value = false;
+      // Cleared whatever happened. A picture that failed to send must not ride
+      // along on the next, unrelated message.
+      if (shown !== null) setPending(null);
     }
+  }
+
+  /**
+   * A picture the child chose. It goes into the log immediately — so they can
+   * see Chittu got it — and into `pending`, so it rides with the next message.
+   *
+   * The previous preview's object URL is revoked when it is replaced, which is
+   * the only cleanup this needs: the Blob behind it is freed, and a `blob:` URL
+   * that outlived its picture is a handle to nothing.
+   */
+  function pickImage(image: ImageInput, url: string): void {
+    if (pending !== null) URL.revokeObjectURL(pending.url);
+    setPending({ image, url });
+    push({ id: nextId(), role: 'childimage', src: url });
+    push({
+      id: nextId(), role: 'system',
+      text: 'Got your picture! Ask me anything about it — "what is this?" '
+        + 'or "is my drawing good?" (I never save pictures.)',
+    });
   }
 
   async function forget(memoryId: string): Promise<void> {
@@ -339,6 +378,8 @@ export function Chat(
             disabled={locked || busy.value || session.value === null}
             {...(locked ? { placeholder: 'Paused until a grown-up unlocks it' } : {})}
             onSend={(t) => { void send(t); }}
+            onPickImage={pickImage}
+            hasImage={pending !== null}
           />
         )}
     </main>

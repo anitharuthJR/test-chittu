@@ -97,6 +97,66 @@ export interface LocalOptions {
   readonly sleep?: (ms: number) => Promise<void>;
 }
 
+/**
+ * The OpenAI-compatible message shape: a string, or a list of content parts.
+ *
+ * THE SECOND HALF OF THE WIRE DIFFERENCE, and the reason this adapter earns
+ * its keep. Anthropic wants `{type:'image', source:{type:'base64', media_type,
+ * data}}`; every OpenAI-compatible server wants `{type:'image_url',
+ * image_url:{url:'data:<mime>;base64,<data>'}}` — same bytes, different
+ * envelope, and neither vendor errors on the other's shape in a way that says
+ * "you sent the picture wrong". Sending Anthropic's block here produces a model
+ * that never saw the picture, which is indistinguishable from a model that
+ * cannot see, exactly as sending Anthropic's top-level `system` here produces a
+ * model that never saw its own prompt.
+ *
+ * THIS IS THE WIRE, NOT A PROMOTION. `DEFAULT_CELLS.vision` names Anthropic,
+ * and pointing it at `local` means pointing it at a model that can actually
+ * see — `chittu-baseline` (qwen3:4b) cannot. Same rule as `embed`: a capability
+ * is not something a cell assignment can confer. What this code guarantees is
+ * that when there IS such a model, the picture reaches it in the shape it
+ * expects.
+ */
+type OpenAiContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+type OpenAiMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string | OpenAiContentPart[];
+};
+
+/**
+ * Attach the picture to the LAST user message. Image first, then text — the
+ * prototype's order (chittu-v3.html:1126), because a model that reads "is my
+ * drawing good?" before it has seen the drawing answers a different question.
+ *
+ * Nothing is carried forward: `req.messages` is a list of strings, so the only
+ * picture on this wire is the one attached here, for this call.
+ */
+function withImage(req: ModelRequest): OpenAiMessage[] {
+  const messages: OpenAiMessage[] = req.messages.map(
+    (m) => ({ role: m.role, content: m.content }));
+  if (req.image === undefined) return messages;
+
+  const part: OpenAiContentPart = {
+    type: 'image_url',
+    image_url: { url: `data:${req.image.mimeType};base64,${req.image.dataBase64}` },
+  };
+  const i = messages.findLastIndex((m) => m.role === 'user');
+  // Dropping it silently would look exactly like a model that ignored it.
+  if (i === -1) return [...messages, { role: 'user', content: [part] }];
+
+  const text = messages[i]!.content;
+  messages[i] = {
+    role: 'user',
+    content: typeof text === 'string' && text !== ''
+      ? [part, { type: 'text', text }]
+      : [part],
+  };
+  return messages;
+}
+
 interface OpenAiChoice { message?: { role?: string; content?: string } }
 interface OpenAiResponse {
   choices?: OpenAiChoice[];
@@ -136,7 +196,7 @@ export function localAdapter(opts: LocalOptions): ProviderAdapter {
         // provider exists to make visible.
         messages: [
           { role: 'system', content: req.system },
-          ...req.messages.map((m) => ({ role: m.role, content: m.content })),
+          ...withImage(req),
         ],
       }),
       signal: AbortSignal.timeout(timeoutMs),

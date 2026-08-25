@@ -261,11 +261,29 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
     },
 
     async generate(input, onUsage) {
-      const { state, subject, grounding } = input;
-      // Homework and curriculum have their own cells in §12.2; both point at
-      // the same engine in Phase 1, so the category is chosen for the metering
-      // and clearance record rather than to change the model today.
-      const category: RouterCategory = state.mode === 'homework' ? 'homework'
+      const { state, subject, grounding, image } = input;
+      /**
+       * THE VISION CELL, and the one thing that reaches it.
+       *
+       * §12.2 has had a `vision` cell since the routing table was written and
+       * nothing ever asked for it — the cell was configured and unreachable,
+       * which is the same class of defect as a prompt clause with nothing
+       * behind it: it reads as a working capability in review.
+       *
+       * The picture wins over the mode. A child in homework mode who shows a
+       * photo of their worksheet needs a model that can see it; routing that to
+       * the text cell would send a vision request to whatever `homework` names,
+       * which today is the same model and tomorrow may not be. The mode still
+       * shapes the PROMPT (`MODE_HINTS` below is unchanged), so the Socratic
+       * homework rules still apply to a picture of a worksheet — it is only the
+       * cell that changes.
+       *
+       * Homework and curriculum have their own cells in §12.2; all three point
+       * at the same engine in Phase 1, so the category is chosen for the
+       * metering and clearance record rather than to change the model today.
+       */
+      const category: RouterCategory = image !== undefined ? 'vision'
+        : state.mode === 'homework' ? 'homework'
         : state.mode === 'learn' ? 'curriculum'
         : 'sandbox';
       // The band and country are already on the state; routing just had no way
@@ -317,6 +335,11 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
         system,
         messages,
         maxTokens: 1000,
+        // Spread, not assigned: `exactOptionalPropertyTypes` distinguishes an
+        // absent field from an explicit `undefined`, and the adapters below
+        // branch on presence to decide whether to build a content-part message
+        // at all. A text turn must produce the same wire it always did.
+        ...(image ? { image } : {}),
       }, decision, category, onUsage);
 
       return reply.text;

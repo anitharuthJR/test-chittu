@@ -40,7 +40,19 @@ export type Message =
       readonly words: readonly { readonly word: string; readonly hit: boolean | null }[];
     }
   /** The scripted score line ("🌟 7 of 8 words — great reading!"), server-authored. */
-  | { readonly id: string; readonly role: 'readscore'; readonly text: string };
+  | { readonly id: string; readonly role: 'readscore'; readonly text: string }
+  /**
+   * The picture the child showed, as they see it in their own conversation.
+   *
+   * `src` is an `blob:` object URL created by `URL.createObjectURL` in this
+   * tab. It is NOT the base64 that went to the server and it is not a path to
+   * anything on a disk: it is a handle to a Blob held in this page's memory,
+   * which dies with the tab and cannot be resolved anywhere else. Reloading
+   * repaints the conversation from `ownMessages`, which has no picture in it —
+   * so the picture is gone on reload, which is the honest rendering of a thing
+   * that was never stored.
+   */
+  | { readonly id: string; readonly role: 'childimage'; readonly src: string };
 
 /**
  * **This client stores no credential, because it holds none.**

@@ -56,6 +56,60 @@ import type { ModelReply, ModelRequest, ProviderAdapter, RouteDecision } from '@
 
 export const ANTHROPIC_ID = 'anthropic';
 
+/**
+ * Anthropic's wire shape for a message, which is a string OR a list of typed
+ * content blocks. Only the image path builds the list.
+ */
+type AnthropicMessage = {
+  role: 'user' | 'assistant';
+  content: string | ({ type: 'text'; text: string }
+    | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } })[];
+};
+
+/**
+ * Attach the picture to the LAST user message, and to nothing else.
+ *
+ * THE IMAGE GOES FIRST, then the text. That is the prototype's own order
+ * (chittu-v3.html:1126) and Anthropic's documented preference: a model that
+ * reads "is my drawing good?" before it has seen the drawing answers a
+ * different question.
+ *
+ * NOTHING IS CARRIED FORWARD. `req.messages` is a list of strings — the
+ * pipeline's `history`, which by construction never held an image — so the
+ * only picture on this wire is the one attached here, for this call. The
+ * prototype had to strip older image blocks out of its history to bound tokens
+ * (chittu-v3.html:1129); here there is nothing to strip, because there was
+ * never anywhere to keep one.
+ */
+function withImage(req: ModelRequest): AnthropicMessage[] {
+  const messages: AnthropicMessage[] = req.messages.map(
+    (m) => ({ role: m.role, content: m.content }));
+  if (req.image === undefined) return messages;
+
+  const i = messages.findLastIndex((m) => m.role === 'user');
+  const block = {
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: req.image.mimeType,
+      data: req.image.dataBase64,
+    },
+  };
+  // No trailing user message is not a shape the pipeline produces, but an
+  // adapter that silently dropped the picture would look exactly like a model
+  // that ignored it. Send it as its own turn rather than losing it.
+  if (i === -1) return [...messages, { role: 'user', content: [block] }];
+
+  const text = messages[i]!.content;
+  messages[i] = {
+    role: 'user',
+    content: typeof text === 'string' && text !== ''
+      ? [block, { type: 'text', text }]
+      : [block],
+  };
+  return messages;
+}
+
 /** `<think>`-style leakage and `<|…|>` special tokens, whoever emitted them. */
 const CONTROL_TOKENS = /<\/?(?:think|thinking|reasoning|tool_call)>|<\|[^|>]*\|>/gi;
 
@@ -118,7 +172,7 @@ export function anthropicAdapter(opts: AnthropicOptions): ProviderAdapter {
         model: route.model,
         max_tokens: req.maxTokens ?? 1000,
         system: req.system,
-        messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: withImage(req),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
