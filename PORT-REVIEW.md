@@ -316,6 +316,13 @@ evidence that anything was limited.
 transaction. On PGlite — one connection — that deadlocks, which is how it was
 found. On real Postgres it would NOT have deadlocked; it would have taken a second
 connection and quietly read a different snapshot than the one being written.
+
+**PGlite was removed on 2026-08-25, so this class of bug no longer announces
+itself.** The single connection was an accidental detector — it caught this twice
+(see also the helpline-resolution entry). Against a pool the same mistake reads a
+stale snapshot and passes. Nothing replaced the detector; the rule in CLAUDE.md
+("never read from `pool` inside a `withChild` transaction — take the caller's
+`tx`") is now enforced by review alone.
 Repository reads now take a `Db` handle, so "which transaction is this in?" cannot
 be fudged.
 
@@ -331,15 +338,23 @@ teen's words at rest, and the Session 001 ruling says they are not stored.
 **Chamber II should decide** whether the trade is right, or whether teen
 classification should degrade instead.
 
-### NOTED — what PGlite does not test
+### RESOLVED (2026-08-25) — what PGlite did not test
 
-PGlite is real Postgres (WASM), so constraints, triggers, RLS and plpgsql are the
-genuine article with no container to run. Three things it does not cover:
-`CREATE EXTENSION vector`, the `vector(1024)` column and the HNSW index are shimmed
-out; there is only one connection, so lock contention and serialization failures
-are unexercised; and it is not the RDS binary. A `docker compose` Postgres 16 +
-pgvector run of the same suite via `DATABASE_URL` would close all three — the `Db`
-port and `bootstrapDb()` already support it.
+PGlite was real Postgres (WASM), so constraints, triggers, RLS and plpgsql were
+the genuine article with no container to run. Three things it did not cover:
+`CREATE EXTENSION vector`, the `vector(1024)` column and the HNSW index were
+shimmed out; there was only one connection, so lock contention and serialization
+failures were unexercised; and it was not the RDS binary.
+
+The suggested fix here was to ALSO run the suite against a container. What
+actually happened is that PGlite was removed and the container became the only
+lane — because the escape hatch built for the divergence (`TestDb.supportsVector`)
+was read by no test, so the gap was silent rather than handled, and because the
+container turned out to be FASTER: 207 DB-backed tests in 38.3s against PGlite's
+48.4s. Two of the three gaps are now closed outright. The third stands: this is
+the pgvector/pgvector:pg16 image, not the RDS binary.
+
+See `docs/superpowers/specs/2026-08-25-remove-pglite-design.md`.
 
 ---
 
@@ -863,9 +878,8 @@ runtime INSERT into training_signal -> ACCEPTED
 child FORCE ROW LEVEL SECURITY      -> false
 ```
 
-Both roles are `NOLOGIN`, so nothing can connect as either. PGlite connects as
-`postgres`; compose and `test:pg` connect as `chittu`; the RDS module would use
-the master user. An owner holds every privilege implicitly and bypasses
+Both roles are `NOLOGIN`, so nothing can connect as either. The suite and the dev
+stack connect as `chittu`; the RDS module would use the master user. An owner holds every privilege implicitly and bypasses
 row-level security, and `FORCE ROW LEVEL SECURITY` is set on no table — so even
 an owner that did `SET ROLE` would be exempt.
 
@@ -1332,9 +1346,12 @@ at every boundary. Removing it fails 3 tests.
 ### FIXED DURING THE WORK — a deadlock this repo had already met once
 
 The first draft resolved helplines from `opts.pool` while inside
-`store.withChild`'s transaction. PGlite has one connection, so the whole API
+`store.withChild`'s transaction. PGlite had one connection, so the whole API
 suite hung rather than failed — no error, just a test run that never finished.
 PORT-REVIEW already recorded this exact failure from the persistence layer.
+
+That detector is gone with PGlite (2026-08-25): on a pool this would have read a
+different snapshot and passed.
 
 `resolveHelplines` now takes `Db | DbPool` with the reason in the signature's
 doc, so "which handle am I on?" cannot be fudged a third time.

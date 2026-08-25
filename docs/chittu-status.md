@@ -483,7 +483,7 @@ argument for mutation testing in one line.
 | `eval_guard.py` grading | CRISIS 0/5, UNSAFE 0/10 | the `[CHIPS]` format its own system prompt requested, scored as failure |
 | Four adapter scorecards | tuned-model results | the base model — `mlx_lm.server` silently drops `--adapter-path` |
 | `variance_protocol.sh` | `SEED 901 RESULT: 0/30` | an argparse usage message. The scorer could not start |
-| `bootstrapDb()` | a healthy service | `SELECT 1`. It migrated PGlite and not Postgres, so a real database came up empty and `/health` still said `ok` |
+| `bootstrapDb()` | a healthy service | `SELECT 1`. It migrated the in-process PGlite fallback and not Postgres, so a real database came up empty and `/health` still said `ok`. PGlite was removed on 2026-08-25; `scripts/dev.sh` now migrates before launching |
 | the migration task | a successful deploy | the FIRST deploy. With no ledger every migration re-ran, so deploy two died on `relation "deployment" already exists` |
 | **`pnpm test`** (2026-08-25) | **1054/1054 green** | `src/`. Tests resolve `@chittu/*` through the `development` export condition, so the suite passed while the compiled artifact could not boot at all |
 | **`variance_protocol.sh` again** | seed 911 = **28/30 (93%)** | a stale copy of itself. bash reads a script by byte offset, the file was edited mid-run, and the card actually holds 35 rows — 28/35, **80%** |

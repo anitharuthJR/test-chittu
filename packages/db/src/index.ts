@@ -5,9 +5,11 @@ export * from './consent-repo.js';
 export * from './child-repo.js';
 
 /**
- * The test fixture is exported from the main entry point on purpose: PGlite is
- * imported DYNAMICALLY inside it, so nothing pulls a WASM Postgres into a
- * production bundle unless a test actually calls createTestDb().
+ * The test fixture ships from the main entry point. It used to carry a caveat —
+ * PGlite was imported dynamically inside it so a WASM Postgres could not reach a
+ * production bundle — which no longer applies: createTestDb() now opens an
+ * ordinary node-postgres pool against DATABASE_URL, the same driver the runtime
+ * uses, and pulls in nothing the runtime does not already have.
  */
 export * from './testing.js';
 

@@ -49,7 +49,7 @@ function builtin(country: Country, status: HelplineStatus): ResolvedHelplines {
 /**
  * @param db the caller's handle — a pool OUTSIDE a transaction, or the `tx`
  *   INSIDE one. Passing the pool while the caller holds a transaction takes a
- *   second connection, which deadlocks on PGlite and reads a different snapshot
+ *   second connection, which reads a different snapshot
  *   on a real server. This repo learned that once already (PORT-REVIEW), and
  *   this signature is why it cannot be fudged again.
  */

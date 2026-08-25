@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 #
-# One command to run Chittu locally: API + client, both in the foreground,
-# both stopped by a single Ctrl-C.
+# One command to run Chittu locally: Postgres, API and client, with the API and
+# client in the foreground and both stopped by a single Ctrl-C.
 #
 #   pnpm start
 #
-# No container and no credentials are required. Without DATABASE_URL the API
-# uses PGlite (real Postgres, in-process, gone when the process exits), and
-# without ANTHROPIC_API_KEY it uses the offline stub router.
+# NEEDS DOCKER. The in-process PGlite fallback was removed on 2026-08-25 — it
+# could not run pgvector, so it was serving a shimmed schema, and it was slower
+# than the container besides. This script starts `postgres-dev` (volume-backed,
+# :55433) and migrates it before launching, because bootstrapDb() connects and
+# deliberately does not migrate. The container is LEFT RUNNING on exit: the
+# volume is the point, and `pnpm stack:down` is how you stop it.
 #
-# That second fallback is the one worth understanding: with no key there is no
-# L2 classifier at all. Every turn classifies SAFE. A local session that looks
-# safe is not evidence that it is — it is evidence that nothing was asked. The
-# API states which router it built; this script deliberately does not guess,
-# because .env.local can supply a key that never appears in this shell.
+# No credentials are required. Without ANTHROPIC_API_KEY the API uses the
+# offline stub router, and that fallback is the one worth understanding: with no
+# key there is no L2 classifier at all. Every turn classifies SAFE. A local
+# session that looks safe is not evidence that it is — it is evidence that
+# nothing was asked. The API states which router it built; this script
+# deliberately does not guess, because .env.local can supply a key that never
+# appears in this shell.
 #
 set -euo pipefail
 
@@ -69,6 +74,28 @@ if [ ! -d node_modules ]; then
   pnpm install --frozen-lockfile
 fi
 
+# The database, before anything that needs one. Same spirit as the line above:
+# this script's job is that `pnpm start` works, not that you have assembled the
+# prerequisites yourself.
+DATABASE_URL="${DATABASE_URL:-postgres://chittu:chittu@localhost:55433/chittu}"
+export DATABASE_URL
+
+if ! docker info >/dev/null 2>&1; then
+  echo "docker is not running — Chittu needs a real Postgres." >&2
+  echo "start Docker (or OrbStack), or point DATABASE_URL at your own server." >&2
+  exit 1
+fi
+
+echo "starting postgres-dev…"
+# --wait blocks on the healthcheck, so the migration below cannot race the
+# server's first-boot initdb.
+docker compose --profile dev up -d --wait postgres-dev
+
+# Migrations are a SEPARATE STEP from booting the API on purpose — see the
+# comment at the top of apps/api/src/migrate.ts. It keeps a ledger, so running
+# it on every launch against a volume-backed database is a no-op after the first.
+pnpm db:migrate
+
 echo "─────────────────────────────────────────────────────────────"
 # The router is NOT reported here. It used to be, by testing $ANTHROPIC_API_KEY
 # in this shell — which stopped being the whole story once .env.local existed:
@@ -77,11 +104,9 @@ echo "────────────────────────�
 # guards are live. main.ts knows, so main.ts says. Its stub warning is explicit
 # that every turn classifies SAFE.
 echo " model router : reported by the API on the next line — read it"
-if [ -n "${DATABASE_URL:-}" ]; then
-  echo " database     : $DATABASE_URL"
-else
-  echo " database     : PGlite, in-process — discarded on exit"
-fi
+# The host and database, never the password DATABASE_URL carries — this line is
+# read aloud in screen shares and pasted into issues.
+echo " database     : $(printf '%s' "$DATABASE_URL" | sed -E 's#://[^@/]*@#://#')"
 echo " api          : http://localhost:$API_PORT"
 echo " app          : http://localhost:$WEB_PORT"
 echo "─────────────────────────────────────────────────────────────"

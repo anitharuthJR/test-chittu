@@ -1,5 +1,5 @@
 /**
- * The persistence layer, against real Postgres (PGlite/WASM).
+ * The persistence layer, against a real Postgres 16 + pgvector server.
  *
  * Two of these suites exist because of a bug this file found: everything was
  * previously verified as SUPERUSER, which bypasses both grants and row-level
@@ -302,10 +302,10 @@ describe('row-level security, AS THE APPLICATION ROLE', () => {
    *
    * `SET ROLE` is PER CONNECTION, and a pool hands out a different connection for
    * the next query — so a role set by one statement is simply not set for the
-   * next. On PGlite, with its single connection, that mistake is invisible; on a
-   * real pool the second assertion in a pair silently ran as superuser and
-   * passed. So the role is set with SET LOCAL inside ONE transaction, which is
-   * also how the application does it.
+   * next. The second assertion in a pair silently ran as superuser and passed —
+   * a mistake a single-connection driver would have hidden entirely, which is
+   * one more reason the suite runs on a real pool. So the role is set with
+   * SET LOCAL inside ONE transaction, which is also how the application does it.
    */
   async function asAppRole<T>(
     fn: (tx: { query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>

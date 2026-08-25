@@ -54,9 +54,11 @@ export async function readClearance(
     return { cleared: new Set(), markets, partial: {}, byCountry: new Map() };
   }
 
-  // Explicit placeholders rather than `= ANY($1)`: the PGlite driver does not
-  // serialise a JS array into a Postgres array literal, and the failure is a
-  // runtime `malformed array literal`, not a type error.
+  // Explicit placeholders rather than `= ANY($1)`. Written for a second driver
+  // that could not serialise a JS array into a Postgres array literal — the
+  // failure was a runtime `malformed array literal`, not a type error. That
+  // driver is gone; this is kept because it also casts each element to
+  // `jurisdiction` explicitly, which `= ANY($1)` would not.
   const holes = markets.map((_, i) => `$${i + 1}::jurisdiction`).join(', ');
   const r = await pool.query<{ provider: string; jurisdiction: string }>(
     `SELECT provider, jurisdiction FROM provider_clearance

@@ -4,10 +4,12 @@
  * Deliberately tiny: `query` and `transaction`, nothing else. Two things follow
  * from that.
  *
- * First, repositories are written against an interface that BOTH node-postgres
- * and PGlite satisfy, so the whole persistence layer is tested against real
- * Postgres (compiled to WASM) with no server to start and no container in CI.
- * The alternative — mocking a database — tests the mock.
+ * First, repositories are written against a port rather than against the driver,
+ * so the persistence layer stays testable without mocking a database — and
+ * mocking a database tests the mock. The port kept a second implementation for a
+ * while (PGlite, Postgres compiled to WASM, in-process); it was removed on
+ * 2026-08-25 because it could not run pgvector and the suite was therefore
+ * exercising a shimmed schema. Tests now run against the real server.
  *
  * Second, there is no query builder. The schema is a compliance artifact that an
  * auditor reads as SQL, so the queries are SQL too, and a reviewer can diff a
@@ -109,47 +111,5 @@ export async function createPgPool(opts: PgOptions): Promise<DbPool> {
       }
     },
     async close() { await pool.end(); },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// PGlite — real Postgres, no server
-// ---------------------------------------------------------------------------
-
-export interface PgliteHandle {
-  query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
-  exec(sql: string): Promise<unknown>;
-  transaction<T>(fn: (tx: {
-    query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
-  }) => Promise<T>): Promise<T | undefined>;
-  close(): Promise<void>;
-}
-
-/**
- * Wraps an already-created PGlite instance. The instance is passed in rather
- * than constructed here so that `@electric-sql/pglite` stays a dev dependency of
- * whoever is testing, and never reaches a production bundle.
- */
-export function wrapPglite(pg: PgliteHandle): DbPool {
-  return {
-    async query(sql, params) {
-      const r = await pg.query(sql, params as unknown[]);
-      return { rows: r.rows as never[] };
-    },
-    async transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
-      const out = await pg.transaction(async (tx) => fn({
-        async query(sql, params) {
-          const r = await tx.query(sql, params as unknown[]);
-          return { rows: r.rows as never[] };
-        },
-      }));
-      // PGlite types transaction() as possibly-undefined because a rollback
-      // produces no value — but a rollback THROWS, so control never reaches
-      // here in that case. A callback that legitimately returns void is common
-      // (a write-only transaction), so undefined is passed through rather than
-      // treated as an error.
-      return out as T;
-    },
-    async close() { await pg.close(); },
   };
 }

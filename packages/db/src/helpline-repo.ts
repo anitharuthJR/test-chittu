@@ -61,7 +61,7 @@ interface RawRow {
 function toRow(r: RawRow): HelplineRow {
   return {
     country: r.country,
-    // jsonb comes back parsed on node-postgres and on PGlite, but a string has
+    // jsonb comes back parsed on node-postgres, but a string has
     // been seen from other drivers; parse defensively rather than crash on the
     // one table the crisis path reads.
     lines: (typeof r.lines === 'string' ? JSON.parse(r.lines) : r.lines) as HelplineLine[],

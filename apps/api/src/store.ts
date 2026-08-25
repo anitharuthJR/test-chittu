@@ -3,7 +3,7 @@
  *
  * There is deliberately no in-memory alternative. Two implementations of a
  * persistence layer means two code paths, and the one the tests exercise is
- * never quite the one production runs — so tests use PGlite, which IS Postgres,
+ * never quite the one production runs — so tests use a real Postgres server,
  * and the only path is this one.
  */
 

@@ -1,43 +1,43 @@
 /**
  * What happens when there is no database to bootstrap.
  *
- * The interesting case is the one a container produces: the production image
- * carries no devDependencies, so `@electric-sql/pglite` is not installed in it.
- * Run that image with NODE_ENV=development and no DATABASE_URL — which the dev
- * compose profile does — and the PGlite branch is reached in an image that
- * cannot satisfy it. Observed as a raw ERR_MODULE_NOT_FOUND stack with no clue
- * about the actual cause, which is a missing DATABASE_URL.
+ * There is exactly one answer now, and that is the point of this file. The API
+ * used to fall back to PGlite whenever DATABASE_URL was absent outside
+ * production, which meant "no database configured" was a state the process could
+ * boot straight through — on a schema that had never run the pgvector DDL. Now
+ * the absence is refused everywhere, and the refusal has to name the fix,
+ * because the person reading it is looking at a container that exited two
+ * seconds after starting.
  */
 import { describe, it, expect } from 'vitest';
 import { bootstrapDb } from './db-bootstrap.js';
-
-const missingModule = () => {
-  const e = new Error("Cannot find package '@electric-sql/pglite'") as Error & { code: string };
-  e.code = 'ERR_MODULE_NOT_FOUND';
-  return Promise.reject(e);
-};
 
 describe('bootstrapDb without a database', () => {
   it('refuses in production, naming DATABASE_URL', async () => {
     await expect(bootstrapDb({ NODE_ENV: 'production' })).rejects.toThrow(/DATABASE_URL/);
   });
 
-  it('explains itself when PGlite is not installed, instead of ERR_MODULE_NOT_FOUND', async () => {
-    const err = await bootstrapDb({ NODE_ENV: 'development' }, missingModule)
-      .then(() => null, (e: Error) => e);
-
-    expect(err).toBeInstanceOf(Error);
-    // The message has to name the fix, because the person reading it is looking
-    // at a container that exited two seconds after starting.
-    expect(err!.message).toMatch(/DATABASE_URL/);
-    expect(err!.message).toMatch(/pglite/i);
-    // And it must not simply re-throw the resolver's error, which is the bug.
-    expect(err!.message).not.toMatch(/^Cannot find package/);
+  // The regression this pins: development used to be the branch that did NOT
+  // refuse. A fallback here is what let a laptop and a deployment run different
+  // schemas without anyone choosing that.
+  it('refuses in development too — there is no fallback engine any more', async () => {
+    await expect(bootstrapDb({ NODE_ENV: 'development' })).rejects.toThrow(/DATABASE_URL/);
   });
 
-  it('does not swallow an unrelated PGlite failure', async () => {
-    const boom = () => Promise.reject(new Error('WASM heap exhausted'));
-    await expect(bootstrapDb({ NODE_ENV: 'development' }, boom))
-      .rejects.toThrow(/WASM heap exhausted/);
+  it('refuses with NODE_ENV unset', async () => {
+    await expect(bootstrapDb({})).rejects.toThrow(/DATABASE_URL/);
+  });
+
+  it('names the command that fixes it, not just the variable', async () => {
+    const err = await bootstrapDb({}).then(() => null, (e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.message).toMatch(/pnpm db:up/);
+  });
+
+  // A refusal that arrives as a connection error is a worse refusal: it sends
+  // the reader to look at the database instead of at their configuration.
+  it('fails before opening a connection, so the error is about config', async () => {
+    const err = await bootstrapDb({}).then(() => null, (e: Error) => e);
+    expect(err!.message).not.toMatch(/ECONNREFUSED|ENOTFOUND|connect/i);
   });
 });

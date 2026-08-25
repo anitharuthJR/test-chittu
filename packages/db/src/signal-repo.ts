@@ -155,7 +155,7 @@ export const signalRepo = {
    * the floor.
    *
    * Opens its OWN transaction, so it must be called on the pool and OUTSIDE any
-   * `withChild` scope — PGlite has a single connection and a nested transaction
+   * `withChild` scope — a nested transaction
    * there hangs rather than fails (CLAUDE.md).
    */
   async observe(

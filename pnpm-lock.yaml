@@ -8,9 +8,6 @@ importers:
 
   .:
     devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.7
-        version: 0.5.7
       '@playwright/test':
         specifier: ^1.49.0
         version: 1.62.1
@@ -63,9 +60,6 @@ importers:
         specifier: ^5.2.0
         version: 5.12.1
     devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.7
-        version: 0.5.7
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -154,9 +148,6 @@ importers:
       '@chittu/disengagement':
         specifier: workspace:*
         version: link:../disengagement
-      '@electric-sql/pglite':
-        specifier: ^0.5.7
-        version: 0.5.7
       '@types/pg':
         specifier: ^8.11.0
         version: 8.23.1
@@ -402,9 +393,6 @@ packages:
   '@csstools/css-tokenizer@3.0.4':
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
-
-  '@electric-sql/pglite@0.5.7':
-    resolution: {integrity: sha512-6WBks0NFO6YUhGP03mCNkbJuVFWwrZPrzZ/vsnAPnsCD28pybdZ+yoTrlLlWFoZst3kdaju5pxIslV/jrr36nQ==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -2579,8 +2567,6 @@ snapshots:
       '@csstools/css-tokenizer': 3.0.4
 
   '@csstools/css-tokenizer@3.0.4': {}
-
-  '@electric-sql/pglite@0.5.7': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true

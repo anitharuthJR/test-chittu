@@ -9,7 +9,7 @@
  *
  * State lives in Postgres. There is no in-memory alternative on purpose: two
  * implementations means the path the tests exercise is never quite the path
- * production runs. Tests use PGlite, which IS Postgres.
+ * production runs. Tests use a real Postgres 16 + pgvector server.
  */
 
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';

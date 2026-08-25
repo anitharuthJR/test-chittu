@@ -68,12 +68,12 @@ if (isProd && apiKey === '' && localUrl === '') {
  */
 const keys = resolveKeys();
 
-const { pool, driver } = await bootstrapDb();
-if (driver === 'pglite') {
-  console.warn(
-    '[chittu] no DATABASE_URL — using an in-process PGlite database. '
-    + 'Real Postgres, but it vanishes when this process exits.',
-  );
+const { pool } = await bootstrapDb();
+// The host and database, never the credentials — this line goes to stdout and
+// into api.log, and DATABASE_URL carries a password.
+{
+  const u = new URL(process.env['DATABASE_URL']!);
+  console.log(`[chittu] database: ${u.host}${u.pathname} — Postgres 16 + pgvector`);
 }
 
 /**
@@ -262,7 +262,7 @@ const app = await buildServer({
  *
  * A container needs 0.0.0.0 or nothing outside it can reach the service, but
  * making that the default would silently publish a developer's API — with its
- * PGlite database and, if they exported one, their provider key — to every
+ * local database and, if they exported one, their provider key — to every
  * device on whatever café wifi they are on. So the Dockerfile sets HOST
  * explicitly and a laptop stays on loopback.
  */

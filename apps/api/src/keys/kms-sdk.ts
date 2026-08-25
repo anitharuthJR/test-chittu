@@ -6,7 +6,7 @@
  * runs somewhere other than AWS.
  *
  * STATICALLY IMPORTED ON PURPOSE, and it is worth 75ms on a dev boot that never
- * uses it. Deferring it — the way `createTestDb` defers PGlite — would move the
+ * uses it. Deferring it behind a dynamic import would move the
  * failure from process start to the first child's turn, and "the SDK is missing
  * from this image" is a thing to learn while the task is still starting rather
  * than while a nine-year-old is waiting for a reply.

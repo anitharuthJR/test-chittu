@@ -6,11 +6,13 @@
  *
  * WHY THIS EXISTS, which is not a nice-to-have.
  *
- * `bootstrapDb()` applies migrations on the PGlite path and NOT on the Postgres
- * path. So pointing the API at a real database gave an empty schema — and it
- * started, and reported healthy, because `/health` is `SELECT 1` and an empty
- * database answers that perfectly well. Containerising surfaced it: on a laptop
- * nobody sets DATABASE_URL, so the gap had never been on a path anyone ran.
+ * `bootstrapDb()` connects and does not migrate. So pointing the API at a real
+ * database gives an empty schema — and it starts, and reports healthy, because
+ * `/health` is `SELECT 1` and an empty database answers that perfectly well.
+ * Containerising surfaced it: back when a laptop fell back to an in-process
+ * database that migrated itself at boot, the gap had never been on a path anyone
+ * ran. That fallback is gone, so this script is now on EVERY path — `dev.sh`
+ * runs it before it launches the API.
  *
  * WHY IT IS A SEPARATE STEP rather than something bootstrapDb does for Postgres
  * too: db/README's rule is that once a database exists that we cannot drop,
@@ -19,12 +21,12 @@
  * first time the API scales past one task. Deployments run a migration task
  * BEFORE the service; this is that task.
  *
- * WHY THERE IS A LEDGER. `applyMigrations()` runs every .sql file it finds, every
- * time. That is harmless on PGlite, which starts empty on every boot — and fatal
- * on Postgres, where the second run dies with `relation "deployment" already
- * exists`. The first `pnpm stack:up` worked and the second failed, which is
- * exactly the shape of a bug that reaches production as "the redeploy broke".
- * So this tracks what it has applied and skips it next time.
+ * WHY THERE IS A LEDGER. Running every .sql file every time is fatal on a
+ * database that persists: the second run dies with `relation "deployment"
+ * already exists`. The first `pnpm stack:up` worked and the second failed, which
+ * is exactly the shape of a bug that reaches production as "the redeploy broke".
+ * So this tracks what it has applied and skips it next time — which matters more
+ * now that `dev.sh` runs it on every launch against a volume-backed database.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -39,8 +41,8 @@ const url = process.env['DATABASE_URL'];
 if (!url) {
   console.error(
     'DATABASE_URL is required.\n'
-    + 'Without one the API uses PGlite, which migrates itself at boot and needs '
-    + 'nothing from this script.',
+    + '  pnpm db:up   starts the test database on :55432\n'
+    + '  pnpm start   starts the dev database on :55433 and runs this for you',
   );
   process.exit(2);
 }
@@ -79,7 +81,7 @@ try {
     applied++;
   }
 
-  // The PGlite path seeds this too. Without it every insert referencing a
+  // The test fixture seeds this too. Without it every insert referencing a
   // deployment fails, which looks like a bug in the first feature anyone tries
   // rather than an empty lookup table. ON CONFLICT so re-running is safe.
   const env = deploymentEnv();

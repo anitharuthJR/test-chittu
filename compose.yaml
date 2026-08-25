@@ -1,12 +1,14 @@
-# Postgres 16 + pgvector, for running the suite against the real thing.
+# Postgres 16 + pgvector, for running the suite.
 #
-# NOT required for day-to-day work: without DATABASE_URL the tests run on
-# PGlite, which is real Postgres compiled to WASM and needs no container. This
-# exists to close the three gaps PGlite cannot: pgvector, genuine concurrency,
-# and a server binary rather than an in-process one.
+# REQUIRED. `pnpm test` starts this service itself and runs against it. Until
+# 2026-08-25 it was optional — without DATABASE_URL the suite fell back to
+# PGlite, real Postgres compiled to WASM and in-process — and this service
+# existed only to close the three gaps that fallback could not: pgvector,
+# genuine concurrency, and a server binary rather than an in-process one. It
+# turned out to be faster as well as stricter, so the fallback went.
 #
-#   docker compose up -d          (OrbStack works identically — it is a drop-in)
-#   pnpm test:pg
+#   pnpm test                     (starts this; OrbStack is a drop-in for Docker)
+#   pnpm db:up                    (or start it by hand)
 #
 # The `dev` PROFILE is a second, separate thing: the API in its own container
 # against its own Postgres, which is the smallest honest rehearsal of §14's
@@ -15,7 +17,9 @@
 #   pnpm stack:up / pnpm stack:down
 #
 # Kept behind a profile so `docker compose up -d` still means "the test
-# database, nothing else" and `pnpm test:pg` is unaffected.
+# database, nothing else", which is what `pnpm test` starts. `scripts/dev.sh`
+# brings up postgres-dev from this profile — the database only, not the api or
+# migrate services — and runs `pnpm db:migrate` against it from the host.
 #
 services:
   postgres:

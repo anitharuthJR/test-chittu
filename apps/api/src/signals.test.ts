@@ -32,9 +32,8 @@ afterAll(async () => { await fixture?.close(); });
 /**
  * SCOPED TO THIS FILE'S OWN SHAPES, never `DELETE FROM signal_counter`.
  *
- * Under PGlite every test file gets its own in-process database, so a global
- * delete here is invisible. Against the real-Postgres lane all 41 files share
- * one database and run concurrently — so a global delete truncates whatever
+ * All 41 test files share one database and run concurrently, each in its own
+ * throwaway schema — so a global delete truncates whatever
  * `packages/db/src/signal-repo.test.ts` is halfway through, and that file fails
  * at collection with all 32 of its tests skipped. Intermittently, which is the
  * worst kind: it passed on the retry.

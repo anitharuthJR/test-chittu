@@ -5,10 +5,10 @@
  * convention. That is only worth saying if it is checked, so this file tries to
  * violate each invariant and asserts the database refuses.
  *
- * Runs on PGlite — real Postgres compiled to WASM — so no server is needed and
- * this can gate CI. pgvector has no PGlite build, so the two vector-specific
- * statements are shimmed out and remain unverified here; everything else is the
- * genuine article.
+ * Runs against a real Postgres 16 + pgvector (`pnpm test` starts it). Every
+ * statement in the schema executes here, the vector ones included — they used to
+ * be shimmed out because the default lane was an in-process WASM Postgres with
+ * no pgvector build.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestDb } from '../packages/db/src/testing';
@@ -22,8 +22,9 @@ let fixtureSeq = 0;
 
 /** Every fixture needs a parent -> child -> consent -> session spine. */
 async function seedFamily(env: 'dev' | 'prod' = 'dev') {
-  // bytea goes in as a literal, not a bound parameter: PGlite binds bytea from a
-  // Uint8Array and rejects a hex string, which reads as "Invalid input for bytea type".
+  // bytea goes in as a literal rather than a bound parameter. Kept that way
+  // deliberately: it reads as the hex the column actually holds, and the
+  // alternative asks each driver to bind a Uint8Array correctly.
   const uniq = `\\x${(++fixtureSeq).toString(16).padStart(8, '0')}`;
   await db.query(`DELETE FROM deployment`);
   await db.query(
@@ -68,8 +69,8 @@ describe('invariant 1 — a flag can never hold a child’s words', () => {
   /**
    * `table_schema = current_schema()` is load-bearing, not tidiness.
    *
-   * On real Postgres every fixture gets its own throwaway schema so test files
-   * can run in parallel (packages/db/src/testing.ts). information_schema spans
+   * Every fixture gets its own throwaway schema so test files can run in
+   * parallel (packages/db/src/testing.ts). information_schema spans
    * ALL of them, so an unfiltered query returned this table's columns once per
    * live fixture — observed as `['assist_topic','assist_topic','note_key',
    * 'note_key']` against a two-element expectation, on a run where nothing about

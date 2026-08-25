@@ -281,7 +281,12 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
   };
 }
 
-/** PGlite hands back Uint8Array where node-postgres hands back Buffer. */
+/**
+ * Defensive, not required: node-postgres hands back Buffer for bytea. It kept a
+ * second driver honest (PGlite returned Uint8Array) and is retained because this
+ * feeds the PIN comparison — a normalise here is cheaper than the class of bug
+ * that appears if a driver ever disagrees again.
+ */
 export function toBuffer(v: Buffer | Uint8Array): Buffer {
   return Buffer.isBuffer(v) ? v : Buffer.from(v);
 }

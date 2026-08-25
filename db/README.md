@@ -19,12 +19,11 @@ Then open **http://localhost:5173**. Check the API separately with:
 curl localhost:8080/health    # {"status":"ok"}
 ```
 
-There is no migration step. `bootstrapDb()` builds the schema on start, so the
-first thing the API prints is how it is running:
+`pnpm start` brings up `postgres-dev`, migrates it, then launches — so the first
+thing the API prints is how it is running:
 
 ```
-[chittu] no DATABASE_URL — using an in-process PGlite database. Real Postgres,
-         but it vanishes when this process exits.
+[chittu] database: localhost:55433/chittu — Postgres 16 + pgvector
 [chittu] no ANTHROPIC_API_KEY — using the offline stub router. Every turn
          classifies SAFE and the sandbox echoes a fixed reply.
 ```
@@ -82,15 +81,14 @@ and `logging.test.ts` drives real pino to prove they are censored.
 tail -f logs/api.log | pnpm exec pino-pretty   # if you want it readable
 ```
 
-### With real Postgres instead of PGlite
+### Pointing at a different database
 
-Only needed for pgvector, genuine concurrency, or pooling behaviour — see
-*Verification* below for why those three differ:
+`pnpm start` defaults to the `postgres-dev` container (`:55433/chittu`, volume
+backed, left running when you Ctrl-C). Export `DATABASE_URL` to override it —
+the script then skips nothing except its own default, and still migrates:
 
 ```bash
-pnpm db:up
-DATABASE_URL=postgres://chittu:chittu@localhost:55432/chittu_test pnpm dev
-pnpm db:down
+DATABASE_URL=postgres://user:pw@somewhere:5432/chittu pnpm start
 ```
 
 ### The prototype needs none of this
@@ -130,40 +128,23 @@ DATABASE_URL=postgres://… pnpm db:migrate    # apply to a real Postgres
 ```
 
 **`pnpm db:migrate` only became real on 2026-08-24, and this file claimed it for
-a while before that.** There is still no `db:migrate:status`.
+a while before that.** There is still no `db:migrate:status`. (This section was
+also duplicated verbatim in this file until 2026-08-25.)
 
 The gap it closes is worth knowing about, because containerising is what found
-it: `bootstrapDb()` applies migrations on the **PGlite** path and not on the
-**Postgres** path. Point the API at a real database and you got an empty schema —
-and it started, and reported healthy, because `/health` is `SELECT 1` and an
-empty database answers that perfectly well. Nobody sets `DATABASE_URL` on a
-laptop, so the gap had never been on a path anyone ran.
+it: `bootstrapDb()` connects and does not migrate. Point the API at a real
+database and you got an empty schema — and it started, and reported healthy,
+because `/health` is `SELECT 1` and an empty database answers that perfectly
+well. It stayed hidden while a laptop with no `DATABASE_URL` fell back to an
+in-process database that migrated itself at boot, so the gap was never on a path
+anyone ran. That fallback was removed on 2026-08-25 and `pnpm start` now runs
+this script on every launch, which puts it on everyone's path.
 
 Migration stays a **separate step**, not something the service does at boot. A
 service that migrates on start runs N times concurrently the first time it scales
 past one task, and that is the opposite of the additive, applied-once rule above.
 Deployments run a migration task before the service; `compose.yaml`'s `dev`
-profile rehearses exactly that shape.
-
-For PGlite the pgvector DDL is rewritten on the way through — `vector(1024)`
-becomes `real[]` and the HNSW index is dropped — so corpus-embedding behaviour is
-the one thing the fast lane does not actually exercise.
-
-**`pnpm db:migrate` only became real on 2026-08-24, and this file claimed it for
-a while before that.** There is still no `db:migrate:status`.
-
-The gap it closes is worth knowing about, because containerising is what found
-it: `bootstrapDb()` applies migrations on the **PGlite** path and not on the
-**Postgres** path. Point the API at a real database and you got an empty schema —
-and it started, and reported healthy, because `/health` is `SELECT 1` and an
-empty database answers that perfectly well. Nobody sets `DATABASE_URL` on a
-laptop, so the gap had never been on a path anyone ran.
-
-Migration stays a **separate step**, not something the service does at boot. A
-service that migrates on start runs N times concurrently the first time it scales
-past one task, and that is the opposite of the additive, applied-once rule above.
-Deployments run a migration task before the service; `compose.yaml`'s `dev`
-profile rehearses exactly that shape.
+profile rehearses exactly that shape, and so does `scripts/dev.sh`.
 
 ## The container, and the dev stack
 
@@ -175,11 +156,11 @@ pnpm stack:down
 
 The smallest honest rehearsal of §14's topology available without AWS: the API in
 its own image, against real Postgres with real pgvector, migrated by a task that
-runs to completion before the service starts. Verified from an empty volume — 29
-tables, `vector(1024)` as a genuine type rather than PGlite's `real[]` shim.
+runs to completion before the service starts. Verified from an empty volume — 33
+tables, `vector(1024)` as a genuine type.
 
 It is a **profile**, so plain `docker compose up -d` still means "the test
-database, nothing else" and `pnpm test:pg` is unaffected.
+database, nothing else" — which is what `pnpm test` starts.
 
 Two things about the image are deliberate and both are arguable:
 
@@ -214,18 +195,17 @@ remember" is not a control an auditor accepts:
 
 Removing one of these is a Guardian Council decision, not a migration.
 
-## Verification — two lanes, one suite
+## Verification — one lane
 
 ```bash
-pnpm test        # PGlite: real Postgres (WASM), in-process, no container
-pnpm db:up       # Postgres 16 + pgvector via Docker/OrbStack
-pnpm test:pg     # the SAME suite against the real server
-pnpm db:down
+pnpm test        # starts postgres on :55432 itself, then runs the suite
+pnpm db:down     # when you want the container gone
 ```
 
-The second lane is not a different suite. `createTestDb()` picks the engine from
-`DATABASE_URL`, so the strict lane is a re-run of the same assertions with three things
-the fast lane cannot provide:
+There used to be two lanes: a fast default on PGlite (Postgres compiled to WASM,
+in-process, no container) and a strict `pnpm test:pg` against a real server. The
+fast one was removed on 2026-08-25. It could not do these, and each one is a real
+bug it hid at some point:
 
 | | PGlite | Real server |
 |---|---|---|
@@ -233,6 +213,9 @@ the fast lane cannot provide:
 | pgvector — `CREATE EXTENSION`, `vector(1024)`, HNSW | ❌ shimmed out | ✅ executed |
 | Connection pooling, `SET ROLE` per connection | ❌ single connection | ✅ |
 | Named schemas (`GRANT USAGE ON SCHEMA`) | ❌ always `public` | ✅ |
+
+It was not even buying speed: 207 DB-backed tests took 48.4s on PGlite against
+38.3s on the container, because WASM overhead cost more than Docker does.
 
 The last two rows are not hypothetical. Running the strict lane found that the schema
 never granted `USAGE ON SCHEMA` — invisible in `public`, which grants it to PUBLIC by

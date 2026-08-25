@@ -6,11 +6,10 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/**' --filter './apps/**' run build",
     "typecheck": "pnpm -r --filter './packages/**' --filter './apps/**' exec tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "pnpm db:up && vitest run",
+    "test:watch": "pnpm db:up && vitest",
     "test:prototype": "playwright test",
     "dev": "pnpm --filter @chittu/api run dev",
-    "test:pg": "DATABASE_URL=postgres://chittu:chittu@localhost:55432/chittu_test vitest run",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down -v",
     "start": "bash scripts/dev.sh",
@@ -22,7 +21,6 @@
     "demo:signals": "pnpm --filter @chittu/api exec tsx scripts/demo-signals.ts"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.7",
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0",

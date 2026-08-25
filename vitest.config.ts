@@ -16,6 +16,15 @@ export default defineConfig({
     // which would change what the API tests are testing if it applied here.
     exclude: ['**/node_modules/**', 'apps/web/**'],
     testTimeout: 30_000,
+    // The suite runs on a real Postgres (`pnpm db:up` starts it; `pnpm test`
+    // does it for you). Defaulted HERE rather than only in the package.json
+    // script so the targeted invocations CLAUDE.md documents — `pnpm vitest run
+    // --project server packages/safety-kernel` and friends — keep working
+    // without every caller exporting it. An exported DATABASE_URL still wins.
+    env: {
+      DATABASE_URL: process.env['DATABASE_URL']
+        ?? 'postgres://chittu:chittu@localhost:55432/chittu_test',
+    },
     coverage: {
       // safety-kernel is the package a certifier reads. It carries the strictest bar.
       thresholds: { 'packages/safety-kernel/**': { branches: 100, functions: 100, lines: 100 } },

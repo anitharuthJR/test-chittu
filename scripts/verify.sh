@@ -2,9 +2,13 @@
 #
 # Everything CI used to run, in one command.
 #
-#   pnpm verify                   # the lanes that need no container
-#   pnpm verify --with-pg         # adds the real-Postgres lane (needs Docker)
-#   pnpm verify --with-container  # adds build-the-image + drive-it (needs Docker)
+#   pnpm verify                   # everything except building the image
+#   pnpm verify --with-container  # adds build-the-image + drive-it
+#
+# ALL LANES NEED DOCKER now. `--with-pg` was removed on 2026-08-25 along with
+# PGlite: the suite runs on a real Postgres, so the lane it used to add is the
+# lane `pnpm test` already is. `--with-container` is still separate because it
+# builds the image, which is minutes rather than seconds.
 #
 # GitHub Actions was removed on 2026-08-25 — it had been failing every run at 3s
 # with "the job was not started because recent account payments have failed", so
@@ -18,13 +22,16 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-WITH_PG=0
 WITH_CONTAINER=0
 for arg in "$@"; do
   case "$arg" in
-    --with-pg)        WITH_PG=1 ;;
     --with-container) WITH_CONTAINER=1 ;;
-    --all)            WITH_PG=1; WITH_CONTAINER=1 ;;
+    --all)            WITH_CONTAINER=1 ;;
+    # Named explicitly rather than falling into "unknown flag", because it was a
+    # documented flag and muscle memory outlives a release note.
+    --with-pg)
+      echo "--with-pg is gone: the suite runs on real Postgres, so that lane is now the default." >&2
+      exit 2 ;;
     *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
@@ -42,6 +49,8 @@ step() {
 }
 
 step "typecheck"          pnpm typecheck
+# Starts postgres on :55432 itself (`pnpm test` chains `pnpm db:up`). The
+# container is left up afterwards, so a rerun does not pay initdb again.
 step "unit + integration" pnpm test
 step "web bundle budget"  bash -c 'pnpm --filter @chittu/web build && pnpm --filter @chittu/web size'
 step "prototype (playwright)" pnpm test:prototype
@@ -71,15 +80,6 @@ if command -v terraform >/dev/null 2>&1; then
     exit $rc'
 else
   printf '\n\033[2m── terraform lane skipped (terraform not installed)\033[0m\n'
-fi
-
-if [ "$WITH_PG" -eq 1 ]; then
-  step "postgres 16 + pgvector" bash -c '
-    pnpm db:up &&
-    DATABASE_URL=postgres://chittu:chittu@localhost:55432/chittu_test pnpm test;
-    rc=$?; pnpm db:down; exit $rc'
-else
-  printf '\n\033[2m── postgres lane skipped (pass --with-pg to include it)\033[0m\n'
 fi
 
 if [ "$WITH_CONTAINER" -eq 1 ]; then
