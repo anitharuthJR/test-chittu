@@ -1358,6 +1358,85 @@ doc, so "which handle am I on?" cannot be fudged a third time.
 
 ## 11. The four diagram nodes the build half-delivered
 
+### FIXED (2026-08-25) — the boot banner disagreed with the server it described
+
+`main.ts` answered "is the grounded corpus live" with its own
+`router.route('embedding')` call — a second opinion about a decision
+`buildServer` makes elsewhere — and it was wrong in **both** directions.
+
+**The stub router reported ON.** `stubRouter().route()` answers every category
+with `{provider:'stub', model:'stub-0'}` and never throws, so a dev boot printed
+`grounded corpus: ON — stub/stub-0` while `embedderFor` returned null, no
+grounding port was wired, and no walk ever contained CORPUS. A route resolving
+is not evidence of a capability; the same defect class as the CORPUS layer stamp
+that sat beside a bare `detectSubject()` call for months, and in the lane where
+people form their mental model of what is live.
+
+**And the more serious half, found while fixing the first: an Anthropic-only
+deployment reported OFF and stamped the layer anyway.** `createRouter` always
+defines `embed`, so `embedderFor(router)` returns a live embedder even though
+`DEFAULT_CELLS.embedding` names `local` and no local adapter exists. The port
+was therefore wired, `CORPUS` was stamped on **every sandbox turn**, and every
+retrieval reported `CORPUS UNAVAILABLE` — under a banner that said `OFF` and a
+follow-up line that promised "no CORPUS layer will be stamped". That is every
+Anthropic-only deployment, which status §2b says is all of them. Confirmed by
+driving a real turn: `layers` contains `CORPUS`, `trace` contains
+`CORPUS UNAVAILABLE`.
+
+**CLAUDE.md described the behaviour that did not exist.** Its invariant read
+"no grounding port is wired, no CORPUS layer is stamped, and the boot banner
+says `grounded corpus: OFF`". One clause of three was true. Corrected there too.
+
+**The fix is structural, not a better guess.** `corpusStatus(router, embedder)`
+takes the embedder `buildServer` actually wired and is computed three lines from
+where `groundFor` is decided; the server hands it out as `app.corpus`, and
+`main.ts` prints that. The banner is no longer a second opinion about the
+wiring — it is the wiring, printed.
+
+**Three states, because the deployment has three, named after what a TRACE will
+look like:**
+
+| state | what a walk contains | what it means |
+|---|---|---|
+| `off` | no CORPUS layer, ever | no embedder wired (the stub) |
+| `unavailable` | CORPUS on every turn, all `CORPUS UNAVAILABLE` | an embedder is wired and routing refuses it |
+| `on` | CORPUS, `GROUNDED CORPUS` or `CORPUS MISS` | wired and routable |
+
+Collapsing `off` into `unavailable` is the identical mistake the pipeline's four
+grounding outcomes exist to prevent one level down. `off` is a fact about the
+BUILD; `unavailable` is a fact about ROUTING; only one of them explains a trace
+full of UNAVAILABLE, and only one is worth waking somebody for.
+
+Verified on the real boot log, both shapes:
+
+```
+[chittu] grounded corpus: OFF — no embedder is wired; no CORPUS layer will appear in any trace
+[chittu] grounded corpus: UNAVAILABLE — an embedder is wired but routing refuses it: route refused for embedding via local: no adapter configured
+[chittu]   every sandbox turn will stamp CORPUS and report CORPUS UNAVAILABLE — that is this refusal, not an outage.
+```
+
+Mutation-tested, per CLAUDE.md: reverting to the `route()`-only check fails 5
+tests; collapsing `unavailable` into `off` fails 2; re-deriving
+`embedderFor(router)` for the banner instead of reporting the wired embedder
+fails 2. **That last mutation is silent against every test that does not inject
+`opts.embed`**, because everywhere else the two values coincide — which is
+exactly the shape of the original bug, so the injected-embedder case is the one
+that has to exist.
+
+#### Still open — the behaviour, not the banner
+
+The banner is now honest about it, but **should an Anthropic-only deployment
+wire a grounding port at all?** Today it does, and pays a `CORPUS UNAVAILABLE`
+stamp on every sandbox turn for a refusal that cannot change without a restart.
+Not wiring it would make `off` the correct state and remove the noise — but the
+boot-time `route()` uses the CONSERVATIVE clearance rule (cleared for every
+enabled market), so a provider cleared in IN and not GB would refuse at boot and
+lose grounding for Indian children who are entitled to it, where the per-turn
+check gets it right. The two refusal reasons need separating — "no adapter for
+this cell's provider" is structural, "not cleared" is per-country — before this
+can move. Left as-is: a change to what every trace in every deployment says is a
+Council-level call on the four grounding outcomes, not a tidy-up.
+
 ### FIXED (2026-08-25) — D4's FOURTH CRISIS DETECTOR had no input channel
 
 D4 draws four detectors converging on one crisis script. Three had an input:

@@ -41,7 +41,7 @@ import {
 } from '@chittu/safety-kernel';
 import { passageById } from '@chittu/reading-coach';
 import { resolveHelplines } from './helplines/resolve.js';
-import { embedderFor, type Embedder } from './corpus/embed.js';
+import { corpusStatus, embedderFor, type CorpusStatus, type Embedder } from './corpus/embed.js';
 import { groundingPort } from './corpus/ground.js';
 import { runMathsHarness } from './maths-harness.js';
 import { buildCertification } from './certification.js';
@@ -142,6 +142,16 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
    */
   const embed = opts.embed ?? embedderFor(router);
   const groundFor = embed ? groundingPort(opts.pool, embed) : null;
+  /**
+   * WHAT WAS WIRED, decided here and reported from here.
+   *
+   * The boot banner used to answer this itself in `main.ts`, from
+   * `router.route('embedding')` alone, and could therefore disagree with this
+   * line — it did, in both directions (see `corpusStatus`). Computing it beside
+   * the decision and handing it out means the banner is not a second opinion
+   * about the wiring; it IS the wiring, printed.
+   */
+  const corpus = corpusStatus(router, embed);
 
   const app = Fastify({
     logger: opts.logger ?? false,
@@ -1290,7 +1300,22 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     );
   });
 
+  /**
+   * Handed out so `main.ts` can print it without re-deriving it. A decorator
+   * rather than a return-tuple because every existing caller expects a bare
+   * FastifyInstance, and because "what did this server wire" is a property of
+   * the server.
+   */
+  app.decorate('corpus', corpus);
+
   return app;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** What `buildServer` wired for the grounded corpus. See `corpusStatus`. */
+    corpus: CorpusStatus;
+  }
 }
 
 /**

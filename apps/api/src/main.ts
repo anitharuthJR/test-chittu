@@ -274,36 +274,6 @@ console.warn(opsTokens === ''
 const router = await chooseRouter();
 
 /**
- * Whether the grounded corpus is live, decided by ROUTING rather than by an
- * environment variable.
- *
- * `buildServer` derives the embedder from the router, so the question is
- * whether the `embedding` cell resolves to a provider that is cleared,
- * reachable AND capable of embedding. Asking `route()` is how we find out, and
- * asking it here means the answer is on the boot log rather than inferred from
- * traces a week later.
- *
- * No country in hand at boot, so this gets the conservative clearance rule —
- * cleared for every enabled market. That is the right check for a banner: it
- * says the corpus is on only where it is on everywhere.
- */
-{
-  let status: string;
-  try {
-    const d = router.route('embedding');
-    status = `ON — ${d.provider}/${d.model}`;
-  } catch (e) {
-    status = `OFF — ${e instanceof Error ? e.message : String(e)}`;
-  }
-  console.warn(`[chittu] grounded corpus: ${status}`);
-  if (status.startsWith('OFF')) {
-    console.warn(
-      '[chittu]   no CORPUS layer will be stamped, and answers fall back to the '
-      + 'truth wall. Set CHITTU_LOCAL_BASE_URL and clear the provider to enable.');
-  }
-}
-
-/**
  * The automated ID rail (`automated_id_check`).
  *
  * Self-gating: with no key and no workflow the method is filtered out of
@@ -377,6 +347,35 @@ const app = await buildServer({
   ...(opsTokens === '' ? {} : { opsTokens }),
   ...(didit ? { didit } : {}),
 });
+
+/**
+ * Whether the grounded corpus is live — PRINTED FROM WHAT THE SERVER WIRED,
+ * which is why this now sits BELOW `buildServer` rather than above it.
+ *
+ * It used to be its own `router.route('embedding')` call up here, i.e. a second
+ * opinion about a decision made somewhere else, and it disagreed with that
+ * decision in both directions: it reported ON for the stub router (whose
+ * `route()` answers every category and never throws) while no port was wired at
+ * all, and it reported OFF for an Anthropic-only deployment while a port WAS
+ * wired and CORPUS was being stamped on every single turn. `corpusStatus` now
+ * takes the embedder `buildServer` actually used, so the two cannot diverge.
+ *
+ * The follow-up line is the part that was doing real damage. It promised "no
+ * CORPUS layer will be stamped" on every OFF, which was false for exactly the
+ * deployments that saw it — and it is the sentence an operator would reach for
+ * to explain a trace. Each state now says what that state's traces look like.
+ */
+console.warn(`[chittu] grounded corpus: ${app.corpus.banner}`);
+if (app.corpus.state === 'off') {
+  console.warn(
+    '[chittu]   answers fall back to the truth wall. Set CHITTU_LOCAL_BASE_URL '
+    + 'and clear the provider to enable.');
+} else if (app.corpus.state === 'unavailable') {
+  console.warn(
+    '[chittu]   every sandbox turn will stamp CORPUS and report CORPUS '
+    + 'UNAVAILABLE — that is this refusal, not an outage. Answers fall back to '
+    + 'the truth wall.');
+}
 /**
  * Bind address. Defaults to loopback and must be opted OUT of.
  *

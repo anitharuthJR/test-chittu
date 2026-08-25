@@ -74,3 +74,109 @@ export function embedderFor(router: ProviderRouter): Embedder | null {
     return vector;
   };
 }
+
+// ---------------------------------------------------------------------------
+// What a deployment will actually SEE — the boot banner's one source of truth
+// ---------------------------------------------------------------------------
+
+/**
+ * Three states, named after what appears in a TRACE rather than after how the
+ * config looks, because the trace is where the question gets asked.
+ *
+ * - `off`        — no embedder wired. **No CORPUS layer in any walk, ever.**
+ * - `unavailable`— an embedder IS wired and the route refuses it. **CORPUS is
+ *                  stamped on every sandbox turn and every one reports
+ *                  `CORPUS UNAVAILABLE`.**
+ * - `on`         — wired and routable. CORPUS is stamped and reports
+ *                  `GROUNDED CORPUS` or `CORPUS MISS`.
+ *
+ * `off` and `unavailable` USED TO BE REPORTED AS THE SAME THING, and they are
+ * not remotely the same thing — which is the identical mistake the pipeline's
+ * four grounding outcomes exist to prevent one level down. CLAUDE.md: "A miss
+ * is a fact about the corpus, `unavailable` is a fact about the deployment."
+ * Here: `off` is a fact about the BUILD ("this deployment has no embedder and
+ * will never have one until it is restarted with different config") and
+ * `unavailable` is a fact about ROUTING ("an embedder exists, and every call it
+ * makes is being refused"). Only one of those is worth waking somebody for, and
+ * only one of them explains a trace full of CORPUS UNAVAILABLE.
+ */
+export type CorpusState = 'off' | 'unavailable' | 'on';
+
+export interface CorpusStatus {
+  readonly state: CorpusState;
+  /** One line for the boot banner. Says what a trace will look like. */
+  readonly banner: string;
+  /** Why, in the router's own words where it had any. */
+  readonly reason: string;
+  /** True exactly when `runTurn` will be handed a `ground` port. */
+  readonly portWired: boolean;
+}
+
+/**
+ * The banner's answer, derived from THE EMBEDDER THE SERVER ACTUALLY WIRED.
+ *
+ * `main.ts` used to answer this itself, with `router.route('embedding')` alone,
+ * and got it wrong in both directions:
+ *
+ *   - **The stub router reported ON.** `stubRouter().route()` answers every
+ *     category with `{provider:'stub', model:'stub-0'}` and never throws, so
+ *     the banner printed `grounded corpus: ON — stub/stub-0` while
+ *     `embedderFor` returned null, no port was wired, and no walk ever
+ *     contained CORPUS. A banner that reads as a working control in review with
+ *     nothing behind it — the same defect class as the CORPUS layer stamp that
+ *     sat next to a bare `detectSubject()` call for months.
+ *
+ *   - **An Anthropic-only deployment reported OFF, and then stamped the layer
+ *     anyway.** `createRouter` always defines `embed`, so `embedderFor` returns
+ *     a live embedder even when `DEFAULT_CELLS.embedding` names `local` and no
+ *     local adapter exists. The port was wired, CORPUS was stamped on every
+ *     sandbox turn, and every retrieval reported UNAVAILABLE — while the banner
+ *     said OFF and the line under it promised "no CORPUS layer will be
+ *     stamped". That is every Anthropic-only deployment, which status §2b says
+ *     is all of them.
+ *
+ * Taking the embedder as an ARGUMENT rather than recomputing it is the whole
+ * point: `buildServer` passes the one it wired, so the banner and the wiring
+ * cannot disagree. `portWired` is that same value restated as a boolean, and a
+ * test pins the two together.
+ */
+export function corpusStatus(
+  router: ProviderRouter, embedder: Embedder | null,
+): CorpusStatus {
+  if (embedder === null) {
+    return {
+      state: 'off',
+      portWired: false,
+      reason: 'the router has no embeddings capability at all',
+      banner: 'OFF — no embedder is wired; no CORPUS layer will appear in any trace',
+    };
+  }
+
+  /**
+   * An embedder exists, so the port IS wired and CORPUS WILL be stamped. The
+   * only remaining question is what it will say.
+   *
+   * No country in hand at boot, so `route()` applies the conservative rule —
+   * cleared for every enabled market. That makes this answer pessimistic rather
+   * than wrong: a provider cleared in IN but not GB refuses here and still
+   * grounds an Indian child's turn at request time, where the country is known.
+   * Said plainly in the banner rather than papered over.
+   */
+  try {
+    const d = router.route('embedding');
+    return {
+      state: 'on',
+      portWired: true,
+      reason: `${d.provider}/${d.model}`,
+      banner: `ON — ${d.provider}/${d.model}`,
+    };
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return {
+      state: 'unavailable',
+      portWired: true,
+      reason,
+      banner: `UNAVAILABLE — an embedder is wired but routing refuses it: ${reason}`,
+    };
+  }
+}
