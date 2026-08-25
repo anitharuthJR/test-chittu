@@ -41,6 +41,7 @@ COPY packages/disengagement/package.json packages/disengagement/
 COPY packages/maths-engine/package.json  packages/maths-engine/
 COPY packages/pedagogy/package.json      packages/pedagogy/
 COPY packages/pipeline/package.json      packages/pipeline/
+COPY packages/reading-coach/package.json packages/reading-coach/
 COPY packages/safety-kernel/package.json packages/safety-kernel/
 COPY packages/seal/package.json          packages/seal/
 
@@ -102,6 +103,7 @@ COPY --from=build --chown=nonroot:nonroot /app/packages/disengagement/dist ./pac
 COPY --from=build --chown=nonroot:nonroot /app/packages/maths-engine/dist  ./packages/maths-engine/dist
 COPY --from=build --chown=nonroot:nonroot /app/packages/pedagogy/dist      ./packages/pedagogy/dist
 COPY --from=build --chown=nonroot:nonroot /app/packages/pipeline/dist      ./packages/pipeline/dist
+COPY --from=build --chown=nonroot:nonroot /app/packages/reading-coach/dist ./packages/reading-coach/dist
 COPY --from=build --chown=nonroot:nonroot /app/packages/safety-kernel/dist ./packages/safety-kernel/dist
 COPY --from=build --chown=nonroot:nonroot /app/packages/seal/dist          ./packages/seal/dist
 COPY --from=build --chown=nonroot:nonroot /app/apps/api/dist               ./apps/api/dist

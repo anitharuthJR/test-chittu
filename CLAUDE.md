@@ -152,12 +152,30 @@ Read these two documents before any non-trivial change — they are the authorit
   `.d.ts` under `moduleResolution: nodenext` demands. Extensionless resolves under vitest and
   Vite and nowhere else. `pnpm verify` has a `compile to dist` lane for the cheap half, and
   `scripts/smoke-dist.mjs` (via `--with-container`) drives the real thing.
+- **`apps/api/Dockerfile` enumerates workspace packages BY HAND, in two lists, and a
+  package missing from either is invisible until the container boots.** The manifests
+  copied in `base`, and the `dist` directories copied into the runtime. `@chittu/reading-coach`
+  was in neither for eight commits: `pnpm install --frozen-lockfile` linked it from the
+  lockfile anyway, so the image carried a symlink to a directory that did not exist and the
+  API died on its first line with `ERR_MODULE_NOT_FOUND` — while 1881 tests were green. The
+  `build` stage hides it, because it does `COPY packages ./packages` wholesale. **After adding
+  a package to `packages/`, add it to BOTH lists**; `apps/api/src/dockerfile-workspace.test.ts`
+  fails in milliseconds if you do not, and removing `reading-coach` from either list must fail
+  3 tests. Do not "fix" only the list that appeared in the stack trace — the test asserts the
+  two lists are the same set for that reason.
 - **After editing `packages/db/src/crypto.ts` or `apps/api/src/keys/`: `pnpm vitest run --project server packages/db/src/crypto-guard.test.ts apps/api/src/keys`, then mutation-test it.** Reverting the allowlist to the old `env === 'prod'` denylist must fail 8 tests; removing the shred-check-before-KMS-call must fail 1. Verify the real path too, not just the unit: `NODE_ENV=production ANTHROPIC_API_KEY=x node dist/main.js` must refuse and name `CHITTU_KMS_KEY_ARN`.
 - **`.env.local` is read only outside production and never overrides the environment** (`apps/api/src/env-local.ts`). `scripts/dev.sh` deliberately does NOT report which router is in play any more — it used to test `$ANTHROPIC_API_KEY` in its own shell, which `.env.local` makes wrong, and a banner claiming STUB while the real classifier runs is a false statement about which guards are live. `main.ts` owns that line now; do not reintroduce a second source of truth.
-- **`infra/` has never been applied.** `fmt`, `init -backend=false` and `validate` are clean;
-  `plan` and `apply` have never run and there is no state and no backend. Do not describe it
-  as deployed infrastructure. `staging/`, `prod/`, `model/` and `training/` are deliberately
-  unwritten — see `infra/README.md` for why inventing them would be worse than their absence.
+- **`infra/envs/demo` HAS been applied. Nothing else in `infra/` has.** The demo lane is real
+  infrastructure — one `t4g.small` in account 430313601196 (`ap-south-1`) serving
+  `chittu.tulifo.ai`, applied 2026-08-25 — and its state is a LOCAL, gitignored
+  `terraform.tfstate` in the MAIN checkout, with no backend. `infra/envs/dev` and the
+  Fargate + RDS + KMS path it stands for are still `fmt` / `init -backend=false` / `validate`
+  clean and have never had a `plan` or an `apply`; do not describe THAT as deployed
+  infrastructure. Nor is the demo box the deployment path — it runs dev-mode consent and
+  dev-mode keys, which production refuses by construction, and it moves nothing on G1–G5.
+  See `docs/runbooks/demo-deploy.md`. `staging/`, `prod/`, `model/` and `training/` are
+  deliberately unwritten — see `infra/README.md` for why inventing them would be worse than
+  their absence.
 - **Mutation-test the guards you add.** Break the thing on purpose and confirm tests go red: removing the Law 02 gate must fail 5 tests, disabling the control-token strip must fail 5, disabling the escalation-leak check must fail 6. A guard whose removal is silent is not a guard.
 
 ## When building the backend (Phase 1)

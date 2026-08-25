@@ -134,18 +134,30 @@ cookies and destructive routes require a PIN-minted parent session. See PORT-REV
 
 ---
 
-## 2c. Deployment — what exists as of 2026-08-25
+## 2c. Deployment — what exists as of 2026-08-26
 
-Nothing is deployed. Nothing has ever been deployed. What exists is the path.
+One demo box is deployed. The production path is not, and never has been.
+
+**Deployed (2026-08-25):** the demo lane — `infra/envs/demo` applied into account
+430313601196 (`ap-south-1`), one `t4g.small` on a fixed EIP serving `chittu.tulifo.ai`
+behind Caddy, automatic HTTPS and basic auth. It exists so a person can be shown the
+product. It runs `NODE_ENV=development` — `dev_stub` consent and the local key provider —
+so it moves **nothing** on G1–G5 and rehearses none of the production path. Its Terraform
+state is a local, gitignored file in the main checkout; there is no backend. Runbook and
+live state: `docs/runbooks/demo-deploy.md`.
+
+**Not deployed:** everything §14 means by deployment — Fargate, RDS, KMS, Secrets Manager,
+ACM, ECR. `infra/envs/dev` has never had a `plan` or an `apply`. What exists there is the
+path.
 
 | Piece | State | Where |
 |---|---|---|
-| **Container** | Built and driven. Four stages, distroless runtime, no TypeScript / sources / shell / package manager in the image. 522MB → 231MB | `apps/api/Dockerfile` |
+| **Container** | Built and driven. Four stages, distroless runtime, no TypeScript / sources / shell / package manager in the image. 522MB → 231MB. Its two workspace-package lists are hand-maintained and are now guarded by a test — see below | `apps/api/Dockerfile` |
 | **Compiled output** | Every package emits to `dist/`; the runtime is plain node | `*/tsconfig.build.json` |
 | **Local stack** | `docker compose --profile dev up` — Postgres 16 + pgvector, a migration task that runs to completion, then the API | `compose.yaml` |
 | **Migrations** | Explicit runner with a `schema_migration` ledger, applied in a transaction with its ledger row | `apps/api/src/migrate.ts` |
 | **Artifact smoke test** | Drives the COMPILED build over HTTP: consent → session → maths → crisis, two bands, 30 checks | `scripts/smoke-dist.mjs` |
-| **Terraform** | 4 modules + `envs/dev`. `fmt`, `init`, `validate` clean. **`plan` and `apply` NEVER RUN** | `infra/` |
+| **Terraform** | 4 modules + `envs/dev` + `envs/demo`. `fmt`, `init`, `validate` clean. **`envs/demo` applied 2026-08-25 — local state, no backend. `envs/dev` has NEVER had a `plan`** | `infra/` |
 | **One command** | `pnpm verify --all` — 10 lanes, including the container lane that builds the image and drives it on real Postgres | `scripts/verify.sh` |
 
 **What is deliberately absent from `infra/`:** `staging/`, `prod/`, and §14's `model/` and
@@ -160,6 +172,25 @@ and a human reading the first `plan`. The code is ready for a `plan` it has neve
 **Still absent from `infra/`, and needed before the PWA can be served:** there is no
 CloudFront/S3 tier for `apps/web`. The ALB routes to the API only, so A7's CDN box has no
 Terraform behind it. ElastiCache is in A7 and not in `infra/` either.
+
+### The bug the demo refresh found (2026-08-26)
+
+The runtime image could not boot. `@chittu/reading-coach` arrived with the reading
+coach (#58) and was added to neither of the two lists in `apps/api/Dockerfile` that
+enumerate workspace packages by hand — the manifests copied in `base`, and the `dist`
+directories copied into the distroless runtime. `pnpm install --frozen-lockfile` linked
+the dependency from the lockfile regardless, so the image shipped
+`apps/api/node_modules/@chittu/reading-coach` pointing at a directory that was not
+there, and the API died on its first line with `ERR_MODULE_NOT_FOUND`. The `build` stage
+compiled fine, because it does `COPY packages ./packages` wholesale.
+
+**1881 tests were green throughout.** This is the failure CLAUDE.md already names —
+"`pnpm test` proves nothing about the artifact that ships" — happening a second time,
+because the first fix was a rule for humans rather than a test. The container lane does
+catch it, but it is behind `--with-container`, needs Docker and minutes, and CI was
+removed on 2026-08-25, so nothing cheap ran. `apps/api/src/dockerfile-workspace.test.ts`
+is the cheap thing now: it fails in milliseconds if either list stops covering
+`packages/`, and it failed 3 before the fix.
 
 ### The bug that a deployment question found (2026-08-25)
 

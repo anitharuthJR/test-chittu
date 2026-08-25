@@ -73,6 +73,12 @@ services:
       # seal verify) makes zero model calls either way.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # The ops console. Absent => /ops is not mounted at all (404), which
+      # is the safe default. It is named here for the reason spelled out
+      # below: it WAS set in .env on the demo box and missing from this
+      # block, so shipping this file turned the console off and the only
+      # evidence was one line of boot banner.
+      CHITTU_OPS_TOKENS: ${CHITTU_OPS_TOKENS:-}
       # The automated ID rail (G1). Absent => the method is not offered at all
       # and the API says so on boot; that is the safe default, since this rail
       # sends a parent to a third party to photograph a government ID.

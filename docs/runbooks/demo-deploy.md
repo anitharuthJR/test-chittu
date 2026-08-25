@@ -13,19 +13,45 @@ migrate → api) · Caddy serving the built PWA and proxying `/v1`, with automat
 
 Running cost ≈ **$17–24/mo**; stopped between demos ≈ **$6/mo**. Table in §9.
 
-> **Current state (2026-08-25): FULLY DEPLOYED — §1–§7 all done and walked.**
+> **Current state (2026-08-26): FULLY DEPLOYED, refreshed to `main` @ 3c7ded9.**
 > `infra/envs/demo` applied into account **430313601196** (`ap-south-1`): instance
 > `i-04e0ddcc0b509612d` (`t4g.small`) on the adopted EIP **13.205.39.18** =
 > `chittu.tulifo.ai` (Let's Encrypt cert valid to Nov 2026). Compose stack healthy
-> (postgres + migrated schema + api), **stub router** (no provider key on the box —
-> add `ANTHROPIC_API_KEY=` to `/opt/chittu/.env` and
-> `docker compose up -d --force-recreate api` to go live). Basic auth user `demo`;
-> the password and the demo family's parent PIN are with Arun, not in this repo.
-> The §7 walk passed end-to-end in the deployed UI: consent (dev_stub) → chat →
-> deterministic maths turn (trace shows zero model calls) → crisis turn (scripted
-> spine, IN helplines, lock) → parent PIN → category-only flags → unlock → seal
-> verify ("5 sealed records, nothing altered"). CLI access is the `devops` profile
-> via `aws login` (temporary — re-run `aws login --profile devops` when expired).
+> (postgres + migrated schema + api), image `chittu-api:latest` = `602929d9cf92`.
+> **The router is Anthropic**, not the stub — a key was added to `/opt/chittu/.env`
+> after the first deploy, and the boot line says so. Basic auth user `demo`; the
+> password and the demo family's parent PIN are with Arun, not in this repo.
+> CLI access is the `devops` profile via `aws login` (temporary — re-run
+> `aws login --profile devops` when expired).
+>
+> **The 2026-08-26 refresh**, for the record, because two of its three findings
+> are traps the next refresh can fall into as well:
+>
+> - Migrations `0007_reading_stats`, `0008_automated_id_check` and `0009_ops_users`
+>   applied on the ledger's first run against the existing demo data; 34 tables.
+> - **The image would not boot, and no cheap lane said so.** `@chittu/reading-coach`
+>   (#58) was in neither of the Dockerfile's two hand-maintained package lists, so
+>   the runtime image carried a dangling pnpm symlink and died on
+>   `ERR_MODULE_NOT_FOUND` at its first line — with 1881 tests green. Fixed, and
+>   `apps/api/src/dockerfile-workspace.test.ts` now guards both lists.
+> - **Shipping `deploy/demo/compose.yaml` turned the ops console OFF.**
+>   `CHITTU_OPS_TOKENS` was set in the box's `.env` and named in the box's
+>   hand-edited compose file but never in the repo's, and compose passes only what
+>   the block names — the same trap the file's own Didit comment warns about. The
+>   variable is in the repo's block now. If you hand-edit compose ON THE BOX again,
+>   the next `scp` deletes it; put it in the repo instead.
+>
+> Verified after the refresh: `/health` ok, the boot banner (Anthropic router,
+> `/ops` mounted with 1 operator, ID check not offered, corpus `UNAVAILABLE` —
+> which is the correct three-state answer for an Anthropic-only box, not an
+> outage), the deployed web bundle byte-identical to the built one, and
+> `scripts/smoke-dist.mjs` driven against the deployed API over an SSH forward:
+> 32/32, both bands — Law 02, consent cookie never in the body, scripted crisis
+> spine, L1 before any classifier, no control-token leak, category-only parent
+> flags, crisis lock surviving a re-open. That walk writes two demo families into
+> the demo database; `docker compose down -v` and re-onboarding clears them.
+> The browser UI behind basic auth was NOT re-walked — §7 by hand still wants a
+> human with the password.
 >
 > **Gotcha found by the walk:** never hand out the URL in
 > `https://user:pass@chittu.tulifo.ai` form. A page loaded that way carries the
