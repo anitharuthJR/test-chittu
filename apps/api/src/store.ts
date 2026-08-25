@@ -56,14 +56,58 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
     return { ...EMPTY_RUNTIME, ...JSON.parse(decrypt(toBuffer(blob), dek)) } as RuntimeState;
   }
 
+  /**
+   * A THINKER'S TURNS ARE NEVER WRITTEN DOWN — not here either.
+   *
+   * `message.body_enc` refuses them (`teen_bodies_are_never_stored`, Session
+   * 001), and `addMessage` agrees with the constraint before it has to argue.
+   * This blob did not: `history` and `recentKid` both carry the child's own
+   * sentences, so a teen's words survived a full write-and-read cycle and were
+   * handed back to a vendor on the next turn. The carve-out was enforced on one
+   * column and defeated by another, in the same transaction.
+   *
+   * WHAT THIS COSTS, because it is not free and the schema said so first.
+   * A teen's classifier window is now one turn — the current one — and their
+   * conversation carries no context between requests. `CLASSIFIER_SYSTEM` asks
+   * the model to judge the latest message "IN CONTEXT of the window (patterns
+   * across messages matter: escalating secrecy, boundary-testing, repeated
+   * distress)", and for thinkers there is no window to judge it in. L1, the
+   * sandbox escalation tokens and L6 are unchanged; it is L2 that loses power,
+   * for the band whose turns most need it.
+   *
+   * ABSTRACTION IS NOT A WAY OUT, and it is worth recording why, because it is
+   * the obvious idea. `abstractShape` destroys DISTINCTIVE tokens, not meaning:
+   *
+   *   "i cut myself last night and mum doesnt know"  ->  unchanged, verbatim
+   *
+   * A shape of a disclosure is the disclosure. Two designs could buy the window
+   * back — a label-only window (the L1 kind and L2 label per turn, no words, in
+   * the shape `flag` already uses), or a per-session key held in an httpOnly
+   * cookie so the blob is unreadable without the child's own browser. Both are
+   * larger than this fix and both are decisions, not implementations.
+   */
   async function writeRuntime(
-    tx: Db, sessionId: string, childId: string, state: RuntimeState,
+    tx: Db, sessionId: string, childId: string, band: Band, state: RuntimeState,
   ): Promise<void> {
     const dek = await child.dekFor(tx, childId);
+    const teen = band === 'thinker';
     const trimmed: RuntimeState = {
       ...state,
-      history: state.history.slice(-HISTORY_WINDOW),
-      recentKid: state.recentKid.slice(-HISTORY_WINDOW),
+      history: teen ? [] : state.history.slice(-HISTORY_WINDOW),
+      recentKid: teen ? [] : state.recentKid.slice(-HISTORY_WINDOW),
+      /**
+       * NOT PERSISTED FOR ANY BAND, because nothing reads it.
+       *
+       * `state.assists` accumulates `outcome.assist` — whatever string the
+       * classifier returned, which `parseAssist` accepts unconstrained. It is
+       * written in `packages/pipeline` and consumed by no code anywhere: the
+       * parent-facing record is the `flag` row, whose `assist_topic` is
+       * CHECKed to `^[a-z0-9 \-]{1,40}$` precisely so it cannot become a
+       * free-text field by drift. This array had no such guard and no purpose —
+       * model-authored text about a child, kept for nobody. Dropping it changes
+       * nothing observable and stores less.
+       */
+      assists: [],
     };
     await tx.query(`UPDATE session SET runtime_enc = $2 WHERE id = $1`,
       [sessionId, encrypt(JSON.stringify(trimmed), dek)]);
@@ -154,7 +198,7 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
       // incremented rather than set, so a concurrent turn cannot clobber the count
       await tx.query(`UPDATE session SET msg_count = msg_count + 1 WHERE id = $1`,
         [sessionId]);
-      await writeRuntime(tx, sessionId, childId, {
+      await writeRuntime(tx, sessionId, childId, band, {
         mathPractice: after.mathPractice,
         history: [...after.history],
         recentKid: [...after.recentKid],

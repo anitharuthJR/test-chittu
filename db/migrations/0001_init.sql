@@ -255,10 +255,18 @@ CREATE TABLE session (
   -- detected subject, and the classifier's 3-message rolling window.
   --
   -- The rolling window is the uncomfortable part and is flagged rather than
-  -- hidden: for a `thinker` it is the ONE place a teen's words are written down,
-  -- because `message.body_enc` refuses them. Without it the classifier loses its
-  -- window for exactly the band whose turns most need context — which since
-  -- 2026-08-25 is a named field, `recentKid`, separate from the model's context. It is encrypted
+  -- hidden. It USED to be the one place a teen's words were written down —
+  -- `message.body_enc` refuses them and this blob did not, so the carve-out was
+  -- enforced on one column and defeated by another in the same transaction.
+  -- Since 2026-08-25 a `thinker`'s `history` and `recentKid` are written empty,
+  -- so nothing textual about a teen survives a request here.
+  --
+  -- That is not free, and the trade this comment used to ask Chamber II about
+  -- has been made rather than dissolved: a teen's classifier window is now one
+  -- turn, and their conversation carries no context between requests. L1, the
+  -- sandbox escalation tokens and L6 are unchanged; L2 loses its window for the
+  -- band whose turns most need it. See PORT-REVIEW for the two designs that
+  -- could buy it back. It is encrypted
   -- under the child's DEK, lives only as long as the session, and dies with the
   -- crypto-shred — but it is still a teen's words at rest, and Chamber II should
   -- decide whether that trade is the right one.
@@ -580,13 +588,21 @@ CREATE TABLE transcript_grant (
 -- a plain CREATE ROLE fails the second time this file is applied. Wrapped so the
 -- schema is re-runnable — which is what lets the same suite run against a throw-
 -- away schema on a shared Postgres.
+--
+-- BOTH exceptions, and that is not belt-and-braces. `duplicate_object` is what
+-- Postgres raises when the role is already there when you look. When two
+-- fixtures look at the same instant and both proceed, the loser gets
+-- `unique_violation` on `pg_authid_rolname_index` instead — a different SQLSTATE
+-- for the same situation. Catching only the first made a whole test file fail at
+-- collection, with all of its tests skipped, on a database nobody had used yet.
+-- Same shape as `CREATE EXTENSION IF NOT EXISTS`, which is not atomic either.
 DO $$ BEGIN
   CREATE ROLE chittu_app NOLOGIN;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE ROLE chittu_ops NOLOGIN;   -- metering + registries only
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$;
 
 ALTER TABLE child   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session ENABLE ROW LEVEL SECURITY;

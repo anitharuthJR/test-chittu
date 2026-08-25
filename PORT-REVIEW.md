@@ -974,7 +974,68 @@ Mutations, each verified red: the turn joins the context before the guards → 7
 scripted replies enter the context → 4; the window comes from the context again
 → 5; the blocked exchange is committed → 1; a sandbox escalation is committed → 2.
 
-### NOTED — `session.runtime_enc` is still where a teen's words live
+### FIXED (2026-08-25) — `session.runtime_enc` was where a teen's words lived
+
+Session 001 ruled that a teen's message body is never stored.
+`teen_bodies_are_never_stored` enforces it on `message`, and `addMessage` agrees
+with the constraint before it has to argue. `session.runtime_enc` did not: it
+carries `history` and `recentKid`, both of which are the child's own sentences.
+
+Probed end to end, in two processes so nothing survived in memory:
+
+```
+teen message rows WITH a body      : 0        <- the carve-out held here
+teen session.runtime_enc bytes     : 215      <- and was defeated here
+turn 2 sent the teen's turn 1 text : true     <- a full write-and-read round trip
+```
+
+**One column enforced it and another in the same transaction undid it.**
+
+**The fix, and what it costs.** For a `thinker`, `history` and `recentKid` are
+written empty. Nothing textual about a teen survives a request. The cost is the
+one the schema comment named first: a teen's classifier window is now a single
+turn, and their conversation carries no context between requests. L1, the
+sandbox escalation tokens and L6 are unchanged — it is L2 that loses its window,
+for the band whose turns most need it. The comment asked Chamber II to decide
+whether the trade was right; the trade has now been made in the other direction,
+and it should be reviewed as such rather than assumed settled.
+
+**Abstraction is not a way out, which is worth recording because it is the
+obvious idea.** `abstractShape` destroys DISTINCTIVE tokens, not meaning:
+
+```
+"i cut myself last night and mum doesnt know"      ->  unchanged, verbatim
+"he keeps asking me to send pictures and i said no" ->  unchanged, verbatim
+"i have not eaten properly for three days"          ->  "i have not <OOV> properly for three days"
+```
+
+A shape of a disclosure is the disclosure. Two designs could buy the window back
+without storing words, and both are decisions rather than implementations:
+
+- **A label-only window** — the L1 kind and L2 label per turn, no text, in the
+  shape `flag` already uses. Recovers "escalating secrecy" without a sentence.
+- **A per-session key in an httpOnly cookie**, so the blob is unreadable without
+  the child's own browser and becomes permanently unrecoverable when the session
+  ends — a per-session crypto-shred that happens by itself.
+
+**And a second channel found while sweeping for the first.** `state.assists`
+accumulates `outcome.assist` — whatever string the classifier returned, which
+`parseAssist` accepts unconstrained — and is read by NO code anywhere. The
+parent-facing record is the `flag` row, whose `assist_topic` is CHECKed to
+`^[a-z0-9 \-]{1,40}$` precisely so it cannot become a free-text field by drift.
+This array had no such guard and no purpose. It is no longer persisted for any
+band; nothing observable changes and less is stored.
+
+`state.topics` was checked too and is clean: the port only ever writes fixed
+guard labels and the literal `'maths'`. The prototype's
+`text.split(' ').slice(0,2)` — the first two words of the child's turn — was not
+ported, which is lucky rather than deliberate and is now noted.
+
+Mutations, each verified red: the model context persisted for teens → 2; the
+window persisted for teens → 2; the carve-out never applies → 2; assists
+persisted → 2.
+
+### SUPERSEDED — `session.runtime_enc` is still where a teen's words live
 
 Unchanged by the above, and already flagged in the schema: for a `thinker`,
 `message.body_enc` refuses the body and `runtime_enc` holds it, so the blob is
@@ -1044,6 +1105,21 @@ rather than the mechanism.
 Mutations, each verified red: the one-spelling literal → 26; no slice at all →
 33; no whitespace tolerance → 4; special tokens without a pipe → 3; the client
 drifting back → 10.
+
+### FIXED (2026-08-25) — the same race again, one object over
+
+`CREATE ROLE` is wrapped in a `DO` block catching `duplicate_object`, so the
+schema is re-runnable. Two fixtures starting at the same instant on a fresh
+database both look, both find nothing, and both proceed — and the loser gets
+`unique_violation` on `pg_authid_rolname_index`, a different SQLSTATE for the
+same situation. Not caught, so a whole test file failed at collection with all
+32 of its tests skipped.
+
+Identical in shape to the extension race below, found the same way — a cold
+database — and it says something about the class: **an existence check followed
+by a create is not atomic, whatever the object is, and "it is already there" and
+"somebody else just made it" are different errors.** Both exceptions are caught
+now; verified across three cold starts.
 
 ### FIXED (2026-08-25) — the real-Postgres lane had an extension race
 
