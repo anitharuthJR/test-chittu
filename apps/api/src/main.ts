@@ -3,6 +3,7 @@ import { stubRouter } from './providers.js';
 import { anthropicAdapter } from './providers/anthropic.js';
 import { createRouter } from './providers/router.js';
 import { readClearance, enabledMarkets } from './providers/clearance.js';
+import { readCells, resolveCells, describeCells } from './providers/cells.js';
 import { bootstrapDb } from './db-bootstrap.js';
 import { startSweepTimer } from './helplines/sweep.js';
 import { buildLoggerOptions, resolveLogDir } from './logging.js';
@@ -44,6 +45,31 @@ if (driver === 'pglite') {
  * one record a certifier reads.
  */
 async function chooseRouter() {
+  /**
+   * Cell assignment is resolved and VALIDATED FIRST — before the stub check,
+   * before clearance, before any turn.
+   *
+   * Validating early is the point. If this sat below the stub branch, a typo in
+   * CHITTU_CELL_* would be silently unexamined on every laptop and every CI run,
+   * and would first be discovered in production — which is the failure shape
+   * this repository keeps finding. So the config is always checked and always
+   * reported; whether it is APPLIED depends on whether a real router is built.
+   *
+   * `strict` in production: a rejected cell there means the deployment believes
+   * it is running one model and is running another. That is invisible, and
+   * invisible is the part that matters.
+   */
+  const resolved = resolveCells({
+    env: process.env,
+    rows: await readCells(pool),
+    strict: isProd,
+  });
+  for (const problem of resolved.problems) {
+    console.warn(`[chittu] routing config REJECTED: ${problem}`);
+  }
+  const overrides = describeCells(resolved);
+  const cells = resolved.cells;
+
   if (apiKey === '') {
     if (isProd) {
       throw new Error(
@@ -55,17 +81,28 @@ async function chooseRouter() {
       '[chittu] no ANTHROPIC_API_KEY — using the offline stub router. '
       + 'Every turn classifies SAFE and the sandbox echoes a fixed reply.',
     );
+    if (overrides.length > 0) {
+      // Checked above, and deliberately NOT described as being in effect: the
+      // stub routes nowhere, so saying "sandbox -> claude-opus-5" here would be
+      // a false statement about what is running.
+      console.warn(
+        `[chittu] routing config parsed OK but is NOT in effect (stub router):\n${overrides.join('\n')}`);
+    }
     return stubRouter();
   }
 
   const adapters = { anthropic: anthropicAdapter({ apiKey }) };
+
+  console.warn(overrides.length === 0
+    ? '[chittu] routing: all cells at compiled defaults'
+    : `[chittu] routing overrides IN EFFECT:\n${overrides.join('\n')}`);
 
   if (!isProd) {
     // Outside production, clearance is not enforced: there are no signed terms
     // to check against on a laptop, and requiring a seeded table to run `pnpm
     // dev` would only teach people to seed it meaninglessly.
     console.warn('[chittu] provider clearance is NOT enforced outside production.');
-    return createRouter({ adapters });
+    return createRouter({ adapters, cells });
   }
 
   const markets = await enabledMarkets(pool);
@@ -81,7 +118,7 @@ async function chooseRouter() {
     console.warn(
       `[chittu] ${provider} is NOT cleared for ${missing.join(', ')} — not routable.`);
   }
-  return createRouter({ adapters, cleared });
+  return createRouter({ adapters, cells, cleared });
 }
 
 /**

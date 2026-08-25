@@ -53,7 +53,7 @@ corpus_unchanged() {
 MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
 SEED="${SEED:-921}"
 CHUNK=250
-STOPS="500 1000 1500 2000"
+STOPS="${STOPS:-500 1000 1500 2000}"
 
 rm -rf adapters
 done_iters=0
