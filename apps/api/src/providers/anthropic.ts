@@ -15,9 +15,41 @@
  * retry with a short backoff; a 400 means our request is wrong and repeating it
  * just burns money and time.
  *
- * **The vendor's own litter is stripped here**, before the reply reaches the
- * pipeline. L6 strips again on the way out — see `stripControlTokens` in the
- * kernel — because a second wall costs nothing and this one is vendor-specific.
+ * **THIS ADAPTER DOES NOT STRIP CONTROL TOKENS, AND THAT IS THE FIX.**
+ *
+ * It used to, with `.replace(CONTROL_TOKENS, ' ')`. That deleted the `</think>`
+ * that the kernel's `stripControlTokens` SLICES on — the kernel keeps what
+ * follows the last close tag, and a delete leaves it nothing to find. So the
+ * reasoning got welded onto the answer:
+ *
+ *     vendor:            <think>she said she wants to die</think>CRISIS
+ *     kernel alone:      CRISIS                              -> the guard fires
+ *     adapter -> kernel: she said she wants to die CRISIS     -> matches nothing
+ *
+ * On an ordinary turn that is a cosmetic leak. On the turn that matters it is
+ * not: the sandbox's escalation tokens are compared EXACTLY
+ * (packages/pipeline/src/index.ts), so that turn locks nothing, shows no
+ * helplines, flags no parent, and renders the model's reasoning about a child's
+ * self-harm to that child. L6 does not catch it — it tests for banned content,
+ * and reasoning is not banned content.
+ *
+ * The kernel already runs on the sandbox reply, inside the pipeline, for every
+ * vendor. The adapter's only job was to stop destroying its input.
+ *
+ * **And the strip must NOT be moved somewhere generic either.** The first
+ * attempt at this fix ran `stripControlTokens` in the router's `callAdapter`,
+ * for every category — which broke the CLASSIFIER, whose reply is JSON. A
+ * verdict carrying the literal characters `</think>` inside a string value,
+ * such as `{"label":"CRISIS","assist":"STRUGGLE: pasted </think> at school"}`,
+ * got sliced in half and failed `parseClassifier`, turning a CRISIS the
+ * classifier had correctly caught into a FAST-PATH-ONLY turn. The slice is
+ * correct for prose and wrong for JSON, so it belongs on the path that carries
+ * prose, which is where the pipeline already had it.
+ *
+ * `CONTROL_TOKENS` below is the adapter's declared `controlTokens` port member.
+ * NOTHING READS IT — see PORT-REVIEW; making it live is not a tidy-up, because a
+ * vendor whose delimiters are not `<think>` would need the slice, not a delete,
+ * and the field cannot express the difference.
  */
 
 import type { ModelReply, ModelRequest, ProviderAdapter, RouteDecision } from '@chittu/contracts';
@@ -104,12 +136,12 @@ export function anthropicAdapter(opts: AnthropicOptions): ProviderAdapter {
     }
 
     const body = await res.json() as AnthropicResponse;
+    // Delivered as the vendor wrote it, control tokens and all. See the header:
+    // the kernel's slice needs the delimiters intact, and it runs downstream.
     const text = (body.content ?? [])
       .filter((c) => c.type === 'text')
       .map((c) => c.text ?? '')
       .join(' ')
-      .replace(CONTROL_TOKENS, ' ')
-      .replace(/\s+/g, ' ')
       .trim();
 
     // An empty completion is a failure, not an answer. Returning '' would let
@@ -130,17 +162,23 @@ export function anthropicAdapter(opts: AnthropicOptions): ProviderAdapter {
 
     async complete(req, route) {
       let last: unknown;
+      // Whether the LOOP judged the last failure worth another go. The escaping
+      // error reports this rather than a hardcoded `true`, which was a lie in a
+      // field nobody currently reads: a TypeError is not retried, and was then
+      // rethrown claiming it was retryable. §12.3 promises a fall-back-to-a-
+      // cleared-cell policy, and that policy would read exactly this field.
+      let wasRetryable = false;
       for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
         try {
           return await once(req, route);
         } catch (e) {
           last = e;
-          const retryable = e instanceof ProviderError
+          wasRetryable = e instanceof ProviderError
             ? e.retryable
             // A timeout or a dropped socket is worth one more go; a
             // programming error is not.
             : e instanceof DOMException && e.name === 'TimeoutError';
-          if (!retryable || attempt === maxRetries) break;
+          if (!wasRetryable || attempt === maxRetries) break;
           await sleep(250 * (attempt + 1));
         }
       }
@@ -150,7 +188,7 @@ export function anthropicAdapter(opts: AnthropicOptions): ProviderAdapter {
       }
       throw new ProviderError(
         ANTHROPIC_ID, null,
-        last instanceof Error ? last.message : 'request failed', true);
+        last instanceof Error ? last.message : 'request failed', wasRetryable);
     },
   };
 }

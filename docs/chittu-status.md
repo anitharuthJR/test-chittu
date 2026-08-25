@@ -445,12 +445,14 @@ reads a script incrementally by byte offset and the file was edited mid-run. The
 re-execs from a snapshot of itself, verified by editing a running copy and watching it ignore the
 edit. **The scorecard file is the artefact; the summary line is a convenience.**
 
-## 8b. The pattern: eleven instruments, one failure mode
+## 8b. The pattern: thirteen instruments, one failure mode
 
 Every defect in this list is an **instrument reporting success while measuring something other
 than what it claimed**. Not one was found by reading code; every one needed running the thing.
-The last five were found on 2026-08-25 and are the reason this section is no longer titled
-"four". The ninth is the sharpest: it is *this document's own* §7b acceptance criterion,
+The last seven were found on 2026-08-25 and are the reason this section is no longer titled
+"four". Twelve and thirteen were found by surveying for a second provider, and neither is
+about a second provider: both were live in `main`, and the second would have rendered a
+model's reasoning about a child's self-harm to that child with no crisis lock. The ninth is the sharpest: it is *this document's own* §7b acceptance criterion,
 written the same night, going green on a worse model. The eleventh was written, run green, and
 caught by mutation-testing it **twenty minutes later, in the same sitting** — which is the
 argument for mutation testing in one line.
@@ -468,6 +470,9 @@ argument for mutation testing in one line.
 | **the Tamil SAFE controls** | **2/2 PASS at 500 iters** | a model that escalates nothing. Tamil crisis recall there is 0/4. The floor was cleared by the absence of the behaviour, not the presence of the discrimination |
 | **`training_signal.shape_is_abstracted`** | "rejects raw prose reaching this column by any route" | a character class containing `0-9` and no `A-Z`. It accepted `9876543210` — a ten-digit mobile — and rejected `my <PET> died…`, the worked example in its own comment. Invisible for as long as the table had zero writers: **a constraint is only tested by code that tries to write through it** |
 | **the `shapeHash` domain-separation test** | "differs from the blind index — domain separation" | that `fingerprint()` lowercases its input. The comparison shape contained `<PET>`, so the two hashed different strings and differed with or without the domain tag. Deleting the tag left it green |
+| **`router.test.ts` — "the request we actually send"** | the request we actually send | a request the pipeline never produces. Its fixtures built `history` WITHOUT the current turn; `runTurn` appends it before calling any port. So the router double-sent the child's words to every vendor cell, and the classifier's three-turn window showed the latest turn twice — to the one layer whose job is noticing repeats. The two `SessionState` fixtures in the repo start `history: []` and call the router port DIRECTLY, bypassing the append — so the fixtures agreed with the router and disagreed with production from turn one onward |
+| **`ProviderAdapter.controlTokens`** | "what to strip from THIS provider's output" (architecture §12.1) | nothing. Declared in contracts, set by the adapter, read by no code. Pointing it at a pattern that matches nothing broke **zero** tests. Meanwhile the adapter's own strip deleted the `</think>` the kernel slices on, welding a model's reasoning onto its answer — and a test asserted that welded output as correct, with a comment explaining why it was fine |
+| **the first fix for the above** (caught in review, never landed) | "no adapter can forget to strip" | a slice applied to JSON. Moving `stripControlTokens` into `callAdapter` for every category cut a classifier verdict containing `</think>` in half, so a CRISIS `main` catches became FAST-PATH-ONLY. Every test in the change was green; an adversarial review found it by writing a verdict nobody had thought to write |
 
 **The rule this earns.** An eval built from the artefact it tests proves only that the artefact
 is self-consistent. Corpora must come from outside — real child phrasings, panel sessions,

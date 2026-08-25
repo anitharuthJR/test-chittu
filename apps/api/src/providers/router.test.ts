@@ -18,7 +18,8 @@ import { anthropicAdapter, ProviderError } from './anthropic.js';
 import { createRouter, RouteRefused, DEFAULT_CELLS } from './router.js';
 import { resolveCells } from './cells.js';
 import type { ModelUsage } from '@chittu/contracts';
-import type { SessionState } from '@chittu/pipeline';
+import { runTurn, type SessionState } from '@chittu/pipeline';
+import { createChain } from '@chittu/seal';
 import { createTestDb } from '@chittu/db';
 import { readClearance, toJurisdiction } from './clearance.js';
 
@@ -286,17 +287,18 @@ describe('failure handling', () => {
   });
 });
 
-describe('the vendor\'s own litter is stripped before the pipeline sees it', () => {
-  it('removes reasoning tags and special tokens', async () => {
-    respond = () => ({ status: 200, body: text('<think>plan</think>Sunlight scatters blue!<|end|>') });
-    const out = await router().generate({ text: 'why', state: state(), subject: null });
-    expect(out).toBe('plan Sunlight scatters blue!');
-    // Note what survives: only the literal `</think>` triggers the kernel's
-    // slice, and this adapter only strips tags. L6 runs after this and is what
-    // actually stands between the model and the child.
-    expect(out).not.toMatch(/<\||<think>/);
-  });
-});
+/*
+ * REMOVED: `the vendor's own litter is stripped before the pipeline sees it`.
+ *
+ * It asserted `expect(out).toBe('plan Sunlight scatters blue!')` on the input
+ * `<think>plan</think>Sunlight scatters blue!<|end|>` — pinning the model's
+ * reasoning surviving into the answer as the INTENDED result, and explaining in
+ * a comment why that was acceptable. It was not: the same path welds reasoning
+ * onto an escalation token and stops it matching.
+ *
+ * Superseded by `reasoning must not survive into the escalation comparison`
+ * below, which asserts the correct output for that exact input.
+ */
 
 describe('clearance is checked for the CHILD\'s country, not the intersection', () => {
   /**
@@ -426,5 +428,269 @@ describe('the router reports what a call cost, and nothing about who made it', (
   it('is optional — every existing caller still works without it', async () => {
     const r = router();
     await expect(r.classify('hello', [])).resolves.toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('the child is asked ONCE — the pipeline\'s history already holds the turn', () => {
+  /**
+   * The two tests in "the request we actually send" above build `history`
+   * WITHOUT the current turn, which is the convention the router assumed. The
+   * pipeline supplies the opposite: `runTurn` appends the child's turn to
+   * `history` before any port is called, so by the time `generate()` and
+   * `classify()` run, the turn is already the last entry.
+   *
+   * That mismatch is invisible from either side. The router tests were green
+   * because their fixture matched the router; the pipeline tests were green
+   * because they count model calls rather than inspect bodies; and every
+   * SessionState fixture in this repo starts with `history: []`, so turn one —
+   * the only turn a smoke test drives — looks identical either way.
+   *
+   * The seam test below drives the real pipeline into the real router, which is
+   * the only place the two conventions meet.
+   */
+  it('sends the sandbox the turn once, not twice', async () => {
+    await router().generate({
+      text: 'second question',
+      state: state({
+        history: [
+          { role: 'user', content: 'first question' },
+          { role: 'assistant', content: 'a reply' },
+          { role: 'user', content: 'second question' },
+        ],
+      }),
+      subject: null,
+    });
+    const msgs = recorded[0]!.body.messages as { role: string; content: string }[];
+    expect(msgs.map((m) => m.content)).toEqual(
+      ['first question', 'a reply', 'second question']);
+    // Two adjacent user messages is also what makes this vendor-specific: some
+    // vendors merge them, some reject the request outright.
+    expect(msgs.filter((m, i) => i > 0 && m.role === msgs[i - 1]!.role)).toEqual([]);
+  });
+
+  it('gives the classifier three DISTINCT turns, not the latest one twice', async () => {
+    // The window exists to show patterns across messages — escalating secrecy,
+    // repeated distress. Feeding the current turn twice makes every turn look
+    // like a repeat to the one layer whose job is noticing repeats, and costs a
+    // real turn of context out of a three-turn window.
+    await router().classify('third', [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'a reply' },
+      { role: 'user', content: 'second' },
+      { role: 'user', content: 'third' },
+    ]);
+    expect(recorded[0]!.body.messages[0].content).toBe(
+      '[msg 1] first\n[msg 2] second\n[msg 3] third');
+  });
+
+  it('still appends when the caller passes history WITHOUT the turn', async () => {
+    // Both conventions have to work: `route()` is a public port and an ops
+    // command or a future caller may hold either. The router decides from what
+    // it was actually given rather than from what it assumes.
+    await router().generate({
+      text: 'only question',
+      state: state({ history: [] }),
+      subject: null,
+    });
+    expect((recorded[0]!.body.messages as { content: string }[]).map((m) => m.content))
+      .toEqual(['only question']);
+  });
+});
+
+describe('reasoning must not survive into the escalation comparison', () => {
+  /**
+   * `stripControlTokens` in the kernel SLICES at the last `</think>` and keeps
+   * what follows. The adapter used to replace `<think>` and `</think>` with
+   * spaces first — which deletes the delimiter the kernel needs, so the slice
+   * never happened and the reasoning was welded onto the answer.
+   *
+   * On an ordinary turn that is a cosmetic leak. On the turn that matters it is
+   * not: the sandbox's escalation tokens are compared EXACTLY, so
+   * `<think>…</think>CRISIS` arrived as `… CRISIS`, matched nothing, and the
+   * model's reasoning about a child's self-harm would have been rendered to her
+   * with no crisis lock, no helplines and no parent flag. L6 does not catch it
+   * — it tests for banned content, and reasoning is not banned content.
+   *
+   * THESE ASSERT THROUGH THE PIPELINE, not against `router.generate()`. The
+   * kernel's slice lives in the pipeline and applies to the sandbox reply and
+   * to nothing else — which is the point of the fix, so a router-level
+   * assertion would be checking the wrong half of the chain.
+   */
+  const drive = async (vendorReply: string) => {
+    const r = router();
+    respond = (n) => n === 0
+      ? { status: 200, body: text('{"label":"SAFE","memory":null,"assist":null}') }
+      : { status: 200, body: text(vendorReply) };
+    const p = {
+      classify: (t: string, h: SessionState['history'], c: never) => r.classify(t, h, c),
+      generate: (i: Parameters<typeof r.generate>[0]) => r.generate(i),
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    const out = await runTurn(state({ history: [] }), 'everything feels like a lot', p as never);
+    const shown = out.response.blocks.map((b) =>
+      b.kind === 'chips' ? b.chips.join(' ')
+        : b.kind === 'steps' ? b.items.join(' ')
+          : b.kind === 'big' ? b.emoji : b.text).join(' ');
+    return { lock: out.response.crisisLock, trace: out.response.trace, shown };
+  };
+
+  it('an escalation token behind a reasoning preamble still locks the chat', async () => {
+    const out = await drive('<think>she said she wants to die</think>CRISIS');
+    expect(out.lock, 'the crisis token did not fire').toBe(true);
+    expect(out.shown, "the model's reasoning was rendered to the child")
+      .not.toMatch(/she said she wants to die/);
+  });
+
+  it('drops reasoning from an ordinary answer rather than welding it on', async () => {
+    const out = await drive('<think>plan the answer</think>Sunlight scatters blue!<|end|>');
+    expect(out.shown).toContain('Sunlight scatters blue!');
+    expect(out.shown).not.toMatch(/plan the answer|<\||<think>/);
+  });
+
+  it('a reply that is ONLY reasoning never reaches the child', async () => {
+    const out = await drive('<think>thinking about it</think>');
+    expect(out.shown).not.toMatch(/thinking about it/);
+  });
+});
+
+describe('the CLASSIFIER reply is JSON, and must NOT be sliced', () => {
+  /**
+   * The first version of this fix moved `stripControlTokens` into the router's
+   * `callAdapter`, so it ran for every category. That broke the classifier and
+   * lost a crisis `main` catches: a verdict carrying the literal characters
+   * `</think>` inside a string value is cut in half by the slice, fails
+   * `parseClassifier`, and the pipeline honestly reports FAST-PATH-ONLY — an
+   * ordinary chat where the chat should have locked.
+   *
+   * "i want to disappear" does not trip L1. On that turn L2 is the only wall.
+   * The slice is right for prose and wrong for JSON, so it stays on the path
+   * that carries prose.
+   */
+  it('a verdict containing </think> in a string value still parses', async () => {
+    respond = () => ({ status: 200, body: text(
+      '{"label":"CRISIS","memory":null,"assist":"STRUGGLE: pasted </think> at school"}') });
+    const out = await router().classify('i want to disappear', []);
+    expect(out.label).toBe('CRISIS');
+  });
+
+  it('and one carrying a special token in a memory does too', async () => {
+    respond = () => ({ status: 200, body: text(
+      '{"label":"SAFE","memory":{"category":"PET","fact":"a cat called <|mani|>"},"assist":null}') });
+    const out = await router().classify('my cat', []);
+    expect(out.label).toBe('SAFE');
+  });
+});
+
+/*
+ * REMOVED: `controlTokens is a port member that has to DO something`.
+ *
+ * It is not one, and the attempt to make it one was withdrawn. Applying it in
+ * `callAdapter` as a DELETE, after the kernel's slice, recreated the exact
+ * defect this change fixes — for any vendor whose reasoning delimiters are not
+ * `<think>`. The router would find no `</think>` to slice on, then delete the
+ * vendor's own delimiters, and weld the reasoning back onto the answer.
+ *
+ * The field cannot express the difference between a DELIMITER (slice, keep what
+ * follows) and LITTER (delete). Fixing that is a contract change; it is recorded
+ * in PORT-REVIEW as a known-dead port member rather than papered over with a
+ * live one that is wrong.
+ */
+
+describe('an error reports what the adapter actually did', () => {
+  it('a failure the retry loop declined to retry is not marked retryable', async () => {
+    // `retryable` was hardcoded `true` on the escaping error, including for
+    // failures the loop had just refused to retry. Nothing reads it today,
+    // which is why it went unnoticed — and §12.3's promised
+    // fall-back-to-a-cleared-cell policy is exactly what would read it.
+    const a = anthropicAdapter({
+      apiKey: 'k', baseUrl, sleep: async () => {},
+      fetchImpl: (() => { throw new TypeError('fetch failed'); }) as unknown as typeof fetch,
+    });
+    const err = await a.complete(
+      { system: 's', messages: [{ role: 'user', content: 'hi' }] },
+      { provider: 'anthropic', model: 'm', promptVersion: 'v' },
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as ProviderError).retryable).toBe(false);
+  });
+
+  it('a timeout that exhausted the budget still is', async () => {
+    respond = () => ({ status: 200, body: text('ok'), delayMs: 60 });
+    const a = anthropicAdapter({ apiKey: 'k', baseUrl, timeoutMs: 20, sleep: async () => {} });
+    const err = await a.complete(
+      { system: 's', messages: [{ role: 'user', content: 'hi' }] },
+      { provider: 'anthropic', model: 'm', promptVersion: 'v' },
+    ).catch((e: unknown) => e);
+    expect((err as ProviderError).retryable).toBe(true);
+  });
+});
+
+describe('a child repeating themselves — the case the window exists for', () => {
+  /**
+   * CLASSIFIER_SYSTEM asks the model to judge the latest message in context
+   * because "patterns across messages matter: escalating secrecy,
+   * boundary-testing, repeated distress". So a conditional append is only
+   * correct if REAL repetition still reaches it.
+   *
+   * It does, and the old code was worse than a double-send: it showed a
+   * repetition on the very first turn a child ever sent, because it appended
+   * `text` to a history that already ended with it. Every turn looked like a
+   * repeat to the one layer that escalates on repeats.
+   *
+   *   turn 1, old:  [msg 1] i feel awful | [msg 2] i feel awful
+   *   turn 1, new:  [msg 1] i feel awful
+   */
+  const say = async (r: ReturnType<typeof router>, turns: readonly string[]) => {
+    let s = state({ history: [] });
+    const p = {
+      classify: (t: string, h: SessionState['history'], c: never) => r.classify(t, h, c),
+      generate: (i: Parameters<typeof r.generate>[0]) => r.generate(i),
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    for (const t of turns) s = (await runTurn(s, t, p as never)).state;
+    return recorded.filter((x) => (x.body.system as string).includes('safety+memory classifier'))
+      .map((x) => x.body.messages[0].content as string);
+  };
+
+  it('shows one turn for one turn, and two for two', async () => {
+    const windows = await say(router(), ['i feel awful', 'i feel awful']);
+    expect(windows[0]).toBe('[msg 1] i feel awful');
+    expect(windows[1]).toBe('[msg 1] i feel awful\n[msg 2] i feel awful');
+  });
+
+  it('shows three for three — genuine escalating distress is not swallowed', async () => {
+    const windows = await say(router(), ['i feel awful', 'i feel awful', 'i feel awful']);
+    expect(windows[2]).toBe(
+      '[msg 1] i feel awful\n[msg 2] i feel awful\n[msg 3] i feel awful');
+  });
+});
+
+describe('the convention this all rests on', () => {
+  /**
+   * The router appends only when history does not already end with the turn.
+   * That is correct because `runTurn` always appends first — and if that ever
+   * stopped being true, the router would silently under-count a verbatim
+   * repeat rather than fail. So the convention is pinned here, at the pipeline,
+   * rather than assumed in the router.
+   */
+  it('runTurn hands every port a history ending with the current turn', async () => {
+    const seen: { text: string; last: string | undefined }[] = [];
+    const ports = {
+      async classify(text: string, history: SessionState['history']) {
+        seen.push({ text, last: history.at(-1)?.content });
+        return { label: 'SAFE' as const, memory: null, assist: null };
+      },
+      async generate(input: { text: string; state: SessionState }) {
+        seen.push({ text: input.text, last: input.state.history.at(-1)?.content });
+        return 'a reply';
+      },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    const t1 = await runTurn(state({ history: [] }), 'first', ports as never);
+    await runTurn(t1.state, 'second', ports as never);
+    expect(seen).toHaveLength(4);
+    for (const s of seen) expect(s.last, `port saw history ending ${s.last}`).toBe(s.text);
   });
 });

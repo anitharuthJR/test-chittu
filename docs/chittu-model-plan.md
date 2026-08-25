@@ -168,14 +168,53 @@ prose reaching it would have taken a ten-digit mobile number and refused its own
 documented example. Neither was visible for as long as the table had no writers.
 It is now a whitelist of lowercase words and exactly six placeholders.
 
-### Phase 3 — A second provider (≈2–3 days) — **NEXT**
+### Phase 3 — A second provider — **BLOCKED on the vendor's own terms**
 
 `MODEL_CATALOGUE` has one provider. Until it has two, the claim that routing is
 provider-agnostic is untested.
 
-**Take Google Gemini first** (landscape #1). LearnLM was folded into Gemini 2.5,
-it is the only entry in the file that is both API-reachable and purpose-tuned for
-K-12, and expert raters preferred it +31% over GPT-4o for learning.
+~~**Take Google Gemini first** (landscape #1).~~ **This is wrong, and the reason
+is the one this plan applied to OpenAI and did not apply to Google.**
+
+Read on 2026-08-25, verbatim, from <https://ai.google.dev/gemini-api/terms>:
+
+> "You must be 18 years of age or older to use the APIs."
+
+> "You also will not use the Services as part of a website, application, or
+> other service … that is directed towards or is likely to be accessed by
+> individuals under the age of 18."
+
+Chittu is a service directed towards individuals under 18. §3 below rules OpenAI
+out because "OpenAI's own position is that its models are not for under-13s";
+Google's published terms say something stronger and broader, and this plan
+recommended them anyway. **The pedagogy evidence was checked and the contract
+was not.**
+
+Three further facts from the same source, for whoever picks this up:
+
+- **Unpaid tier**: "human reviewers may read, annotate, and process your API
+  input and output", and submitted content trains Google's models. Disqualifying
+  on its own.
+- **Paid tier**: "Google doesn't use your prompts … or responses to improve our
+  products", with logging "for a limited period" for abuse detection. Discussable.
+- `generateContent` is now **legacy**. Its replacement, the Interactions API,
+  "stores all Interaction objects (`store=true`)" by default and retains them
+  **55 days** on the paid tier (<https://ai.google.dev/gemini-api/docs/interactions>).
+  Requirements §9.2 says revocation must propagate, and W5 promises erasure by
+  crypto-shred — which reaches our database and not Google's.
+
+Also worth correcting: **there is no callable `learnlm-*` model id.** LearnLM was
+folded into the Gemini line, so "route homework to LearnLM" names a capability,
+not a model, and `MODEL_CATALOGUE` could never have held it.
+
+**What was done instead**, because it was the part of phase 3 that was neither
+blocked nor speculative: the survey that produced the finding above also turned
+up three defects live in `main`, all of which a second provider would have made
+dangerous. They are fixed, and stripping plus the emptiness check moved into
+`callAdapter` so that **no adapter can forget them** — which is the actual
+substance of "routing is provider-agnostic". See `PORT-REVIEW.md`.
+
+**What must happen before phase 3 resumes** is decision 5 in §5 below.
 
 Work: a `gemini` adapter implementing `ProviderAdapter` (3 members), an entry in
 `MODEL_CATALOGUE`, a `provider_clearance` row per market **after Seat 10 review**,
@@ -270,7 +309,27 @@ Two cautions from the file that bear directly on us:
    means it needs at least two named people who are not each other.
 4. **What is the retention on `metering`?** It holds no content, but it is a
    per-session behavioural record and DPDP bars behavioural monitoring of
-   children. Needs a number, not a default.
+   children. Needs a number, not a default. *With two vendors it also becomes
+   the only per-turn record of which vendor received a given child's turn —
+   `audit_event` seals the trace label and names no provider — so it is the
+   cross-border-transfer evidence a DPIA would ask for.*
+
+5. **Which second provider, now that Google is ruled out by its own terms?**
+   Phase 3 cannot resume without an answer. The options, none of which an
+   engineer should pick alone:
+   - **Vertex AI** (same models, Google Cloud terms rather than the Gemini API
+     Additional Terms, service-account auth, different endpoint). Needs its own
+     terms review — the age clause may not carry over, and that is precisely the
+     thing to check rather than assume.
+   - **A self-hosted open model** — Merlyn Origin Suite (answers only from
+     school-selected curriculum) or Orca-Math 7B for word problems.
+     No vendor terms at all, which removes this whole class of problem, and it
+     is where §12.2 says the classifier belongs anyway. Slower.
+   - **A second Anthropic model as the "second provider"** — honest about what it
+     proves (the cell layer) and what it does not (that the port is
+     vendor-agnostic). Cheap; largely theatre.
+   - **Stop at one provider** and spend phase 3 on phase 4 instead, since the
+     signals from phase 2 have no human surface yet.
 
 ---
 

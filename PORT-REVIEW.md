@@ -647,6 +647,205 @@ the fake vendor logging `CLASSIFY model=claude-haiku-4-5 system=2010b` and
 `SANDBOX model=claude-sonnet-5 system=5206b`, and with the no-model paths
 confirmed to make **zero** vendor calls.
 
+### FIXED (2026-08-25) — three defects found while surveying for a second provider
+
+None of these are about Gemini. All three were live in `main`, and all three
+were invisible because the tests around them used conventions the production
+caller does not.
+
+**1. The child's turn was sent to every vendor cell TWICE.** `runTurn` appends
+the child's turn to `history` before any port is called, and both router paths
+appended `input.text` again. The sandbox body was `[…, user, user]` with the
+last two identical, **from turn one onward** — `runTurn` appends before the
+first port call, so there was never a turn where the two conventions agreed. It
+cost tokens against Anthropic. Whether another vendor would reject two adjacent
+`user` messages outright is *not* established here and is not claimed; it is one
+of the things a second adapter would find out.
+
+`scripts/smoke-dist.mjs` could not have caught it either way: both turns it
+drives (`what is 7 times 8`, `i want to die`) are zero-model paths and never
+reach the router.
+
+The classifier damage is worse and is not cosmetic. The window is three of the
+child's turns, and the point of the window is patterns *across* turns —
+`CLASSIFIER_SYSTEM` says so: "escalating secrecy, boundary-testing, repeated
+distress". Sending the current turn twice pushed a real turn of context out of a
+three-turn window:
+
+```
+[msg 1] second question     <- 'first question' has fallen out
+[msg 2] third question
+[msg 3] third question      <- the same turn again
+```
+
+And it did something worse than that. On the **first turn a child ever sends**,
+with no history at all, the window already read as a repetition:
+
+```
+turn 1, before:  [msg 1] i feel awful | [msg 2] i feel awful
+turn 1, after:   [msg 1] i feel awful
+```
+
+Every turn looked like a repeat to the one layer that escalates on repeats. Two
+tests now drive the real pipeline through the real router with a child saying
+the same sentence two and three times, and assert the window shows exactly what
+was said — because a conditional append is only correct if genuine repetition
+still reaches the classifier.
+
+The prototype pushes once (`chittu-v3.html:1033`, `:1120`) and the router now
+matches it. Both paths append only when the history does not already end with
+the turn, because `generate()` and `classify()` are public ports and a caller
+may hold either convention.
+
+**2. Adapter-side control-token stripping DEFEATED the kernel's.** The kernel's
+`stripControlTokens` *slices* at the last `</think>` and keeps what follows. The
+adapter replaced `<think>` and `</think>` with spaces first — deleting the
+delimiter the kernel needs, so the slice never happened and the reasoning was
+welded onto the answer:
+
+```
+vendor:            <think>she said she wants to die</think>CRISIS
+kernel alone:      CRISIS                                   -> crisis lock fires
+adapter -> kernel: she said she wants to die CRISIS         -> matches nothing
+```
+
+The sandbox's escalation tokens are compared EXACTLY, so that turn locks
+nothing, shows no helplines, flags no parent — and renders the model's reasoning
+about a child's self-harm to that child. L6 does not catch it: it tests for
+banned content, and reasoning is not banned content. `packages/pipeline/src/index.ts:362-363` names this exact
+string — *"a self-hosted model emits `<think></think>CRISIS`, and
+`<think></think>CRISIS` !== `CRISIS`"* — and the guard written for it was being
+disarmed one layer earlier.
+
+Latent for Anthropic, which returns thinking as a separate content block that
+the adapter filters out. Live the moment any vendor emits inline reasoning —
+which is the entire premise of phase 3, and of `chittu-local`.
+
+**The fix is that the adapter now strips NOTHING** and hands the reply over as
+the vendor wrote it. The kernel's slice already runs on the sandbox reply, in
+the pipeline, for every vendor. The adapter's only job was to stop destroying
+its input.
+
+**A first version of this fix was wrong and is worth recording.** It moved
+`stripControlTokens` into the router's `callAdapter` so that it ran for every
+category — "so no adapter can forget". That broke the classifier and lost a
+crisis `main` catches:
+
+```
+verdict: {"label":"CRISIS","memory":null,"assist":"STRUGGLE: pasted </think> at school"}
+  main      -> CRISIS
+  that fix  -> parseClassifier: not JSON  ->  FAST-PATH-ONLY
+```
+
+`i want to disappear` does not trip L1; on that turn L2 is the only wall. The
+slice is correct for prose and wrong for JSON, so it stays on the path that
+carries prose. Caught by an adversarial review before it landed, not by the
+suite — every test in the change was green.
+
+**3. `controlTokens` is a port member that does nothing.** Declared in
+contracts, documented in architecture §12.1 as *"what to strip from THIS
+provider's output"*, set by the one adapter — and read by no code at all.
+Pointing it at a pattern matching nothing breaks zero tests.
+
+**NOT FIXED, deliberately.** Making it live means applying it, and applying it
+as a delete after the kernel's slice re-creates defect 2 for any vendor whose
+delimiters are not `<think>`: no `</think>` to slice on, then the vendor's own
+delimiters deleted, then the reasoning welded back on. Demonstrated in review
+with a ten-line adapter. The field cannot express the difference between a
+DELIMITER (slice, keep what follows) and LITTER (delete), so honouring it
+correctly is a contract change. Recorded here as a known-dead member rather than
+papered over with a live one that is wrong.
+
+**4. `ProviderError.retryable` was hardcoded `true` on the escaping error**,
+including for failures the retry loop had just declined to retry. Nothing reads
+the field today, which is why it survived; §12.3's promised
+fall-back-to-a-cleared-cell policy is exactly what would read it. Fixed: the
+escaping error reports what the loop actually decided.
+
+**Mutations, each verified to go red:**
+
+| mutation | tests that fail |
+|---|---|
+| the adapter strips control tokens again | 3 |
+| the sandbox appends the turn unconditionally | 1 |
+| the classifier window appends unconditionally | 2 |
+| `retryable` hardcoded `true` again | 1 |
+
+---
+
+### KNOWN AND OPEN — two further defects the same review found
+
+Both pre-date this change and neither is fixed here; both are in `main` today.
+
+**The `</think>` slice fires on ONE spelling.** `stripControlTokens` slices on a
+case-sensitive `indexOf('</think>')` while deleting via a `/gi` pattern, so
+`<thinking>`, `<reasoning>`, `<THINK>`, `</think >` and `<tool_call>` are all
+deleted rather than sliced — and weld exactly as `<think>` used to. Driven end
+to end through the shipped adapter and the real pipeline, four of five spellings
+render the model's reasoning to the child with `crisisLock: false`.
+
+This is already pinned as an intended "ported gap" in
+`packages/safety-kernel/src/output-filter.test.ts:244-256`. It is a **kernel**
+change under the port-semantics rule ("changing them is a Guardian Council
+decision, not a port decision"), so it is not made here. What is corrected here
+is the claim: fixing `<think>` closes one spelling, not the class.
+
+**The L6 branch deletes the CHILD's turn, not the model's.**
+`packages/pipeline/src/index.ts` does `history: afterCls.history.slice(0, -1)`
+with the comment *"drop the poisoned turn"* — but the poisoned assistant reply
+was never appended, so the last entry is the child's own message. After an L6
+block the child's words vanish from the classifier's three-turn window, and the
+next sandbox call opens with an `assistant` message. The prototype avoids this
+structurally by keeping `S.recentKid` separate from `S.history`; the port
+collapsed them.
+
+---
+
+### BLOCKED (2026-08-25) — Gemini's own terms forbid the use phase 3 proposes
+
+`docs/chittu-model-plan.md` §3 names Google Gemini as the second provider, on
+the strength of LearnLM's pedagogy record. Before writing the adapter, the
+Gemini API Additional Terms of Service were read. Verbatim, from
+<https://ai.google.dev/gemini-api/terms>:
+
+> "You must be 18 years of age or older to use the APIs."
+
+> "You also will not use the Services as part of a website, application, or
+> other service (collectively, "API Clients") that is directed towards or is
+> likely to be accessed by individuals under the age of 18."
+
+Chittu is a service directed towards individuals under the age of 18. That is
+not a Seat 10 judgement call about residency or retention; it is the published
+contract prohibiting this category of use. The plan was careful to rule OpenAI
+out on exactly this ground (landscape #19, COPPA) and did not apply the same
+test to Google.
+
+Two further facts from the same page, which bear on any successor decision:
+
+> unpaid tier: "To help with quality and improve our products, human reviewers
+> may read, annotate, and process your API input and output."
+
+> paid tier: "Google doesn't use your prompts … or responses to improve our
+> products"
+
+A free-tier call would put a child's turn in front of a human reviewer and into
+Google's training data. Only the paid tier is even discussable.
+
+Separately, `generateContent` is now labelled legacy in favour of an Interactions
+API which, from <https://ai.google.dev/gemini-api/docs/interactions>, "stores all
+Interaction objects (`store=true`)" by default and retains them **55 days** on
+the paid tier. A vendor holding 55 days of a child's turns cannot be reconciled
+with requirements §9.2, where revocation must propagate and W5 promises erasure
+by crypto-shred — a shred reaches our database and not Google's. If Google is
+ever used, it is `generateContent` with its statelessness as the stated reason,
+or the Interactions API with `store=false` and that flag asserted in a test.
+
+**No adapter was written.** Building one against an endpoint we are contractually
+barred from calling would be inventing confidence, and the likely successor —
+Vertex AI under Google Cloud terms — has a different host, a different path and
+service-account auth, so most of what was written would be wrong anyway. The
+decision is recorded in the model plan §5 as a question for a human.
+
 ### NOTED — the classifier cell is a substitution, not the design
 
 §12.2's finding is that there is no kid-safety classifier to buy, and the

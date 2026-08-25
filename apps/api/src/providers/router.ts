@@ -165,7 +165,20 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
   ) {
     const started = Date.now();
     const reply = await adapter.complete(req, decision);
-    // Only after a SUCCESSFUL call. A refused route and a vendor error cost
+    /**
+     * NO CONTROL-TOKEN STRIPPING HERE, and that is deliberate rather than an
+     * omission. A first version of this fix stripped for every category and
+     * broke the classifier: its reply is JSON, and `stripControlTokens` SLICES
+     * at the last `</think>`, so a verdict carrying those characters inside a
+     * string value was cut in half and a correctly-caught CRISIS became a
+     * FAST-PATH-ONLY turn.
+     *
+     * The slice is right for prose and wrong for JSON. The pipeline already
+     * applies it to the sandbox reply and to nothing else, which is the correct
+     * place, and it applies to every vendor because it is above the port.
+     */
+
+    // Only after a SUCCESSFUL call.    // Only after a SUCCESSFUL call. A refused route and a vendor error cost
     // nothing and must not appear as spend.
     onUsage?.({
       category,
@@ -188,9 +201,20 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
       // The window is the child's OWN recent turns, numbered, exactly as the
       // prompt describes. Patterns across messages are the point: escalating
       // secrecy and repeated distress are invisible in a single turn.
-      const recent = [...history.filter((m) => m.role === 'user'), { role: 'user', content: text }]
+      //
+      // `text` is appended ONLY if the history does not already end with it.
+      // The pipeline appends the child's turn to `history` before any port is
+      // called (packages/pipeline/src/index.ts, `withInput`), so appending
+      // unconditionally put the current turn in the window TWICE — showing the
+      // one layer whose job is noticing repeats an artificial repeat on every
+      // single turn, and pushing a real turn of context out of a three-turn
+      // window. The prototype pushes once (chittu-v3.html:1033) and this now
+      // matches it.
+      const turns = history.filter((m) => m.role === 'user').map((m) => m.content);
+      if (turns.at(-1) !== text) turns.push(text);
+      const recent = turns
         .slice(-window)
-        .map((m, i) => `[msg ${i + 1}] ${m.content}`)
+        .map((t, i) => `[msg ${i + 1}] ${t}`)
         .join('\n');
 
       const reply = await callAdapter(adapter, {
@@ -237,12 +261,28 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
         mathMethod: MATH_METHOD[state.board] ?? null,
       });
 
+      /**
+       * The turn goes in ONCE. `state.history` already ends with it — the
+       * pipeline appends before calling any port — so adding `input.text`
+       * unconditionally sent the child's words twice, as two consecutive `user`
+       * messages. Anthropic merges those; other vendors reject the request
+       * outright, which would have surfaced as every turn after the first
+       * failing with `SANDBOX · unavailable` and a child seeing "My words got a
+       * bit tangled there!" forever.
+       *
+       * Conditional rather than simply dropped: `generate()` is a public port
+       * and a caller may hold either convention. It decides from what it was
+       * given rather than from what it assumes.
+       */
+      const messages = state.history.map((m) => ({ role: m.role, content: m.content }));
+      const last = messages.at(-1);
+      if (last === undefined || last.role !== 'user' || last.content !== input.text) {
+        messages.push({ role: 'user' as const, content: input.text });
+      }
+
       const reply = await callAdapter(adapter, {
         system,
-        messages: [
-          ...state.history.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user' as const, content: input.text },
-        ],
+        messages,
         maxTokens: 1000,
       }, decision, category, onUsage);
 
