@@ -21,8 +21,11 @@ import {
   operatorForToken, operatorFor, setOpsCookie, clearOpsCookie,
 } from './auth.js';
 import {
-  FAILURE_CLASSES, LAYERS, TOKENS, loginPage, routingPage, signalsPage,
+  FAILURE_CLASSES, LAYERS, TOKENS, errorPage, loginPage, routingPage, signalsPage, usersPage,
 } from './page.js';
+import {
+  OpsRefused, editChild, editParent, eraseChild, handle, readActions, readUsers,
+} from './users.js';
 import { signalRepo, DuplicateExample, SameEyes, EXAMPLE_SPLITS } from '@chittu/db';
 
 export interface OpsOptions {
@@ -179,6 +182,114 @@ export function opsRoutes(opts: OpsOptions) {
       return reply.code(303).header('location', '/ops/routing').send();
     });
 
+    // ---- users ------------------------------------------------------------
+
+    /**
+     * `page` is the ONLY thing any users route takes from the query string, and
+     * it is clamped rather than validated-then-rejected: a hand-typed
+     * `?page=999` on a two-page console should show page two, not an error.
+     *
+     * NO PARENT OR CHILD ID APPEARS IN A URL, in any position, on any of these
+     * four routes. `req.url` is logged unredacted next to the caller's address
+     * (apps/api/src/logging.ts), so an id in a path or a query string is an id
+     * in a log file — the rule /ops/signals already follows, and the reason the
+     * edit forms are `<details>` blocks rather than `?edit=<uuid>` links.
+     */
+    async function usersView(operator: string, rawPage: string | undefined, extra: {
+      error?: string; notice?: string;
+    } = {}) {
+      const [view, actions] = await Promise.all([
+        readUsers(opts.pool, opts.keys, rawPage),
+        readActions(opts.pool),
+      ]);
+      return usersPage({ operator, view, actions, ...extra });
+    }
+
+    app.get<{ Querystring: { page?: string } }>('/ops/users', async (req, reply) => {
+      const operator = await who(req);
+      if (operator === null) return html(reply, 401, loginPage('Please sign in.'));
+      return html(reply, 200, await usersView(operator, req.query.page));
+    });
+
+    /**
+     * The three writes share this: an `OpsRefused` is a sentence for the
+     * operator and anything else is a 500 that says nothing. That split is the
+     * one /ops/signals had to learn — its `promote()` threw
+     * "below the k-anonymity floor: 7 of 25 sessions", and echoing arbitrary
+     * error text handed a browser the exact number the floor exists to
+     * withhold. So only messages this code wrote for an operator are shown.
+     */
+    async function write(
+      req: FastifyRequest, reply: FastifyReply,
+      run: (operator: string, body: Record<string, string>) => Promise<string>,
+    ) {
+      const operator = await who(req);
+      if (operator === null) return html(reply, 401, loginPage('Please sign in.'));
+      const b = (req.body ?? {}) as Record<string, string>;
+      const page = b['page'];
+      try {
+        const notice = await run(operator, b);
+        return html(reply, 200, await usersView(operator, page, { notice }));
+      } catch (e) {
+        if (e instanceof OpsRefused) {
+          return html(reply, 400, await usersView(operator, page, { error: e.message }));
+        }
+        throw e;
+      }
+    }
+
+    app.post<{ Body: Record<string, string> }>('/ops/users/parent', async (req, reply) =>
+      write(req, reply, async (operator, b) => {
+        await editParent(opts.pool, opts.keys, {
+          parentId: (b['parent_id'] ?? '').trim(),
+          name: b['name'] ?? '', email: b['email'] ?? '',
+          locale: (b['locale'] ?? 'en').trim(),
+        }, {
+          // From the SESSION. An `actor` in the body is ignored, and a test
+          // posts one — this is the field an incident review reads.
+          actor: operator, reason: b['reason'] ?? '',
+        });
+        return 'Parent updated.';
+      }));
+
+    app.post<{ Body: Record<string, string> }>('/ops/users/child', async (req, reply) =>
+      write(req, reply, async (operator, b) => {
+        await editChild(opts.pool, opts.keys, {
+          childId: (b['child_id'] ?? '').trim(),
+          firstName: b['first_name'] ?? '',
+          band: (b['band'] ?? '').trim(),
+          board: b['board'] ?? '',
+          // No `country`. It is not a field on this form and it is not read
+          // here either, so a hand-crafted POST carrying one cannot move a
+          // family into another jurisdiction — see editChild.
+        }, { actor: operator, reason: b['reason'] ?? '' });
+        return 'Child updated.';
+      }));
+
+    /**
+     * Erasure. The confirmation is typed, not clicked.
+     *
+     * This shreds a key and there is no undo, and the console ships no
+     * JavaScript so there is no `confirm()` to fall back on. A second button
+     * would be one mis-click from a crypto-shred, so the operator has to copy
+     * the handle out of the row — which also means they cannot erase the wrong
+     * child by opening the wrong `<details>`.
+     */
+    app.post<{ Body: Record<string, string> }>('/ops/users/erase', async (req, reply) =>
+      write(req, reply, async (operator, b) => {
+        const childId = (b['child_id'] ?? '').trim();
+        if (childId === '') throw new OpsRefused('Pick a child.');
+        if ((b['confirm'] ?? '').trim().toLowerCase() !== handle(childId)) {
+          throw new OpsRefused(
+            'Type the child’s handle exactly to confirm. Nothing was erased.');
+        }
+        const { sessionsEnded } = await eraseChild(opts.pool, childId, {
+          actor: operator, reason: b['reason'] ?? '',
+        });
+        return `Erased. ${sessionsEnded} live session${sessionsEnded === 1 ? '' : 's'} ended, `
+          + 'and the key is shredded.';
+      }));
+
     // ---- signals (phase 4) ------------------------------------------------
 
     /**
@@ -197,9 +308,21 @@ export function opsRoutes(opts: OpsOptions) {
       if (operator === null) return html(reply, 500, loginPage('Something went wrong.'));
       // The message is NOT echoed. Operators get a sentence; the detail is in
       // the log, which is where a detail that might carry a count belongs.
-      return html(reply, 500, await signalsView(operator, {
-        error: 'Something went wrong, and it is in the log rather than on this page.',
-      }));
+      //
+      // Signals renders its own queue back with a banner, because the operator
+      // was mid-triage and losing the queue loses their place. Every other page
+      // gets the plain error shell — re-rendering the signals queue after a
+      // failure on /ops/users would answer a question nobody asked, and would
+      // run three more queries on a request that already failed once.
+      if (req.url.startsWith('/ops/signals') || req.url.startsWith('/ops/examples')) {
+        return html(reply, 500, await signalsView(operator, {
+          error: 'Something went wrong, and it is in the log rather than on this page.',
+        }));
+      }
+      return html(reply, 500, errorPage(
+        operator,
+        req.url.startsWith('/ops/users') ? '/ops/users' : '/ops/routing',
+        'Something went wrong, and it is in the log rather than on this page.'));
     });
 
     async function signalsView(operator: string, extra: {

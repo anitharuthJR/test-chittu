@@ -30,7 +30,7 @@ const FORM = { 'content-type': 'application/x-www-form-urlencoded' };
 describe('the console does not exist unless it is configured', () => {
   it('404s every ops route with no CHITTU_OPS_TOKENS', async () => {
     const app = await server();
-    for (const url of ['/ops', '/ops/routing', '/ops/signals']) {
+    for (const url of ['/ops', '/ops/routing', '/ops/users', '/ops/signals']) {
       expect((await app.inject({ method: 'GET', url })).statusCode).toBe(404);
     }
     for (const url of ['/ops/login', '/ops/signals/promote', '/ops/signals/examples',

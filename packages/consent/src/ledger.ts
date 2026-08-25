@@ -183,10 +183,26 @@ export function revoke(r: ConsentRecord, reason: string, now = new Date()): Cons
   });
 }
 
-/** A change of toggles or band writes a NEW record; the old one is superseded. */
+/**
+ * A change of toggles or band writes a NEW record; the old one is superseded.
+ *
+ * `childFirstName` IS one of the changes this accepts, which is easy to miss:
+ * the name is not a column on `consent_record`, but it IS in `canonicalise`,
+ * so correcting the spelling of a child's name and leaving the record alone
+ * leaves a seal that no longer verifies — and `assertActiveConsent` refuses a
+ * record whose seal does not verify, which signs the family out. Found by
+ * driving an ops edit end to end; the tests did not catch it because nothing
+ * re-read the record through the gate afterwards.
+ *
+ * NOT `country`/`jurisdiction`, deliberately. `law` is chosen FROM the country
+ * at enrolment, so moving one without the other would leave a record claiming
+ * consent was granted under a law that does not apply where the family is.
+ * That is a re-consent, not a correction, and it needs the consent flow.
+ */
 export function supersede(
   previous: ConsentRecord,
-  changes: Partial<Pick<ConsentRecord, 'band' | 'board' | 'memoryOn' | 'learnOn'>>,
+  changes: Partial<Pick<ConsentRecord,
+    'band' | 'board' | 'memoryOn' | 'learnOn' | 'childFirstName'>>,
 ): { previous: ConsentRecord; next: ConsentRecord } {
   if (previous.status !== 'active') {
     throw new ConsentError('only an active consent can be superseded', 'bad-transition');
@@ -208,6 +224,7 @@ export function supersede(
       supersedes: previous.id,
       band: changes.band ?? previous.band,
       board: changes.board ?? previous.board,
+      childFirstName: changes.childFirstName ?? previous.childFirstName,
       memoryOn, learnOn, scopes,
       status: 'active',
       createdAt: now,

@@ -138,10 +138,33 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
           ]);
         const parentId = p.rows[0]!.id;
 
+        /**
+         * DO NOTHING, and this line is a security control.
+         *
+         * It used to be `DO UPDATE SET pin_hash = EXCLUDED.pin_hash,
+         * failed_attempts = 0, locked_until = NULL` — an UNVERIFIED draft
+         * overwrote an existing family's parent PIN. `/v1/consent/draft` takes
+         * no credential and completes no challenge, so the whole attack was:
+         * know the parent's email, POST a draft, choose the PIN.
+         *
+         * The child is the one who knows that email, and the child is holding
+         * the device the consent cookie is on. `/v1/parent/pin/verify` checks
+         * the PIN of whichever parent that cookie resolves to, so the child
+         * then entered their own new PIN, got a `chittu_parent` cookie, and
+         * with it could lift a crisis lock and erase the account — the two
+         * things cookies.ts says "only a correct PIN mints". The real parent's
+         * PIN meanwhile stopped working. Verified end to end before the fix:
+         * new PIN 200, original PIN 401, on the original cookie.
+         *
+         * So a returning parent keeps the PIN they already have. Enrolling a
+         * second child does not change it, and there is deliberately no path
+         * here that can: rotating a PIN is a thing that must prove it is the
+         * parent, which means a route behind the parent session, not a field on
+         * an anonymous form.
+         */
         await tx.query(
           `INSERT INTO parent_pin (parent_id, pin_hash) VALUES ($1, $2)
-           ON CONFLICT (parent_id) DO UPDATE SET pin_hash = EXCLUDED.pin_hash,
-             failed_attempts = 0, locked_until = NULL, rotated_at = now()`,
+           ON CONFLICT (parent_id) DO NOTHING`,
           [parentId, pinHash]);
 
         const c = await tx.query<{ id: string }>(

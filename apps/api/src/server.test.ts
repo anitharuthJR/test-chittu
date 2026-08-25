@@ -671,6 +671,46 @@ describe('parent PIN over HTTP', () => {
     }
   });
 
+  /**
+   * The attack this pins, because it worked: `/v1/consent/draft` takes no
+   * credential and its `parent` upsert matches on the email blind index, so a
+   * draft for an address that already exists reached that family's
+   * `parent_pin` row. It set the PIN and reset the lockout, before any
+   * verification. The child knows the email and is holding the device the
+   * consent cookie is on, so the child could mint a parent session — and a
+   * parent session lifts a crisis lock and erases the account.
+   */
+  it('an unverified draft cannot reset an existing parent PIN', async () => {
+    const email = `resetme${++seq}@example.com`;
+    const { cookie } = await grantConsent({ parentEmail: email });
+
+    const redraft = await app.inject({
+      method: 'POST', url: '/v1/consent/draft',
+      payload: {
+        parentName: 'Lakshmi', parentEmail: email, childFirstName: 'Meera',
+        country: 'IN', band: 'builder', board: 'CBSE', method: 'dev_stub',
+        pin: '7362', pinConfirm: '7362',
+      },
+    });
+    expect(redraft.statusCode, redraft.body).toBe(201);
+
+    const chosen = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '7362' },
+    });
+    expect(chosen.statusCode, 'a PIN chosen by an unverified draft must not work')
+      .toBe(401);
+    expect(chosen.cookies.find((c) => c.name === PARENT_COOKIE)).toBeUndefined();
+
+    // And the real parent is not locked out of their own dashboard. Attempt
+    // four of five: the three failures above have not tripped the lockout.
+    const real = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify',
+      headers: jar(cookie), payload: { pin: '4917' },
+    });
+    expect(real.statusCode, real.body).toBe(200);
+  });
+
   it('verifies the right PIN and refuses the wrong one', async () => {
     const { cookie } = await grantConsent();
     const good = await app.inject({

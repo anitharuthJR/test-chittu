@@ -20,6 +20,7 @@
 import { BANDS, COUNTRIES, type RouterCategory } from '@chittu/contracts';
 import { CATEGORIES, MODEL_CATALOGUE, type ResolvedCells, cellFor } from '../providers/cells.js';
 import { DEFAULT_CELLS } from '../providers/router.js';
+import { handle, type OpsActionRow, type UsersView } from './users.js';
 
 /** "an explorer", "a builder". Small, but the page is read by people. */
 function article(word: string): string {
@@ -72,6 +73,36 @@ form.triage{display:flex;flex-direction:column;gap:.35rem}
 form.triage label{margin:0;display:flex;flex-direction:column;gap:.15rem}
 form.triage button{margin-top:.4rem;padding:.35rem .8rem;font-size:13px}
 td form.triage select{font-size:13px;padding:.3rem .4rem}
+/* Users. Tiles for the totals, and one table where a family is a heavier row
+   with its children indented beneath it — the alternative, two tables joined by
+   a handle, makes an operator do the join in their head. */
+nav.tabs{margin:-.25rem 0 1.5rem;font-size:13px}
+nav.tabs a{color:var(--dim);text-decoration:none;margin-right:1rem;
+  padding-bottom:.2rem;border-bottom:2px solid transparent}
+nav.tabs a:hover{color:var(--accent)}
+nav.tabs a.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));
+  gap:.6rem;margin:.4rem 0 1.5rem}
+.tile{background:#fff;border:1px solid var(--line);border-radius:6px;padding:.65rem .8rem}
+.tile b{display:block;font-size:1.45rem;font-weight:600;line-height:1.25}
+.tile span{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.tile.warn b{color:var(--warn)}
+tr.fam td{background:#f7f6f0;border-top:1px solid var(--line)}
+tr.kid td:first-child{padding-left:1.6rem}
+td.num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+th.num{text-align:right}
+.pager{display:flex;gap:1rem;align-items:center;margin-top:1.1rem;font-size:13px;
+  color:var(--dim)}
+.pager a{color:var(--accent)}
+tr.edit td{background:#fbfaf5;padding:1rem .6rem}
+tr.edit form{max-width:52rem}
+tr.edit form+form{margin-top:1.4rem;padding-top:1.1rem;border-top:1px solid var(--line)}
+form.danger{background:#fdf7f7;border:1px solid #e8cccc;border-radius:6px;padding:.9rem 1rem}
+form.danger strong{color:var(--warn)}
+button.warn{background:var(--warn)}
+a.cancel{margin-left:.9rem;font-size:13px;color:var(--dim)}
+.ok{background:#f2f7f2;border:1px solid #cfe0cf;color:#2f5d2f;
+  padding:.7rem .9rem;border-radius:4px;margin-bottom:1rem}
 `;
 
 function shell(title: string, body: string): string {
@@ -94,6 +125,47 @@ ${error === undefined ? '' : `<div class="err">${esc(error)}</div>`}
   <p class="note">Tokens are configured per operator in the deployment
   environment. There is no self-service reset.</p>
 </form>`);
+}
+
+/**
+ * The console's three pages, and how you get from one to another.
+ *
+ * There was no nav at all: /ops/signals existed and nothing on /ops/routing
+ * linked to it, so it was reachable only by typing the URL. A page nobody can
+ * find is a page nobody reads, which for a triage queue is the same as not
+ * having one.
+ */
+const TABS: readonly (readonly [string, string])[] = Object.freeze([
+  ['/ops/routing', 'Routing'],
+  ['/ops/users', 'Users'],
+  ['/ops/signals', 'Signals'],
+]);
+
+function topbar(operator: string): string {
+  return `<div class="who">${esc(operator)} ·
+  <form method="post" action="/ops/logout"><button type="submit">sign out</button></form></div>`;
+}
+
+function tabs(current: string): string {
+  return `<nav class="tabs">${TABS.map(([href, label]) =>
+    `<a href="${href}"${href === current ? ' class="on"' : ''}>${label}</a>`).join('')}</nav>`;
+}
+
+/**
+ * Something broke and the operator is signed in.
+ *
+ * The message is written HERE, never taken from the error — `/ops/signals`
+ * already learned that lesson the expensive way: `promote()` throws
+ * "below the k-anonymity floor: 7 of 25 sessions", and echoing it handed a
+ * browser the exact number the floor exists to withhold.
+ */
+export function errorPage(operator: string, current: string, message: string): string {
+  return shell('Error', `
+${topbar(operator)}
+<h1>Something went wrong</h1>
+<p class="sub">It is in the log rather than on this page.</p>
+${tabs(current)}
+<div class="err">${esc(message)}</div>`);
 }
 
 export interface RoutingView {
@@ -160,11 +232,11 @@ export function routingPage(v: RoutingView): string {
       }).join('')}</table>`;
 
   return shell('Routing', `
-<div class="who">${esc(v.operator)} ·
-  <form method="post" action="/ops/logout"><button type="submit">sign out</button></form></div>
+${topbar(v.operator)}
 <h1>Routing</h1>
 <p class="sub">Which model answers which turn. Clearance is checked separately,
 per child, and can still refuse a cell chosen here.</p>
+${tabs('/ops/routing')}
 
 ${problems}
 ${v.error === undefined ? '' : `<div class="err">${esc(v.error)}</div>`}
@@ -335,12 +407,12 @@ export function signalsPage(v: SignalsView): string {
            </form>`}</td></tr>`).join('')}</table>`;
 
   return shell('Signals', `
-<div class="who">${esc(v.operator)} ·
-  <form method="post" action="/ops/logout"><button type="submit">sign out</button></form></div>
+${topbar(v.operator)}
 <h1>Signals</h1>
 <p class="sub">Shapes the pipeline handled badly, and the examples authored to fix them.
 A shape appears here only once <strong>25 distinct sessions</strong> have produced it —
 below that there is no shape stored to show.</p>
+${tabs('/ops/signals')}
 
 ${v.error === undefined ? '' : `<div class="err">${esc(v.error)}</div>`}
 
@@ -363,4 +435,278 @@ ${v.operatorCount < 2
        approved: an example needs a reviewer who is not its author. Configure a second
        operator in <code>CHITTU_OPS_TOKENS</code>.</div>` : ''}
 ${review}`);
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+/**
+ * Families — named, counted, editable.
+ *
+ * WHAT IS NOT HERE, and the list is the point. No transcript, no memory fact,
+ * no flag note, no message body, no PIN. The console can tell an operator that
+ * a child sent forty turns and cannot tell them one word of any of them.
+ *
+ * NO ID EVER GOES IN A URL. `req.url` is logged next to the caller's address
+ * (apps/api/src/logging.ts), so an id in a query string is an id in a log file
+ * — the rule /ops/signals already follows. The page number is the only thing in
+ * the query string and a page number is not a subject; every edit and every
+ * erase puts its id in a POST BODY.
+ *
+ * NO SEARCH BOX, still. Not a privacy fig leaf now that names render — a
+ * practical one: `email_hash` is a blind index, and a box that resolves an
+ * address to a family is an oracle for testing guessed addresses. Pagination
+ * reads a page; that is the whole interface.
+ *
+ * THE FORMS ARE PLAIN HTML, and the destructive one is deliberately awkward:
+ * erase needs the child's handle typed back. There is no client JavaScript on
+ * this console to put up a confirm dialog, and "are you sure" as a second
+ * button is one mis-click away from a crypto-shred.
+ */
+
+/** Two-word relative time. An operator scanning a column wants "3d", not a date. */
+function ago(then: Date | null, now: number): string {
+  if (then === null) return '<span style="color:var(--dim)">never</span>';
+  const mins = Math.max(0, Math.round((now - then.getTime()) / 60_000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+/** Zero is real information on this page; it should not shout. */
+function n(value: number): string {
+  return value === 0 ? '<span style="color:var(--dim)">0</span>' : String(value);
+}
+
+function tile(label: string, value: number, warn = false): string {
+  return `<div class="tile${warn && value > 0 ? ' warn' : ''}">
+    <b>${value}</b><span>${esc(label)}</span></div>`;
+}
+
+/** Unreadable is not the same as blank, and the page should say which. */
+function shown(value: string | null, why = 'key shredded'): string {
+  return value === null
+    ? `<span style="color:var(--dim)" title="${esc(why)}">—</span>`
+    : esc(value);
+}
+
+export interface UsersPageView {
+  readonly operator: string;
+  readonly view: UsersView;
+  readonly actions: readonly OpsActionRow[];
+  readonly error?: string | undefined;
+  readonly notice?: string | undefined;
+  /** Injected so the rendered "3d ago" column is testable. */
+  readonly now?: number;
+}
+
+export function usersPage(v: UsersPageView): string {
+  const { totals, parents, page, pageCount } = v.view;
+  const now = v.now ?? Date.now();
+  /**
+   * The page to come back to after a POST, carried in the BODY.
+   *
+   * The first draft of this opened an edit form with `?edit=child:<uuid>`, which
+   * would have put a child id in a URL — and `req.url` is logged unredacted next
+   * to the caller's address. `<details>` does the same job in the browser with
+   * no state in the URL at all, and no JavaScript: the console still ships none.
+   */
+  const back = `<input type="hidden" name="page" value="${page}">`;
+
+  const tiles = [
+    tile('families', totals.parents),
+    tile('children', totals.children),
+    tile('consent active', totals.consentActive),
+    tile('awaiting proof', totals.consentPending),
+    tile('revoked', totals.consentRevoked),
+    tile('sessions', totals.sessions),
+    tile('turns', totals.messages),
+    tile('active 24h', totals.activeToday),
+    tile('spine turns', totals.spine),
+    tile('crisis locks', totals.crisisLocks, true),
+    tile('locks still on', totals.locksOpen, true),
+    tile('flags open', totals.flagsOpen, true),
+    tile('memories', totals.memories),
+    tile('live now', totals.sessionsLive),
+  ].join('');
+
+  const COLS = 9;
+
+  /** The parent's own edit form, collapsed until an operator opens it. */
+  const parentForm = (p: UsersView['parents'][number]): string => `
+    <tr class="edit"><td colspan="${COLS}">
+      <details><summary>Edit family ${esc(handle(p.id))}</summary>
+      <form method="post" action="/ops/users/parent">
+        <input type="hidden" name="parent_id" value="${esc(p.id)}">${back}
+        <div class="row">
+          <div><label for="pn-${esc(handle(p.id))}">Parent name</label>
+            <input id="pn-${esc(handle(p.id))}" name="name" type="text"
+              value="${esc(p.name ?? '')}"></div>
+          <div><label for="pe-${esc(handle(p.id))}">Email</label>
+            <input id="pe-${esc(handle(p.id))}" name="email" type="text"
+              value="${esc(p.email ?? '')}"></div>
+          <div style="flex:0 0 7rem"><label for="pl-${esc(handle(p.id))}">Locale</label>
+            <input id="pl-${esc(handle(p.id))}" name="locale" type="text"
+              value="${esc(p.locale)}"></div>
+        </div>
+        <label for="pr-${esc(handle(p.id))}">Reason</label>
+        <input id="pr-${esc(handle(p.id))}" name="reason" type="text"
+          placeholder="why this change, in a sentence someone reading an incident review would want">
+        <button type="submit">Save</button>
+        <p class="note">Recorded against <strong>${esc(v.operator)}</strong>. The email is
+        also a blind index, so both move together — an address changed in one place
+        and not the other makes a parent unfindable by their own email.</p>
+      </form></details></td></tr>`;
+
+  /** A child's edit form, plus the erase form beneath it. */
+  const childForm = (c: UsersView['parents'][number]['children'][number]): string => {
+    const h = esc(handle(c.id));
+    return `
+    <tr class="edit"><td colspan="${COLS}">
+      <details><summary>Edit or erase child ${h}</summary>
+      <form method="post" action="/ops/users/child">
+        <input type="hidden" name="child_id" value="${esc(c.id)}">${back}
+        <div class="row">
+          <div><label for="cn-${h}">Child first name</label>
+            <input id="cn-${h}" name="first_name" type="text" value="${esc(c.firstName ?? '')}"></div>
+          <div><label for="cb-${h}">Band</label>
+            <select id="cb-${h}" name="band">${options([...BANDS], c.band)}</select></div>
+          <div><label for="cd-${h}">Board</label>
+            <input id="cd-${h}" name="board" type="text" value="${esc(c.board)}"></div>
+        </div>
+        <label for="cr-${h}">Reason</label>
+        <input id="cr-${h}" name="reason" type="text"
+          placeholder="why this change, in a sentence someone reading an incident review would want">
+        <button type="submit">Save</button>
+        <p class="note">Saving writes a NEW consent version that supersedes the current
+        one — the name, the band and the board are all covered by the record's seal, so
+        a correction has to be re-sealed rather than edited in place. The family stays
+        signed in; the bearer token moves to the new version in the same transaction.
+        Country is not editable here: the law a consent was granted under is chosen from
+        it, so moving a family between jurisdictions is a re-consent, not a correction.</p>
+      </form>
+
+      <form method="post" action="/ops/users/erase" class="danger">
+        <input type="hidden" name="child_id" value="${esc(c.id)}">${back}
+        <strong>Erase this child</strong>
+        <p class="note">Shreds the encryption key and drops every message, memory and
+        flag. There is no undo: the key is gone, so the ciphertext is gone with it. The
+        consent ledger stays, as proof a consent existed and was withdrawn. Normally
+        this is a parent's decision behind their own PIN.</p>
+        <div class="row">
+          <div><label for="ec-${h}">Type <code>${h}</code> to confirm</label>
+            <input id="ec-${h}" name="confirm" type="text" autocomplete="off"></div>
+          <div><label for="er-${h}">Reason</label>
+            <input id="er-${h}" name="reason" type="text"
+              placeholder="who asked, and how you know it was them"></div>
+        </div>
+        <button type="submit" class="warn">Erase permanently</button>
+      </form>
+      </details></td></tr>`;
+  };
+
+  const rows = parents.length === 0
+    ? `<tr><td colspan="${COLS}" class="note">No families yet.</td></tr>`
+    : parents.map((p) => {
+      const kids = p.children.length;
+      const fam = `<tr class="fam">
+        <td class="mono"><strong>${esc(handle(p.id))}</strong>${
+  p.erased ? ' <span class="tag default">erased</span>' : ''}</td>
+        <td><strong>${shown(p.name)}</strong><br>
+          <span style="color:var(--dim)">${shown(p.email)}</span></td>
+        <td>${kids} ${kids === 1 ? 'child' : 'children'}
+          <span class="mono" style="color:var(--dim)">${esc(p.locale)} · ${
+  esc(p.createdAt.toISOString().slice(0, 10))}</span></td>
+        <td class="num">${n(p.sessions)}</td>
+        <td class="num">${n(p.messages)}</td>
+        <td class="num">${n(p.memories)}</td>
+        <td class="num">${n(p.flagsOpen)}</td>
+        <td class="num">${n(p.locks)}</td>
+        <td>${ago(p.lastSeen, now)}</td></tr>`;
+
+      const children = p.children.length === 0
+        ? `<tr class="kid"><td colspan="${COLS}" class="note">Enrolled, no child record —
+             a draft consent that was never completed.</td></tr>`
+        : p.children.map((c) => {
+          const row = `<tr class="kid">
+          <td class="mono" style="color:var(--dim)">↳ ${esc(handle(c.id))}${
+  c.erased ? ' <span class="tag default">erased</span>' : ''}</td>
+          <td>${shown(c.firstName)}</td>
+          <td>${esc(c.band)} · ${esc(c.country)} ·
+            <span class="tag${c.consentStatus === 'active' ? '' : ' default'}">${
+  esc(c.consentStatus ?? 'none')}</span>
+            <span class="mono" style="color:var(--dim)">${esc(c.board)}${
+  c.memoryOn === true ? ' · memory' : ''}${c.learnOn === true ? ' · learning' : ''}</span></td>
+          <td class="num">${n(c.sessions)}${
+  c.live > 0 ? ` <span class="tag">${c.live} live</span>` : ''}</td>
+          <td class="num" title="${c.spine} spine turn${c.spine === 1 ? '' : 's'}, ${
+  c.readAttempts} reading attempt${c.readAttempts === 1 ? '' : 's'}">${n(c.messages)}</td>
+          <td class="num">${n(c.memories)}</td>
+          <td class="num" title="${c.flagsTotal} total">${n(c.flagsOpen)}</td>
+          <td class="num">${n(c.locks)}</td>
+          <td>${ago(c.lastSeen, now)}</td></tr>`;
+          // An erased child has a shredded key: there is nothing left to edit,
+          // and nothing left to erase.
+          return row + (c.erased ? '' : childForm(c));
+        }).join('');
+
+      return fam + (p.erased ? '' : parentForm(p)) + children;
+    }).join('');
+
+  const log = v.actions.length === 0
+    ? '<p class="note">No operator has changed a family yet.</p>'
+    : `<table><tr><th>when</th><th>who</th><th>what</th><th>subject</th>
+         <th>fields</th><th>why</th></tr>${
+  v.actions.map((a) => `<tr>
+      <td class="mono" style="white-space:nowrap">${
+  esc(a.createdAt.toISOString().slice(0, 16).replace('T', ' '))}</td>
+      <td>${esc(a.actor)}</td>
+      <td class="mono">${esc(a.action)}</td>
+      <td class="mono">${esc(a.subject)} ${esc(handle(a.subjectId))}</td>
+      <td class="mono" style="color:var(--dim)">${
+  a.fields.length === 0 ? '—' : esc(a.fields.join(', '))}</td>
+      <td>${esc(a.reason)}</td></tr>`).join('')}</table>`;
+
+  const pager = pageCount <= 1 ? '' : `<div class="pager">
+    ${page > 1 ? `<a href="/ops/users?page=${page - 1}">← newer</a>` : '<span>← newer</span>'}
+    <span>page ${page} of ${pageCount}</span>
+    ${page < pageCount ? `<a href="/ops/users?page=${page + 1}">older →</a>` : '<span>older →</span>'}
+  </div>`;
+
+  return shell('Users', `
+${topbar(v.operator)}
+<h1>Users</h1>
+<p class="sub">Who is using Chittu, how much, and the record of every change made
+from here. Newest family first.</p>
+${tabs('/ops/users')}
+
+${v.error === undefined ? '' : `<div class="err">${esc(v.error)}</div>`}
+${v.notice === undefined ? '' : `<div class="ok">${esc(v.notice)}</div>`}
+
+<div class="tiles">${tiles}</div>
+
+<h2>Families</h2>
+<table>
+  <tr><th>handle</th><th>who</th><th>details</th><th class="num">sessions</th>
+      <th class="num">turns</th><th class="num">memories</th><th class="num">flags</th>
+      <th class="num">locks</th><th>last seen</th></tr>
+  ${rows}
+</table>
+${pager}
+<p class="note">There is no transcript, no memory fact, no flag note and no message
+body anywhere on this page: turn counts come from the session counter, so nothing
+here reads a child's messages. There is no search box either — the parent email is
+stored as a blind index, and a box that resolves an address to a family is an
+oracle for testing guessed addresses. A dash means a value could not be decrypted,
+which for a parent means the first child's key has been shredded.</p>
+
+<h2>What operators have changed</h2>
+${log}
+<p class="note">Append-only, and the actor comes from the signed-in token rather
+than from anything typed into a form. It records which fields moved, never what
+they became — an audit row holding an old email address would be a copy of the one
+adult identifier we hold, in a table with no key to shred.</p>`);
 }
