@@ -120,7 +120,7 @@ If anything is missing, the transcript is in `/var/log/cloud-init-output.log`.
 ## 4. Ship a build — from the Mac, repeated per update
 
 The box never compiles anything. Apple-silicon Macs are arm64, the same architecture as
-t4g, so the image built for `pnpm verify --with-container` runs there natively. (If ever
+t4g, so the image `pnpm verify` builds in its container lane runs there natively. (If ever
 building from an x86 machine instead: `docker buildx build --platform linux/arm64`.)
 
 ```bash

@@ -2,13 +2,19 @@
 #
 # Everything CI used to run, in one command.
 #
-#   pnpm verify                   # everything except building the image
-#   pnpm verify --with-container  # adds build-the-image + drive-it
+#   pnpm verify                 # everything, including building the image
+#   pnpm verify --no-container  # skip the slow lane when you know you can
 #
-# ALL LANES NEED DOCKER now. `--with-pg` was removed on 2026-08-25 along with
+# ALL LANES NEED DOCKER. `--with-pg` was removed on 2026-08-25 along with
 # PGlite: the suite runs on a real Postgres, so the lane it used to add is the
-# lane `pnpm test` already is. `--with-container` is still separate because it
-# builds the image, which is minutes rather than seconds.
+# lane `pnpm test` already is.
+#
+# THE CONTAINER LANE IS NOT OPTIONAL ANY MORE, and #66 is why. It is the only
+# lane that drives the artifact that ships, it sat behind `--with-container`
+# with no CI to pass that flag, and so an image that could not boot at all —
+# `ERR_MODULE_NOT_FOUND` on its first line — shipped for eight commits while
+# 1881 tests stayed green. A check nobody runs is not a check. It costs
+# minutes; a dead container costs a deploy.
 #
 # GitHub Actions was removed on 2026-08-25 — it had been failing every run at 3s
 # with "the job was not started because recent account payments have failed", so
@@ -22,9 +28,20 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-WITH_CONTAINER=0
+WITH_CONTAINER=1
+
+# The container lane gets its OWN compose project, and that is a safety
+# property rather than tidiness. It tears down with `down -v`, and compose.yaml
+# pins `name: chittu` — the ONE dev database every worktree shares (#59). Run
+# under that name by default and every verify wipes everyone's dev data.
+export VERIFY_PROJECT=chittu-verify
+
 for arg in "$@"; do
   case "$arg" in
+    --no-container)   WITH_CONTAINER=0 ;;
+    # Both were the way to ASK for this lane. They now ask for what they
+    # already have, so they stay parseable rather than becoming "unknown flag"
+    # — same courtesy the removed --with-pg gets below.
     --with-container) WITH_CONTAINER=1 ;;
     --all)            WITH_CONTAINER=1 ;;
     # Named explicitly rather than falling into "unknown flag", because it was a
@@ -83,23 +100,15 @@ else
 fi
 
 if [ "$WITH_CONTAINER" -eq 1 ]; then
-  # Builds the image and DRIVES it: consent -> session -> maths -> crisis, on a
-  # real Postgres, against the distroless runtime. The only lane that exercises
-  # the artifact that actually ships.
-  step "container + smoke" bash -c '
-    docker compose --profile dev down -v >/dev/null 2>&1
-    docker compose --profile dev up -d --build || exit 1
-    for i in $(seq 1 90); do
-      curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 && break
-      [ "$i" = 90 ] && { echo "api never became healthy"; docker compose --profile dev logs api | tail -30; docker compose --profile dev down -v >/dev/null 2>&1; exit 1; }
-      sleep 1
-    done
-    node scripts/smoke-dist.mjs http://127.0.0.1:8080
-    rc=$?
-    docker compose --profile dev down -v >/dev/null 2>&1
-    exit $rc'
+  # Builds the image and DRIVES it. The only lane that exercises the artifact
+  # that actually ships, and the reason it is no longer optional is #66: an
+  # image that could not boot shipped for eight commits because nothing passed
+  # --with-container. Its own file, because it grew past a bash -c string —
+  # and two of its details (its own project, its own ports) are what let it run
+  # beside the parallel worktrees this repo is used through.
+  step "container + smoke" bash scripts/verify-container.sh
 else
-  printf '\n\033[2m── container lane skipped (pass --with-container to include it)\033[0m\n'
+  printf '\n\033[2m── container lane SKIPPED by --no-container — the artifact that ships is unverified\033[0m\n'
 fi
 
 printf '\n────────────────────────────────────────\n'

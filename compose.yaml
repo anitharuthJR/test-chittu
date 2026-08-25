@@ -67,6 +67,17 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+      # start_period, because a COLD volume fails this check for a reason that
+      # is not failure. pgvector's entrypoint runs initdb, starts a TEMPORARY
+      # server to apply it, then shuts that server down to start the real one —
+      # and `pg_isready` passes against the temporary one and then fails through
+      # the shutdown. At interval 2s x 20 retries with no start_period, those
+      # probes burn the whole retry budget and compose declares the container
+      # unhealthy, so `depends_on: service_healthy` gives up on a database that
+      # was seconds from being fine. Failures inside this window do not count;
+      # the container still goes healthy the moment a probe succeeds, so a
+      # generous value costs a working start nothing.
+      start_period: 60s
 
   # --------------------------------------------------------------- dev stack ---
   # Its own database, on its own port and a real volume: this one is meant to
@@ -88,6 +99,17 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+      # start_period, because a COLD volume fails this check for a reason that
+      # is not failure. pgvector's entrypoint runs initdb, starts a TEMPORARY
+      # server to apply it, then shuts that server down to start the real one —
+      # and `pg_isready` passes against the temporary one and then fails through
+      # the shutdown. At interval 2s x 20 retries with no start_period, those
+      # probes burn the whole retry budget and compose declares the container
+      # unhealthy, so `depends_on: service_healthy` gives up on a database that
+      # was seconds from being fine. Failures inside this window do not count;
+      # the container still goes healthy the moment a probe succeeds, so a
+      # generous value costs a working start nothing.
+      start_period: 60s
 
   # Runs to completion, then exits. The API waits for it rather than migrating
   # itself: bootstrapDb() deliberately does NOT migrate the Postgres path, because

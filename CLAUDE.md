@@ -141,8 +141,30 @@ Read these two documents before any non-trivial change — they are the authorit
   signal). `scripts/verify.sh` runs exactly what CI ran: typecheck, the full suite, the web
   bundle budget, Playwright, the guard grader, corpus leakage and the L1 crisis gate.
   Every lane needs Docker: the suite runs on a real Postgres and `pnpm test` starts the
-  container itself. `--with-container` additionally builds the image and drives it. There is no second pair of eyes now, so running it is the whole
-  quality gate.
+  container itself. **The container lane — build the image, drive it — now runs by
+  DEFAULT**; `--no-container` skips it and says so in the output. It was opt-in behind
+  `--with-container` while no CI existed to pass that flag, which is how an image that
+  could not boot shipped for eight commits (#66). It runs under its own compose project
+  (`chittu-verify`), because it tears down with `down -v` and the shared `chittu` project
+  is where the one dev database lives. There is no second pair of eyes now, so running it
+  is the whole quality gate.
+  - **The container lane starts COLD every run, which is why `compose.yaml`'s postgres
+    healthchecks carry `start_period`.** pgvector's entrypoint runs `initdb`, starts a
+    TEMPORARY server to apply it, then shuts that down to start the real one — and
+    `pg_isready` passes against the temporary server and then fails through the shutdown.
+    At `interval: 2s` x `retries: 20` with no `start_period`, those probes burn the whole
+    budget and compose calls the container unhealthy, so `depends_on: service_healthy`
+    gives up on a database seconds from being fine. The warm shared databases almost never
+    hit it; a lane that always starts from a fresh volume hits it every time.
+  - `scripts/verify-container.sh` + `compose.verify.yaml` are the lane. The overlay drops
+    the fixed host ports (ephemeral for the api, none for the database) and the script runs
+    under project `chittu-verify` — **both are why it can run beside the parallel worktrees
+    this repo is used through**, and the project name is also what keeps its `down -v` off
+    the shared `chittu-dev-data`. `apps/api/src/verify-lanes.test.ts` pins all of it —
+    defaulting the lane back OFF must fail 1 test, dropping `-p "$PROJECT"` must fail 1,
+    pointing the project at `chittu` must fail 1, dropping the overlay from the compose
+    calls must fail 1, removing `!override` must fail 2, and removing the teardown trap
+    must fail 1.
 - **`pnpm test` proves nothing about the artifact that ships.** Tests resolve `@chittu/*`
   through the `development` export condition — the SOURCES. The container runs `dist/*.js`
   through the `default` condition: different files, a different resolver, different rules.
@@ -151,7 +173,7 @@ Read these two documents before any non-trivial change — they are the authorit
   what Node's ESM resolver requires and what a consumer compiling against a generated
   `.d.ts` under `moduleResolution: nodenext` demands. Extensionless resolves under vitest and
   Vite and nowhere else. `pnpm verify` has a `compile to dist` lane for the cheap half, and
-  `scripts/smoke-dist.mjs` (via `--with-container`) drives the real thing.
+  `scripts/smoke-dist.mjs` (the container lane, now on by default) drives the real thing.
 - **`apps/api/Dockerfile` enumerates workspace packages BY HAND, in two lists, and a
   package missing from either is invisible until the container boots.** The manifests
   copied in `base`, and the `dist` directories copied into the runtime. `@chittu/reading-coach`

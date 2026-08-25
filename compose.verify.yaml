@@ -1,0 +1,36 @@
+# Overlay for the `pnpm verify` container lane. Never used on its own:
+#
+#   docker compose -f compose.yaml -f compose.verify.yaml -p chittu-verify ...
+#
+# WHY THIS FILE EXISTS. The lane became part of `pnpm verify` by default (#66),
+# and compose.yaml publishes FIXED host ports — 8080 for the api, 55433 for the
+# dev database. This repository is worked through 2-3 parallel worktrees that
+# all share the pinned `chittu` project (#59), so at any moment another session
+# may have the dev stack up and those ports taken. Opt-in, that was a flag you
+# typed knowing the cost. Default, it makes the quality gate fail for a reason
+# that has nothing to do with the code under test — and a gate that goes red on
+# its own is a gate people learn to ignore.
+#
+# So the lane binds nothing anyone else wants:
+#
+#   - the api publishes an EPHEMERAL host port (a bare container port, so Docker
+#     picks a free one). `docker compose port api 8080` reports which, and the
+#     smoke run is pointed at it.
+#   - the dev database publishes NOTHING. Only the api talks to it, over the
+#     project's own network, and a published port would be one more thing to
+#     collide with for no gain.
+#
+# `!override` rather than a plain list, because compose MERGES sequences by
+# default: without it these would be added to the fixed ports instead of
+# replacing them, and the lane would still try to bind 8080.
+#
+# The lane also runs under its own project name, which is what keeps its
+# teardown (`down -v`) away from the shared `chittu-dev-data` volume. See
+# scripts/verify-container.sh.
+services:
+  postgres-dev:
+    ports: !override []
+
+  api:
+    ports: !override
+      - '8080'

@@ -22,8 +22,9 @@
  * This is the failure CLAUDE.md already names — "`pnpm test` proves nothing
  * about the artifact that ships" — recurring for the second time, because the
  * first fix was a rule for humans to remember rather than a test. The container
- * lane catches it, but it is behind `--with-container`, it needs Docker and
- * several minutes, and CI was removed on 2026-08-25. Nothing cheap failed.
+ * lane does catch it — but it was opt-in behind `--with-container`, and CI was
+ * removed on 2026-08-25, so nothing passed that flag and nothing cheap failed.
+ * That lane runs by default now; this file is still the fast half of the answer.
  *
  * This is the cheap thing. It reads the Dockerfile as text and asserts the two
  * lists still cover `packages/`, so the next package added is a red test in

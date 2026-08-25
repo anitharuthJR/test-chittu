@@ -191,8 +191,8 @@ compiled fine, because it does `COPY packages ./packages` wholesale.
 **1881 tests were green throughout.** This is the failure CLAUDE.md already names —
 "`pnpm test` proves nothing about the artifact that ships" — happening a second time,
 because the first fix was a rule for humans rather than a test. The container lane does
-catch it, but it is behind `--with-container`, needs Docker and minutes, and CI was
-removed on 2026-08-25, so nothing cheap ran. `apps/api/src/dockerfile-workspace.test.ts`
+catch it, but it was behind `--with-container`, needs Docker and minutes, and CI was
+removed on 2026-08-25, so nothing cheap ran. That lane is on by DEFAULT now. `apps/api/src/dockerfile-workspace.test.ts`
 is the cheap thing now: it fails in milliseconds if either list stops covering
 `packages/`, and it failed 3 before the fix.
 
