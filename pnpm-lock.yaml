@@ -44,6 +44,9 @@ importers:
       '@chittu/pipeline':
         specifier: workspace:*
         version: link:../../packages/pipeline
+      '@chittu/reading-coach':
+        specifier: workspace:*
+        version: link:../../packages/reading-coach
       '@chittu/safety-kernel':
         specifier: workspace:*
         version: link:../../packages/safety-kernel
@@ -72,6 +75,9 @@ importers:
       '@chittu/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@chittu/reading-coach':
+        specifier: workspace:*
+        version: link:../../packages/reading-coach
       '@preact/signals':
         specifier: ^2.0.0
         version: 2.11.1(preact@10.29.8)
@@ -181,12 +187,25 @@ importers:
       '@chittu/pedagogy':
         specifier: workspace:*
         version: link:../pedagogy
+      '@chittu/reading-coach':
+        specifier: workspace:*
+        version: link:../reading-coach
       '@chittu/safety-kernel':
         specifier: workspace:*
         version: link:../safety-kernel
       '@chittu/seal':
         specifier: workspace:*
         version: link:../seal
+
+  packages/reading-coach:
+    dependencies:
+      '@chittu/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@chittu/safety-kernel':
+        specifier: workspace:*
+        version: link:../safety-kernel
 
   packages/safety-kernel:
     dependencies:

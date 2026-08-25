@@ -24,6 +24,14 @@ export function StatsPanel({ d }: { d: DashboardResponse }): preact.JSX.Element 
     // The prototype called these "spines". A parent should not have to learn
     // our vocabulary to read their own dashboard.
     ['Scripted safety replies', d.stats.spines],
+    // D5's reading stat, formatted as the prototype formatted it
+    // (chittu-v3.html:1190): a percentage plus the sentence count, or an
+    // em dash before the first attempt. Computed from aggregates — the words
+    // a child read or misread are not in this payload.
+    ['Reading accuracy', d.stats.readingWords > 0
+      ? `${Math.round((d.stats.readingHits / d.stats.readingWords) * 100)}% `
+        + `(${d.stats.readingAttempts} sent.)`
+      : '—'],
   ];
   return (
     <section class="card">

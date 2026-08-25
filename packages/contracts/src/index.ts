@@ -208,6 +208,28 @@ export interface TurnSignal {
   readonly failureClass: 'CLASSIFIER_PARSE' | 'L6_CATCH' | null;
 }
 
+/**
+ * One passage word, marked heard-or-not by the local scorer.
+ *
+ * `word` is always the PASSAGE's word — static bank content — never the
+ * child's transcript. The client renders these spans green/red and decides
+ * nothing: hit and miss were decided server-side, deterministically.
+ */
+export interface ReadingWord {
+  readonly word: string;
+  readonly hit: boolean;
+}
+
+/** The reading coach's scoring payload, present only on a scored read turn. */
+export interface ReadingResult {
+  readonly passageId: string;
+  readonly words: readonly ReadingWord[];
+  readonly hits: number;
+  readonly total: number;
+  /** The scripted score line ("🌟 7 of 8 words — great reading!"). */
+  readonly line: string;
+}
+
 export interface TurnResponse {
   readonly blocks: readonly Block[];
   /** Human-readable provenance, shown in the trace strip. */
@@ -217,6 +239,13 @@ export interface TurnResponse {
   readonly crisisLock: boolean;
   readonly flags: readonly Flag[];
   readonly memorySaved?: Memory;
+  /**
+   * Present ONLY when the reading coach scored this turn. Absent means the
+   * turn ended somewhere earlier — a guard fired on the transcript, or the
+   * session is crisis-locked — and the client must render the blocks exactly
+   * as it would a chat turn's.
+   */
+  readonly reading?: ReadingResult;
 }
 
 // ---------------------------------------------------------------------------

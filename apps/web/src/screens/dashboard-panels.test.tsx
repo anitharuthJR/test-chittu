@@ -29,6 +29,7 @@ const base: DashboardResponse = {
     sessions: 3, messages: 42, spines: 2, memories: 5,
     crisisLocked: false,
     firstSeen: '2026-08-01T09:00:00.000Z', lastSeen: '2026-08-24T18:00:00.000Z',
+    readingAttempts: 2, readingWords: 16, readingHits: 15,
   },
   sessions: [{
     id: 's1', band: 'builder', startedAt: '2026-08-24T18:00:00.000Z',
@@ -53,6 +54,23 @@ describe('StatsPanel', () => {
     // "spines" is our word. A parent should not have to learn it.
     expect(screen.getByText(/scripted safety replies/i)).toBeTruthy();
     expect(screen.queryByText(/spine/i)).toBeNull();
+  });
+
+  it('shows reading accuracy as the prototype formatted it (D5)', () => {
+    render(<StatsPanel d={base} />);
+    // 15/16 words = 94%, across 2 sentences.
+    expect(screen.getByText('94% (2 sent.)')).toBeTruthy();
+    expect(screen.getByText(/reading accuracy/i)).toBeTruthy();
+  });
+
+  it('shows an em dash before the first attempt, never NaN', () => {
+    const none = {
+      ...base,
+      stats: { ...base.stats, readingAttempts: 0, readingWords: 0, readingHits: 0 },
+    };
+    render(<StatsPanel d={none} />);
+    expect(screen.getByText('—')).toBeTruthy();
+    expect(screen.queryByText(/NaN/)).toBeNull();
   });
 });
 

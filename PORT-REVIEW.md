@@ -1556,3 +1556,101 @@ change those too.
 
 Mutation-tested: RECOVER fails 7, DROP fails 7, and four of the seven are the
 prototype-agreement tests — which is the tripwire that stops a kernel-only fix.
+
+---
+
+## The reading coach (D2 RM→RC, ported 2026-08-25)
+
+`packages/reading-coach` + `POST /v1/session/:id/read` + the client's read mode.
+The bank and the scorer are the prototype's, verbatim (`READING_BANK` at
+chittu-v3.html:467, `normWord`/`scoreReading` at :982). Scoring is deterministic
+and local — the maths-engine argument: a scorer that hallucinates a miss teaches
+a child they got it wrong when they did not. Zero model calls on a reading turn
+is proved by counting against injected ports (pipeline and API level) and by the
+metering table staying empty, never by inspection.
+
+### CHANGED FROM THE PROTOTYPE — the transcript now passes L1, and the lock now outranks reading
+
+Two orderings were corrected, both in the safe direction, both directed rather
+than discovered:
+
+1. **The prototype scored a read-aloud attempt BEFORE the L1 fast path** — its
+   read-mode dispatcher (:1046) sits above the lexicon (:1061), so a transcript
+   containing a crisis phrase was scored as reading and nothing else. D2-as-drawn
+   agrees with the prototype (RM→RC routes around L1). The port corrects both: a
+   reading turn walks SEAL → CRISIS_LOCK → READ → L1_LEXICON, and only a clean
+   transcript reaches the scorer. A child reading aloud can say something that
+   needs the crisis spine, and "they were only reading" is not a reason to skip
+   a layer. `PIPELINE_ORDER` already declared READ in exactly this position, so
+   the contract anticipated the correction even though nothing implemented it.
+
+2. **The prototype's read-mode dispatcher also sits above its crisis-lock check**
+   (:1046 vs :1055), so a crisis-locked child could keep being scored. The port
+   runs CRISIS_LOCK first; a locked session answers every read attempt with the
+   calm-mode script and no scoring.
+
+The passage bank carries the mirror-image obligation: `reading-coach`'s tests
+assert every passage passes `scan()` clean, because a bank sentence that trips a
+guard would crisis-lock a child for reading exactly what we asked them to read —
+the over-firing harm, built in.
+
+### CHANGED FROM THE PROTOTYPE — read mode has no typed path
+
+The prototype kept the text input in read mode and answered typed text with a
+"use the microphone" nudge (:1051) — which means typed text in read mode reached
+NO guard at all: not scored, not chatted, not scanned. The port replaces the
+composer with the mic panel in read mode. Typing is impossible, so both problems
+(the unguarded typed path, and typing the passage as a way around the practice)
+are removed rather than handled. Chips are still dispatched locally, exactly as
+the prototype did — "Next sentence!" is a tap, not an utterance, and never
+becomes a model turn.
+
+### NOTED — smaller deviations, each on purpose
+
+- **Celebration branches on `hits === total`, not `pct === 100`.** The rounded
+  percentage can reach 100 with a miss at ~200 words; unreachable at bank
+  lengths, but "you read every single word" must never be said over a rounded
+  miss.
+- **`S.reading.tries` was dead in the prototype** — written, never read. Not
+  ported.
+- **The intro line is a system message, not Chittu-voice.** The prototype's
+  addChittu intro would have meant client-authored Chittu copy, which this port
+  has kept server-side everywhere; Chittu's voice (celebrate/practice) comes
+  from the API's blocks.
+- **The bank ships in the client bundle, deliberately.** Passages are content a
+  child is shown, like the starters — not a guard list. `L1_PATTERNS` stays
+  server-side; nothing changed there.
+- **Teens read too.** The three counters are aggregates (attempts/words/hits)
+  and move for every band; a thinker's transcript body is refused by
+  `teen_bodies_are_never_stored` exactly as chat bodies are, asserted in
+  `read.test.ts`.
+
+### ANSWERED — the speak() re-check this file asked for
+
+"Every output channel guards, not just the visible one — should be checked again
+when the reading coach lands." Checked: the read path's spoken output is the
+response's blocks through the SAME guarded `speak()` as chat; the passage card
+renders static bank words; the score line is server-scripted copy carried in a
+typed field. No new channel renders or speaks raw model text, because no model
+runs.
+
+### MUTATION-TESTED — the three guards this feature adds, broken on purpose
+
+Run 2026-08-25, each reverted after going red:
+
+- **Skip L1 for a reading turn** (`if (kind && !read)` — the prototype's exact
+  shape): fails 1 test, and it is the doctrine test ("a crisis phrase in the
+  transcript fires the spine, not the scorer").
+- **Disable the scorer** (read attempts fall through to classifier + sandbox):
+  fails 6, including both ZERO-models counting proofs.
+- **Count guarded attempts** (recordReading made unconditional): fails 1 — the
+  API test asserting `read_attempts` stays 0 when the crisis spine answered.
+
+### STILL TRUE — browser ASR is a placeholder, not the production path
+
+Unchanged from status §4 and D3: adult-trained ASR fails children. The client
+transcribes with the browser's recogniser and DISCARDS the audio (the composer's
+promise, repeated in the read panel's microcopy: "heard, checked, and discarded —
+never stored"); only text reaches the API. The production path is our own
+child-speech ASR (Phase 2), with Ello-/Amira-class models as the licensing
+bridge. Nothing in this port should be read as an ASR decision.

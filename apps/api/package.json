@@ -19,6 +19,7 @@
     "@chittu/maths-engine": "workspace:*",
     "@chittu/pedagogy": "workspace:*",
     "@chittu/pipeline": "workspace:*",
+    "@chittu/reading-coach": "workspace:*",
     "@chittu/safety-kernel": "workspace:*",
     "@chittu/seal": "workspace:*",
     "@fastify/cookie": "^11.1.2",

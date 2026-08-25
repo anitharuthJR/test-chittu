@@ -104,6 +104,20 @@ export interface OwnMessagesResponse {
   }[];
 }
 
+/** One passage word, marked heard-or-not by the SERVER's local scorer. */
+export interface ReadingWord {
+  readonly word: string;
+  readonly hit: boolean;
+}
+
+export interface ReadingResult {
+  readonly passageId: string;
+  readonly words: readonly ReadingWord[];
+  readonly hits: number;
+  readonly total: number;
+  readonly line: string;
+}
+
 export interface TurnResponse {
   readonly blocks: readonly Block[];
   readonly trace: string;
@@ -111,6 +125,12 @@ export interface TurnResponse {
   readonly crisisLock: boolean;
   readonly flags: readonly Flag[];
   readonly memorySaved?: Memory;
+  /**
+   * Present only when the reading coach scored the attempt. Absent means a
+   * guard answered instead — render the blocks exactly as a chat turn's, and
+   * obey `crisisLock`.
+   */
+  readonly reading?: ReadingResult;
 }
 
 export interface SealResponse {
@@ -182,6 +202,10 @@ export interface DashboardResponse {
     readonly spines: number; readonly memories: number;
     readonly crisisLocked: boolean;
     readonly firstSeen: string | null; readonly lastSeen: string | null;
+    /** Reading-coach aggregates (D5). Counts, never words. */
+    readonly readingAttempts: number;
+    readonly readingWords: number;
+    readonly readingHits: number;
   };
   readonly sessions: readonly SessionSummary[];
   readonly memories: readonly Memory[];
@@ -335,6 +359,16 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
     turn: (sessionId: string, text: string, mode?: Mode) =>
       go<TurnResponse>(`/v1/session/${sessionId}/turn`,
         json(mode === undefined ? { text } : { text, mode })),
+
+    /**
+     * Score a read-aloud attempt. The transcript is TEXT — the browser
+     * transcribed the child's voice and discarded the audio; nothing else
+     * ever leaves the device. Scoring is deterministic and server-side; this
+     * client renders the marks it is handed and decides nothing.
+     */
+    read: (sessionId: string, passageId: string, transcript: string) =>
+      go<TurnResponse>(`/v1/session/${sessionId}/read`,
+        json({ passageId, transcript })),
 
     seal: (sessionId: string) => go<SealResponse>(`/v1/session/${sessionId}/seal`),
 

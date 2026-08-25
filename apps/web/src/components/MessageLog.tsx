@@ -67,6 +67,30 @@ export function MessageLog(
 
           case 'system':
             return <p key={m.id} class="msg msg--system">{m.text}</p>;
+
+          case 'readcard':
+            /*
+             * The words are the PASSAGE's, and the marks are the SERVER's —
+             * this renders what it was handed and judges nothing. A miss is
+             * underlined as well as tinted, because colour alone is not a
+             * signal every child can see.
+             */
+            return (
+              <div key={m.id} class="readcard" aria-label="Read this aloud">
+                {m.words.map((w, j) => (
+                  <span
+                    key={j}
+                    class={`readcard__w${
+                      w.hit === null ? '' : w.hit ? ' is-ok' : ' is-miss'}`}
+                  >
+                    {w.word}
+                  </span>
+                ))}
+              </div>
+            );
+
+          case 'readscore':
+            return <p key={m.id} class="readscore">{m.text}</p>;
         }
       })}
 

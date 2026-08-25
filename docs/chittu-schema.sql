@@ -241,6 +241,15 @@ CREATE TABLE session (
   msg_count      integer NOT NULL DEFAULT 0,
   spine_count    integer NOT NULL DEFAULT 0,
 
+  -- Reading-coach counters (D5's "reading accuracy"; migration 0007).
+  -- Aggregates only — an attempt count, a word count, a hit count. There is no
+  -- path from these back to what a child read or misread, and the audio behind
+  -- them never existed server-side (the browser transcribes and discards).
+  -- Incremented, never set, on the msg_count pattern.
+  read_attempts  integer NOT NULL DEFAULT 0,
+  read_words     integer NOT NULL DEFAULT 0,
+  read_hits      integer NOT NULL DEFAULT 0,
+
   -- Transient pipeline state that outlives a request but not the session: the
   -- armed maths practice question, coarse topic labels, assist notes, the last
   -- detected subject, and the classifier's 3-message rolling window.

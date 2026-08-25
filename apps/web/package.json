@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@chittu/contracts": "workspace:*",
+    "@chittu/reading-coach": "workspace:*",
     "@preact/signals": "^2.0.0",
     "preact": "^10.25.0",
     "wouter-preact": "^3.5.0"

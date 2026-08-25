@@ -85,6 +85,7 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Logging** | `logs/api.log`, redaction enforced by path so §2.2 stops holding by accident | `apps/api/src/logging.ts` |
 | **Metering** | One row per model call — tokens, latency, cost, `rate_version` — against a session pseudonym with no FK to anything. A maths turn and a crisis turn write **zero** rows | `packages/db/metering-repo.ts` |
 | **Signal triage (`/ops/signals`)** | Above-floor shapes only, ranked by sightings; promote → author an example → a **different** operator approves. Refuses in words when fewer than two operators are configured | `apps/api/src/ops/` |
+| **Reading coach** | D2's RM→RC branch, D3's reading-aloud row, D5's accuracy stat. Bank + scorer ported verbatim; deterministic, local, **zero model calls** (proved by counting, and by the metering table staying empty). One doctrine correction: the transcript passes L1 — the prototype scored before any guard ran. Audio never leaves the browser; browser ASR remains the §4 placeholder | `packages/reading-coach`, `POST /v1/session/:id/read` |
 | **Abstractor + signal capture** | A child's turn becomes a shape (six placeholders, ~1,700-lemma closed vocabulary) and the shape's TEXT is written only on the turn that reaches **25 distinct sessions**. Below the floor: a keyed hash and an integer | `packages/safety-kernel/abstractor.ts`, `packages/db/signal-repo.ts` |
 | **Tests** | **1350+**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 

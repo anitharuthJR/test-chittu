@@ -376,6 +376,43 @@ button:disabled { cursor: default; opacity: .55; }
 }
 @keyframes pulse { 50% { transform: scale(1.08) } }
 
+/* ------------------------------------------------------ reading coach --- */
+/* The passage card and marks, ported from the prototype (chittu-v3.html:104).
+   A miss is underlined as well as tinted — colour alone is not a signal every
+   child can see. */
+
+.readcard {
+  align-self: center; max-width: 94%;
+  background: var(--white); border: 3px solid var(--ultra);
+  border-radius: var(--radius); padding: 16px 20px;
+  font-family: var(--font-display); font-size: 22px; font-weight: 700;
+  line-height: 1.6; text-align: center;
+}
+.readcard::before {
+  content: '📕 READ THIS ALOUD'; display: block;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em;
+  color: var(--ultra); margin-bottom: 6px;
+}
+.readcard__w { display: inline-block; margin: 0 3px; padding: 1px 4px; border-radius: 6px; }
+.readcard__w.is-ok { background: var(--leaf-soft); color: var(--leaf); }
+.readcard__w.is-miss {
+  background: var(--coral-soft); color: var(--signal); text-decoration: underline;
+}
+.readscore {
+  align-self: center; font-family: var(--font-display);
+  font-size: 18px; font-weight: 800; color: var(--leaf);
+}
+
+.readmic {
+  display: flex; gap: 12px; align-items: center;
+  padding: 9px 0 14px; position: sticky; bottom: 0; background: var(--sky);
+}
+.readmic__btn { width: 62px; height: 62px; font-size: 24px; }
+.readmic__hint { font-size: 14px; font-weight: 800; }
+.readmic__promise {
+  display: block; font-size: 11px; font-weight: 700; color: var(--night-60);
+}
+
 /* ------------------------------------------------- consent and panels --- */
 
 .consent, .panel {
@@ -517,7 +554,11 @@ button:disabled { cursor: default; opacity: .55; }
   .modebar__btn { text-align: left; }
   .msgs { grid-area: log; }
   .starters { grid-area: starters; }
-  .composer { grid-area: composer; }
+  /* The mic panel REPLACES the composer in read mode, so it takes the same
+     grid area. Without this it landed in the grid's default flow — top of the
+     page — which is exactly the 900px-breakpoint defect class the crisis
+     panel already taught us: invisible to every unit test, obvious on load. */
+  .composer, .readmic { grid-area: composer; }
   .crisis { grid-area: crisis; align-self: start; }
 }
 

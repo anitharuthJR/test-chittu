@@ -294,6 +294,25 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
     },
 
     /**
+     * Reading-coach counters for one scored attempt (migration 0007).
+     *
+     * Aggregates only — an attempt, a word count, a hit count — so like
+     * `stats` it never touches the DEK. Incremented rather than set, on the
+     * msg_count pattern, so a concurrent turn cannot clobber the count. Called
+     * only on a SCORED turn: an attempt whose transcript tripped a guard was
+     * never scored and never counts.
+     */
+    async recordReading(tx: Db, sessionId: string, words: number, hits: number): Promise<void> {
+      await tx.query(
+        `UPDATE session
+            SET read_attempts = read_attempts + 1,
+                read_words    = read_words + $2,
+                read_hits     = read_hits + $3
+          WHERE id = $1`,
+        [sessionId, words, hits]);
+    },
+
+    /**
      * Counts for the parent dashboard, in one round trip.
      *
      * Everything here is an aggregate. There is no path through this function
@@ -303,17 +322,22 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
     async stats(tx: Db, childId: string): Promise<{
       sessions: number; messages: number; spines: number; crisisLocked: boolean;
       firstSeen: string | null; lastSeen: string | null;
+      readingAttempts: number; readingWords: number; readingHits: number;
     }> {
       const r = await tx.query<{
         sessions: string; messages: string; spines: string;
         locked: boolean; first_seen: string | null; last_seen: string | null;
+        read_attempts: string; read_words: string; read_hits: string;
       }>(
         `SELECT count(*)::text                               AS sessions,
                 coalesce(sum(msg_count),0)::text             AS messages,
                 coalesce(sum(spine_count),0)::text           AS spines,
                 bool_or(crisis_lock)                         AS locked,
                 min(started_at)                              AS first_seen,
-                max(coalesce(ended_at, started_at))          AS last_seen
+                max(coalesce(ended_at, started_at))          AS last_seen,
+                coalesce(sum(read_attempts),0)::text         AS read_attempts,
+                coalesce(sum(read_words),0)::text            AS read_words,
+                coalesce(sum(read_hits),0)::text             AS read_hits
            FROM session WHERE child_id = $1`, [childId]);
       const x = r.rows[0];
       return {
@@ -323,6 +347,9 @@ export function childRepo(pool: DbPool, keys: KeyProvider) {
         crisisLocked: x?.locked ?? false,
         firstSeen: x?.first_seen ? new Date(x.first_seen).toISOString() : null,
         lastSeen: x?.last_seen ? new Date(x.last_seen).toISOString() : null,
+        readingAttempts: Number(x?.read_attempts ?? 0),
+        readingWords: Number(x?.read_words ?? 0),
+        readingHits: Number(x?.read_hits ?? 0),
       };
     },
 

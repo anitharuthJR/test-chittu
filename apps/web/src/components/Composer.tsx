@@ -13,8 +13,8 @@ import { speechRecognitionAvailable } from '../store';
  * The transcript is transcribed and discarded — it goes into the text field and
  * is never uploaded as audio, which is the same promise the prototype made.
  */
-interface SpeechEvent { readonly results: ArrayLike<ArrayLike<{ transcript: string }>> }
-interface Recognition {
+export interface SpeechEvent { readonly results: ArrayLike<ArrayLike<{ transcript: string }>> }
+export interface Recognition {
   lang: string;
   interimResults: boolean;
   maxAlternatives: number;
@@ -25,7 +25,7 @@ interface Recognition {
   stop(): void;
 }
 
-function newRecognition(): Recognition | null {
+export function newRecognition(): Recognition | null {
   const g = globalThis as {
     SpeechRecognition?: new () => Recognition;
     webkitSpeechRecognition?: new () => Recognition;

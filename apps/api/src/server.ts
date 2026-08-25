@@ -35,6 +35,7 @@ import { createStore } from './store.js';
 import {
   CRISIS_WELCOME_BACK, REGISTRY, abstractShape, welcomeMemory, welcomeSpine,
 } from '@chittu/safety-kernel';
+import { passageById } from '@chittu/reading-coach';
 import { resolveHelplines } from './helplines/resolve.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
@@ -708,25 +709,7 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           facets = { band: state.band, country: state.country };
         }
 
-        /**
-         * What Chittu SAID, flattened for storage.
-         *
-         * Chips are excluded, and that is a correction rather than a shortcut.
-         * They are suggested next taps — navigation, not utterance — and
-         * appending their labels to the prose produced lines like "I'm still
-         * learning that one! Tell me more Something else", which reads as if
-         * Chittu said it. That went to a parent's transcript, and once a
-         * reloaded page repaints from the same text, to the child as well.
-         *
-         * The `big` emoji is kept: it is decorative, but it is on screen.
-         */
-        const replyText = out.response.blocks
-          .filter((b) => b.kind !== 'chips')
-          .map((b) => (b.kind === 'steps' ? b.items.join(' ')
-            : b.kind === 'big' ? b.emoji : b.text))
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+        const replyText = flattenForStorage(out.response.blocks);
 
         await store.saveTurn(
           tx, req.params.id, loaded.childId, state.band, out.state,
@@ -796,6 +779,119 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
 
       // The child never receives raw model text — only parsed blocks, the trace,
       // and the layers that ran.
+      return reply.send(result);
+    });
+
+  // ---- the reading coach --------------------------------------------------
+
+  /**
+   * D2's RM→RC branch: score a read-aloud attempt against a bank passage.
+   *
+   * WHAT ARRIVES IS TEXT. The browser transcribed the child's voice and
+   * discarded the audio — the same transcribe-and-discard promise the composer
+   * mic makes — so no audio is ever stored or sent, here or anywhere. And that
+   * browser ASR is a PLACEHOLDER, not the production path: adult-trained
+   * models fail children (status §4); the Phase 2 target is our own
+   * child-speech ASR.
+   *
+   * Scoring is DETERMINISTIC and LOCAL — the same doctrine as the maths
+   * engine, for the same reason: a scorer that hallucinates a miss teaches a
+   * child they got it wrong when they did not. No model call is made on this
+   * route, and the tests prove it by counting against an injected router
+   * rather than by inspection.
+   *
+   * The transcript still walks the pipeline prefix — seal → crisis-lock →
+   * READ → L1 lexicon — because a child reading aloud can say something that
+   * needs the crisis spine, and "they were only reading" is not a reason to
+   * skip a layer. When a guard fires, the response is the guard's (no
+   * `reading` payload) and the counters below are untouched.
+   */
+  app.post<{ Params: { id: string }; Body: { passageId: string; transcript: string } }>(
+    '/v1/session/:id/read', {
+      schema: {
+        params: {
+          type: 'object', required: ['id'], additionalProperties: false,
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object', required: ['passageId', 'transcript'], additionalProperties: false,
+          properties: {
+            passageId: { type: 'string', minLength: 1, maxLength: 40 },
+            transcript: { type: 'string', minLength: 1, maxLength: 2000 },
+          },
+        },
+      },
+    }, async (req, reply) => {
+      // The passage is resolved HERE, before the pipeline, so `runTurn` stays
+      // a pure function of its inputs — the same shape as helplines. An
+      // unknown id is a client defect and is refused in words.
+      const passage = passageById(req.body.passageId);
+      if (!passage) return reply.code(404).send({ error: 'no such passage' });
+
+      const owner = await opts.pool.query<{ child_id: string; ended_at: string | null }>(
+        `SELECT child_id, ended_at FROM session WHERE id = $1`, [req.params.id]);
+      const row = owner.rows[0];
+      if (!row) return reply.code(404).send({ error: 'no such session' });
+      if (row.ended_at) return reply.code(409).send({ error: 'session ended' });
+
+      /**
+       * Collected exactly as /turn collects it — and expected to stay EMPTY.
+       * The ports are wired so that if a reading turn ever did reach a vendor,
+       * the spend would be metered rather than invisible; `metering.test.ts`
+       * asserts no row appears, which is the observable form of "zero model
+       * calls". There is no signal-capture block: the read path ends before
+       * the classifier and the sandbox, the only layers that can observe a
+       * failure worth capturing.
+       */
+      const usage: ModelUsage[] = [];
+
+      const result = await store.withChild(row.child_id, async (tx) => {
+        const loaded = await store.loadSession(tx, req.params.id);
+        if (!loaded) return null;
+        const helplines = await resolveHelplines(tx, loaded.state.country);
+        const state = { ...loaded.state, helplines: helplines.text, mode: 'read' as const };
+
+        const out = await runTurn(state, req.body.transcript, {
+          classify: (text, history, ctx) =>
+            router.classify(text, history, ctx, (u) => usage.push(u)),
+          generate: (input) => router.generate(input, (u) => usage.push(u)),
+          seal: store.sealFor(tx, req.params.id),
+          now: () => new Date().toISOString(),
+          newId: () => randomUUID(),
+        }, { passage });
+
+        await store.saveTurn(
+          tx, req.params.id, loaded.childId, state.band, out.state,
+          'read', req.body.transcript, flattenForStorage(out.response.blocks),
+          out.response.trace, out.response.layers,
+          out.response.flags.map((f) => f.assistTopic !== undefined
+            ? { kind: f.kind, noteKey: f.noteKey, assistTopic: f.assistTopic }
+            : { kind: f.kind, noteKey: f.noteKey }),
+          out.response.memorySaved);
+
+        // Counters move only on a SCORED attempt — a guarded turn was never
+        // scored, and counting it would fold crisis turns into a reading stat.
+        if (out.response.reading) {
+          await store.child.recordReading(
+            tx, req.params.id, out.response.reading.total, out.response.reading.hits);
+        }
+        return out.response;
+      });
+
+      if (!result) return reply.code(404).send({ error: 'no such session' });
+
+      if (usage.length > 0) {
+        try {
+          const pseudonym = sessionPseudonym(req.params.id, await opts.keys.indexKey());
+          for (const u of usage) {
+            const cost = costFor(u.tokensIn, u.tokensOut, rateFor(u.provider, u.model));
+            await meteringRepo.record(opts.pool, pseudonym, u, cost);
+          }
+        } catch (e) {
+          app.log.warn({ err: e }, 'metering write failed; the turn is unaffected');
+        }
+      }
+
       return reply.send(result);
     });
 
@@ -978,4 +1074,26 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
  */
 function markVerifying2(r: Parameters<typeof activate>[0]): Parameters<typeof activate>[0] {
   return r.status === 'verifying' ? r : markVerifying(r);
+}
+
+/**
+ * What Chittu SAID, flattened for storage.
+ *
+ * Chips are excluded, and that is a correction rather than a shortcut. They
+ * are suggested next taps — navigation, not utterance — and appending their
+ * labels to the prose produced lines like "I'm still learning that one! Tell
+ * me more Something else", which reads as if Chittu said it. That went to a
+ * parent's transcript, and once a reloaded page repaints from the same text,
+ * to the child as well.
+ *
+ * The `big` emoji is kept: it is decorative, but it is on screen.
+ */
+function flattenForStorage(blocks: readonly Block[]): string {
+  return blocks
+    .filter((b) => b.kind !== 'chips')
+    .map((b) => (b.kind === 'steps' ? b.items.join(' ')
+      : b.kind === 'big' ? b.emoji : b.text))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

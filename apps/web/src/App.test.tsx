@@ -32,6 +32,7 @@ export const DASHBOARD = {
   stats: {
     sessions: 0, messages: 0, spines: 0, memories: 0,
     crisisLocked: false, firstSeen: null, lastSeen: null,
+    readingAttempts: 0, readingWords: 0, readingHits: 0,
   },
   sessions: [], memories: [],
   flags: { safety: [], assist: [], gate: [] },

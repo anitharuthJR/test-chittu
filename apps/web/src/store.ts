@@ -29,7 +29,18 @@ export type Message =
     }
   /** Our own UI copy — an error, a lockout notice. Never a safety script. */
   | { readonly id: string; readonly role: 'system'; readonly text: string }
-  | { readonly id: string; readonly role: 'memory'; readonly memory: Memory };
+  | { readonly id: string; readonly role: 'memory'; readonly memory: Memory }
+  /**
+   * The reading coach's passage card. `hit` is null until the SERVER scored
+   * the attempt — the marks always arrive from the API, never from a local
+   * judgement, because the client renders and decides nothing.
+   */
+  | {
+      readonly id: string; readonly role: 'readcard';
+      readonly words: readonly { readonly word: string; readonly hit: boolean | null }[];
+    }
+  /** The scripted score line ("🌟 7 of 8 words — great reading!"), server-authored. */
+  | { readonly id: string; readonly role: 'readscore'; readonly text: string };
 
 /**
  * **This client stores no credential, because it holds none.**

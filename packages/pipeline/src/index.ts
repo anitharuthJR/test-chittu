@@ -26,6 +26,7 @@ import {
   passesOutputFilter, stripControlTokens, parseBlocks, flatten,
 } from '@chittu/safety-kernel';
 import { mathTurn, practiceStep, type MathPractice } from '@chittu/maths-engine';
+import { readTurn, type ReadPassage } from '@chittu/reading-coach';
 import { detectSubject, type Subject } from '@chittu/pedagogy';
 /**
  * The pipeline appends to the chain and never reads it back, so it depends on
@@ -120,6 +121,15 @@ export interface PipelinePorts {
   seal: SealAppender;
   now(): string;
   newId(): string;
+}
+
+/**
+ * A read-aloud attempt, resolved by the CALLER. The route looks the passage up
+ * and refuses an unknown id before the pipeline runs, so a turn stays a pure
+ * function of its inputs — the same shape as `helplines`.
+ */
+export interface ReadAttempt {
+  readonly passage: ReadPassage;
 }
 
 export interface TurnOutcome {
@@ -231,6 +241,7 @@ export async function runTurn(
   state: SessionState,
   text: string,
   ports: PipelinePorts,
+  read?: ReadAttempt,
 ): Promise<TurnOutcome> {
   const walk: Walk = { layers: [], flags: [] };
 
@@ -266,6 +277,17 @@ export async function runTurn(
     );
   }
 
+  // ---- 2b. READ — the dispatch, not yet the scoring --------------------
+  // PIPELINE_ORDER declares READ here, after the lock and before the lexicon,
+  // because this is where the turn is RECOGNISED as a reading attempt. The
+  // scoring itself happens only after L1 has cleared the transcript. That is
+  // a deliberate correction of both references: the prototype scored before
+  // any guard ran (chittu-v3.html:1046 sits above the L1 fast path) and
+  // D2-as-drawn routes RM→RC around the lexicon. A child reading aloud can
+  // say something that needs the crisis spine, and "they were only reading"
+  // is not a reason to skip a layer.
+  if (read) walk.layers.push('READ');
+
   // ---- 3. L1 LEXICON ---------------------------------------------------
   // Six guards, in dispatch order. Every hit is a zero-token path.
   walk.layers.push('L1_LEXICON');
@@ -294,6 +316,39 @@ export async function runTurn(
       // A crisis ends any practice loop — safety outranks the loop (CLAUDE.md).
       mathPractice: fx.locksChat ? null : withInput.mathPractice,
     });
+  }
+
+  // ---- 3b. READING COACH — deterministic, local, zero model calls ------
+  // Reached only when L1 found nothing in the transcript. Same argument as
+  // the maths engine: a scorer that hallucinates a miss teaches a child they
+  // got it wrong when they did not, so no model is ever asked. The tests
+  // prove it the same way — by counting calls against the injected ports.
+  //
+  // The transcript joined `recentKid` in the shared prefix above (it IS what
+  // the child said, aloud) and never joins `history`: no sandbox ran, so
+  // there is no exchange for a model to build on. An armed maths practice
+  // loop survives untouched — reading beside it is not a change of subject.
+  if (read) {
+    const r = readTurn(read.passage, text, withInput.kid);
+    const out = await reply(withInput, walk, ports, r.reply, r.trace, {});
+    // The score marker seals after the reply, matching the prototype's order
+    // (chittu-v3.html:999). Category-only telemetry: a percentage, never words.
+    await ports.seal.append({
+      role: 'system', layer: 'READ', text: `reading-scored:${r.pct}%`,
+    });
+    return {
+      ...out,
+      response: {
+        ...out.response,
+        reading: {
+          passageId: read.passage.id,
+          words: r.words,
+          hits: r.hits,
+          total: r.total,
+          line: r.line,
+        },
+      },
+    };
   }
 
   // ---- 4. MATHS PRACTICE LOOP -----------------------------------------

@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { createChain, type SealChain } from '@chittu/seal';
 import { passesOutputFilter } from '@chittu/safety-kernel';
 import type { ClassifierOutcome } from '@chittu/contracts';
+import { passageById } from '@chittu/reading-coach';
 import { runTurn, GUARD_EFFECTS, SAFE_FALLBACK, type SessionState, type PipelinePorts } from './index.js';
 
 interface Harness {
@@ -624,5 +625,104 @@ describe('a SANDBOX escalation leaves the model context as it found it', () => {
     expect(out.state.history).toEqual([]);
     // The window keeps it, because the child did say it.
     expect(out.state.recentKid).toEqual(['why is the sky blue']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The reading coach — D2's RM→RC branch, run through the full guard prefix.
+// ---------------------------------------------------------------------------
+
+describe('the reading coach', () => {
+  const mat = passageById('explorer-1')!;   // "The cat sat on a big red mat."
+
+  it('a scored read reaches ZERO models — the local scorer owns it', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'the cat sat on a big red mat', h.ports,
+      { passage: mat });
+    expect(h.calls, 'reading must never reach a model').toEqual({ classifier: 0, sandbox: 0 });
+    expect(out.response.reading).toBeDefined();
+    expect(out.response.reading!.hits).toBe(8);
+    expect(out.response.trace).toBe('READING COACH · celebrate');
+    expect(shown(out.response)).toContain('every single word');
+  });
+
+  it('walks SEAL → CRISIS_LOCK → READ → L1_LEXICON and nothing further', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'the cat sat on a big red mat', h.ports,
+      { passage: mat });
+    expect(out.response.layers).toEqual(
+      ['SEAL', 'CRISIS_LOCK', 'READ', 'L1_LEXICON', 'RENDER', 'LEDGER']);
+  });
+
+  it('a dropped word comes back marked, named for practice, still zero models', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'the cat sat on a big mat', h.ports,
+      { passage: mat });
+    expect(h.calls).toEqual({ classifier: 0, sandbox: 0 });
+    const r = out.response.reading!;
+    expect(r.words.map((w) => w.hit)).toEqual(
+      [true, true, true, true, true, true, false, true]);
+    expect(r.line).toBe('🌟 7 of 8 words — great reading!');
+    expect(shown(out.response)).toContain('practice these words together: red');
+    expect(out.response.trace).toBe('READING COACH · guided practice');
+  });
+
+  /**
+   * The doctrine line this feature exists to keep: a child reading aloud can
+   * say something that needs the crisis spine, and "they were only reading"
+   * is not a reason to skip a layer. The prototype scored BEFORE L1
+   * (chittu-v3.html:1046) — that is corrected here, on purpose.
+   */
+  it('a crisis phrase in the transcript fires the spine, not the scorer', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'i dont want to be here anymore', h.ports,
+      { passage: mat });
+    expect(h.calls).toEqual({ classifier: 0, sandbox: 0 });
+    expect(out.state.crisisLock).toBe(true);
+    expect(out.response.reading, 'a guarded turn is never scored').toBeUndefined();
+    expect(out.response.flags.map((f) => f.category)).toEqual(['CRISIS']);
+    // READ was stamped (the attempt was recognised) and L1 still ran after it.
+    expect(out.response.layers).toEqual(
+      ['SEAL', 'CRISIS_LOCK', 'READ', 'L1_LEXICON', 'RENDER', 'LEDGER']);
+    expect(shown(out.response)).not.toContain('great reading');
+  });
+
+  it('a locked session stays locked — the passage does not reopen the chat', async () => {
+    const h = harness();
+    const out = await runTurn({ ...base, crisisLock: true },
+      'the cat sat on a big red mat', h.ports, { passage: mat });
+    expect(h.calls).toEqual({ classifier: 0, sandbox: 0 });
+    expect(out.response.reading).toBeUndefined();
+    expect(out.response.trace).toBe('CRISIS SPINE · calm-mode companion');
+  });
+
+  it('seals the attempt, the reply, and a words-free score marker', async () => {
+    const h = harness();
+    await runTurn(base, 'the cat sat on a big mat', h.ports, { passage: mat });
+    const records = h.chain.records();
+    expect(h.chain.verify().ok).toBe(true);
+    expect(records.map((r) => r.layer)).toEqual(
+      ['SEAL', 'READING COACH · guided practice', 'READ']);
+    expect(records[2]!.payload).toBe('system|reading-scored:88%');
+  });
+
+  it('the transcript joins the classifier window and never the model context', async () => {
+    const h = harness();
+    const out = await runTurn(base, 'the cat sat on a big red mat', h.ports,
+      { passage: mat });
+    expect(out.state.recentKid).toEqual(['the cat sat on a big red mat']);
+    expect(out.state.history).toEqual([]);
+  });
+
+  it('an armed maths practice loop survives a reading attempt', async () => {
+    const h = harness();
+    const practising = {
+      ...base,
+      mathPractice: { a: 3, op: '+' as const, b: 4, q: '3 + 4', ans: 7 },
+    };
+    const out = await runTurn(practising, 'the cat sat on a big red mat',
+      h.ports, { passage: mat });
+    expect(out.response.reading).toBeDefined();
+    expect(out.state.mathPractice).toEqual(practising.mathPractice);
   });
 });

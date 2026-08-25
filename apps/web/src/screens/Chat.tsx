@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Block, Mode } from '@chittu/contracts';
+import { passagesFor, type ReadPassage } from '@chittu/reading-coach';
 import type { Api } from '../api';
 import { ApiError, OfflineError } from '../api';
 import { guardBlocks } from '../safety/render-guard';
@@ -16,6 +17,7 @@ import { HonestyBadge } from '../components/HonestyBadge';
 import { ModeBar } from '../components/ModeBar';
 import { MessageLog } from '../components/MessageLog';
 import { Composer } from '../components/Composer';
+import { ReadCoach } from '../components/ReadCoach';
 import { CrisisPanel } from '../components/CrisisPanel';
 import { modeInfo } from '../catalog';
 import {
@@ -28,6 +30,8 @@ export function Chat(
   { api: Api; onParentGate: () => void; onMemoryBook: () => void },
 ): preact.JSX.Element {
   const [fatal, setFatal] = useState<string | null>(null);
+  /** The passage on the current read card. Chosen here, scored by the server. */
+  const [passage, setPassage] = useState<ReadPassage | null>(null);
   const opening = useRef(false);
 
   // One session per visit. The guard is a ref rather than state because two
@@ -130,6 +134,14 @@ export function Chat(
     const s = session.value;
     if (s === null || busy.value || crisisLock.value) return;
 
+    /**
+     * Read mode has no free-typed path (the composer is replaced by the mic
+     * panel), so text arriving here is a chip tap — navigation the prototype
+     * also dispatched locally (chittu-v3.html:1047). These never become model
+     * turns: "Next sentence!" is a tap, not an utterance.
+     */
+    if (mode.value === 'read') { readNav(text); return; }
+
     push({ id: nextId(), role: 'child', text });
     busy.value = true;
     try {
@@ -172,13 +184,100 @@ export function Chat(
 
   function pickMode(m: Mode): void {
     mode.value = m;
-    if (m === 'read') {
-      // The reading coach needs POST /session/:id/read, which does not exist
-      // yet. Saying so beats a mode that silently behaves like chat.
+    if (m === 'read') startReading();
+  }
+
+  // ---- the reading coach --------------------------------------------------
+  // The client's share of it is deliberately small: pick a passage from the
+  // static bank, show it, hand the transcript to the server, render the marks
+  // that come back. Scoring, guarding and copy all live on the other end.
+
+  function pickPassage(): ReadPassage | null {
+    const band = session.value?.band;
+    if (band === undefined) return null;
+    const bank = passagesFor(band);
+    return bank[Math.floor(Math.random() * bank.length)] ?? null;
+  }
+
+  function showPassage(p: ReadPassage): void {
+    setPassage(p);
+    // A fresh, unmarked card each time — earlier cards keep their marks, the
+    // way the prototype's log kept every attempt on screen.
+    push({
+      id: nextId(), role: 'readcard',
+      words: p.text.split(/\s+/).map((word) => ({ word, hit: null })),
+    });
+  }
+
+  function startReading(): void {
+    const p = pickPassage();
+    if (p === null) return;   // session still opening; another tap retries
+    push({
+      id: nextId(), role: 'system',
+      text: 'Reading time! Read the sentence out loud. '
+        + 'Your voice is heard, checked, and discarded — never stored.',
+    });
+    showPassage(p);
+  }
+
+  /** Chip navigation inside read mode. Local, exactly as the prototype's. */
+  function readNav(text: string): void {
+    push({ id: nextId(), role: 'child', text });
+    if (/next sentence/i.test(text)) {
+      const p = pickPassage();
+      if (p !== null) showPassage(p);
+      return;
+    }
+    if (/read it again|try again/i.test(text)) {
+      if (passage !== null) showPassage(passage);
+      return;
+    }
+    if (/back to chat|stop reading/i.test(text)) {
+      mode.value = 'chat';
+      return;
+    }
+    push({
+      id: nextId(), role: 'system',
+      text: '🎙 Tap the mic and read the sentence out loud — or tap a choice!',
+    });
+  }
+
+  /**
+   * One scored attempt. The transcript is text the browser produced and the
+   * audio is already gone. If a guard fired server-side there is no `reading`
+   * payload — the blocks are rendered exactly like a chat turn's, and the
+   * crisis lock is obeyed the same way.
+   */
+  async function readAloud(transcript: string): Promise<void> {
+    const s = session.value;
+    const p = passage;
+    if (s === null || p === null || busy.value || crisisLock.value) return;
+
+    push({ id: nextId(), role: 'child', text: `${transcript} 🎙` });
+    busy.value = true;
+    try {
+      const r = await api.read(s.sessionId, p.id, transcript);
+      if (r.reading) {
+        push({ id: nextId(), role: 'readcard', words: r.reading.words });
+        push({ id: nextId(), role: 'readscore', text: r.reading.line });
+      }
+      push({
+        id: nextId(), role: 'chittu',
+        blocks: r.blocks, trace: r.trace, layers: r.layers,
+      });
+      crisisLock.value = r.crisisLock;
+      if (!lite.value && speechSynthesisAvailable()) speak(r.blocks);
+    } catch (e) {
       push({
         id: nextId(), role: 'system',
-        text: 'Reading practice is not switched on yet — it is still being built.',
+        text: e instanceof OfflineError
+          ? "I can't reach the internet right now. Try again in a moment?"
+          : e instanceof ApiError && e.status === 429
+            ? 'That was a lot at once! Give me a second to catch up.'
+            : 'Something went wrong. Try reading it again?',
       });
+    } finally {
+      busy.value = false;
     }
   }
 
@@ -228,11 +327,20 @@ export function Chat(
         </div>
       )}
 
-      <Composer
-        disabled={locked || busy.value || session.value === null}
-        {...(locked ? { placeholder: 'Paused until a grown-up unlocks it' } : {})}
-        onSend={(t) => { void send(t); }}
-      />
+      {mode.value === 'read' && !locked
+        ? (
+          <ReadCoach
+            disabled={busy.value || session.value === null || passage === null}
+            onTranscript={(t) => { void readAloud(t); }}
+          />
+        )
+        : (
+          <Composer
+            disabled={locked || busy.value || session.value === null}
+            {...(locked ? { placeholder: 'Paused until a grown-up unlocks it' } : {})}
+            onSend={(t) => { void send(t); }}
+          />
+        )}
     </main>
   );
 }
