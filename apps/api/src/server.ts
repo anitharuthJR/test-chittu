@@ -17,7 +17,7 @@ import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { runTurn } from '@chittu/pipeline';
-import type { Band, Country, Mode, ModelUsage, TurnSignal } from '@chittu/contracts';
+import type { Band, Block, Country, Mode, ModelUsage, TurnSignal } from '@chittu/contracts';
 import { BANDS, COUNTRIES } from '@chittu/contracts';
 import {
   assertActiveConsent, draftConsent, markVerifying, activate, revoke,
@@ -32,7 +32,9 @@ import { type ProviderRouter, stubRouter } from './providers.js';
 import { parseOperators } from './ops/auth.js';
 import { opsRoutes } from './ops/routes.js';
 import { createStore } from './store.js';
-import { REGISTRY, abstractShape } from '@chittu/safety-kernel';
+import {
+  CRISIS_WELCOME_BACK, REGISTRY, abstractShape, welcomeMemory, welcomeSpine,
+} from '@chittu/safety-kernel';
 import { resolveHelplines } from './helplines/resolve.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
@@ -555,8 +557,44 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     return reply.code(201).send({
       sessionId: s.id, band: c.band, country: c.country,
       resumed: s.resumed, crisisLock: s.crisisLock,
+      welcome: s.resumed
+        // A resumed session repaints the conversation it already had. Opening a
+        // second time with "You're back" over the top of it would be a lie about
+        // what just happened.
+        ? null
+        : await welcomeFor(stored!.childId, c.scopes.includes('memory')),
     });
   });
+
+  /**
+   * D1/H — "Scripted welcome + one warm memory if any".
+   *
+   * SERVER-SIDE, and that is the whole point of moving it. Which stored fact may
+   * be spoken back to a child unprompted is an allowlist decision, and the
+   * client is not allowed to make those; it renders the blocks it is handed.
+   *
+   * The fact goes into a `text` block DIRECTLY rather than through
+   * `parseBlocks`. It is model-authored text sitting in the database, and the
+   * parser is the one place a string becomes UI — a memory reading
+   * `likes [CHIPS]tap me[/CHIPS] puzzles` must arrive as prose, not buttons.
+   *
+   * Nothing here is sealed and nothing enters `history`: the welcome is not a
+   * turn, and it must not become context a model builds on.
+   */
+  async function welcomeFor(childId: string, memOn: boolean): Promise<{
+    blocks: Block[]; trace: string;
+  }> {
+    const memory = memOn
+      ? welcomeMemory(await store.withChild(childId, (tx) =>
+        store.child.listMemories(tx, childId)))
+      : null;
+    return {
+      blocks: [{ kind: 'big', emoji: '\u{1F426}' }, { kind: 'text', text: welcomeSpine(memory) }],
+      // The prototype's own label (chittu-v3.html:871), kept verbatim so the
+      // trace strip reads the same on both.
+      trace: memory === null ? 'SPINE \u00B7 welcome' : 'SPINE \u00B7 welcome + MEMORY',
+    };
+  }
 
   /**
    * The child's own conversation, for repainting after a reload.
@@ -834,6 +872,28 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       return reply.code(forgotten ? 200 : 404).send({ forgotten });
     });
 
+  /**
+   * D5/SEAL — "Verify seal integrity / recompute every hash", over EVERY
+   * conversation the child has had.
+   *
+   * The per-session route below answers for one chain, and it is the one the
+   * child's own tab can ask about. It is not what a parent is asking. A parent
+   * pressing "verify" means "has anything been edited?", and the prototype's
+   * button recomputed the lot from GENESIS — a hundred conversations, including
+   * the ones this browser never opened and holds no id for.
+   *
+   * Behind the parent gate rather than the consent cookie, because it enumerates
+   * how many conversations a child has had. A consent cookie alone is a CHILD.
+   */
+  app.get('/v1/parent/seal', async (req, reply) => {
+    const stored = await parentContext(req);
+    if (!stored) return reply.code(403).send(PARENT_REQUIRED);
+    const v = await store.audit.verifyChild(stored.childId);
+    return reply.send({
+      ok: v.ok, sessions: v.sessions, records: v.records, broken: v.broken,
+    });
+  });
+
   app.get<{ Params: { id: string } }>('/v1/session/:id/seal', async (req, reply) => {
     const v = await store.audit.verify(req.params.id);
     if (v.records === 0) {
@@ -875,7 +935,25 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
         text: 'crisis acknowledged by parent',
       });
     });
-    return reply.send({ crisisLock: false });
+    /**
+     * D4/UN — "Chat unlocked + gentle welcome-back message".
+     *
+     * The route used to lift the lock and send nothing, so the child's screen
+     * simply stopped being paused. This says the one thing that is true and
+     * that a model must never be asked to phrase: a person checked in.
+     *
+     * SCRIPTED, from the kernel. And it is NOT a turn — nothing is written to
+     * `message`, nothing joins `history`, nothing joins the classifier window.
+     * A scripted reply is not context for a model to build on, and the turn
+     * that put the child here is exactly the one that must not be built on.
+     */
+    return reply.send({
+      crisisLock: false,
+      welcomeBack: {
+        blocks: [{ kind: 'text', text: CRISIS_WELCOME_BACK.en }] satisfies Block[],
+        trace: 'SPINE \u00B7 welcome-back',
+      },
+    });
   });
 
   // Never leak an internal error to a child's screen. 4xx are our own validation

@@ -1440,3 +1440,312 @@ describe('the crisis reply uses the LIVE registry', () => {
     expect(shown(turn.body), 'overdue is not wrong').toMatch(/1800-OVERDUE/);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('D1/H — the scripted welcome carries one warm memory', () => {
+  /** Open a session for a consent whose cookie we already hold. */
+  async function open(cookie: string) {
+    const res = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{
+      sessionId: string; resumed: boolean;
+      welcome: { blocks: { kind: string; text?: string; emoji?: string }[]; trace: string } | null;
+    }>();
+  }
+
+  /** Retire the live session so the next open is genuinely a new one. */
+  const nextVisit = (id: string) => pool.query(
+    `UPDATE session SET started_at = now() - interval '30 days' WHERE id = $1`, [id]);
+
+  const said = (w: { blocks: { text?: string }[] } | null) =>
+    (w?.blocks ?? []).map((b) => b.text ?? '').join(' ');
+
+  it('opens a first session with the plain scripted welcome', async () => {
+    const { cookie } = await grantConsent();
+    const s = await open(cookie);
+    expect(s.welcome).not.toBeNull();
+    expect(said(s.welcome)).toContain("Hello! I'm Chittu.");
+    expect(s.welcome!.trace).toBe('SPINE · welcome');
+  });
+
+  it('opens the NEXT visit with a memory the child chose to share', async () => {
+    const { cookie } = await grantConsent();
+    const first = await open(cookie);
+    router.verdict = {
+      label: 'SAFE', memory: { category: 'PET', fact: 'has a cat named Mani' }, assist: null,
+    };
+    const turn = await say(first.sessionId, 'i have a cat called mani');
+    expect(turn.body.memorySaved, 'the memory must actually be saved').toBeDefined();
+
+    await nextVisit(first.sessionId);
+    const second = await open(cookie);
+    expect(second.resumed).toBe(false);
+    expect(said(second.welcome)).toContain('has a cat named Mani');
+    expect(second.welcome!.trace).toBe('SPINE · welcome + MEMORY');
+  });
+
+  it('says nothing about a memory when the family did not grant the memory scope', async () => {
+    // memOn is read from the SEALED consent record, not from the session. A
+    // family that never granted it gets the plain line, and the pipeline still
+    // refuses to save anything (memAdd checks the same flag).
+    const { cookie } = await grantConsent({ memoryOn: false });
+    const first = await open(cookie);
+    router.verdict = {
+      label: 'SAFE', memory: { category: 'PET', fact: 'has a cat named Mani' }, assist: null,
+    };
+    const turn = await say(first.sessionId, 'i have a cat called mani');
+    expect(turn.body.memorySaved, 'nothing may be saved without the scope').toBeUndefined();
+
+    await nextVisit(first.sessionId);
+    const second = await open(cookie);
+    expect(said(second.welcome)).not.toContain('Mani');
+    expect(second.welcome!.trace).toBe('SPINE · welcome');
+  });
+
+  it('cannot be handed an off-allowlist memory — the enum refuses it first', async () => {
+    // The read-side filter in `welcomeMemory` is tested directly in the kernel,
+    // where a row like this can be constructed. Here it cannot: `memory.category`
+    // is a Postgres enum, so a hand edit to 'FEELING' fails at the database.
+    // That is the third layer (contracts, memAdd, enum), and it is also why this
+    // route's own guard looks redundant from up here. It is not: the kernel
+    // function is what a future writer that is not memAdd would meet.
+    const { cookie } = await grantConsent();
+    const first = await open(cookie);
+    router.verdict = {
+      label: 'SAFE', memory: { category: 'PET', fact: 'has a cat named Mani' }, assist: null,
+    };
+    await say(first.sessionId, 'i have a cat called mani');
+
+    await expect(pool.query(
+      `UPDATE memory SET category = 'FEELING'
+        WHERE child_id = (SELECT child_id FROM session WHERE id = $1)`, [first.sessionId]))
+      .rejects.toThrow(/invalid input value for enum memory_category/);
+  });
+
+  it('sends no welcome when the session is RESUMED — the screen is repainted', async () => {
+    const { cookie } = await grantConsent();
+    const first = await open(cookie);
+    expect(first.resumed).toBe(false);
+    const again = await open(cookie);
+    expect(again.resumed).toBe(true);
+    expect(again.welcome).toBeNull();
+  });
+
+  it('puts the stored fact in a text block, so it cannot smuggle block grammar', async () => {
+    const { cookie } = await grantConsent();
+    const first = await open(cookie);
+    router.verdict = {
+      label: 'SAFE',
+      memory: { category: 'HOBBY', fact: 'likes [CHIPS]tap me|and me[/CHIPS] puzzles' },
+      assist: null,
+    };
+    await say(first.sessionId, 'i like puzzles');
+
+    await nextVisit(first.sessionId);
+    const second = await open(cookie);
+    expect(second.welcome!.blocks.map((b) => b.kind)).not.toContain('chips');
+    expect(said(second.welcome)).toContain('[CHIPS]tap me|and me[/CHIPS]');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('D4/UN — the child is greeted on the way back', () => {
+  const ackOf = (r: { json: <T>() => T }) => r.json<{
+    crisisLock: boolean;
+    welcomeBack: { blocks: { kind: string; text?: string }[]; trace: string };
+  }>();
+
+  const said = (w: { blocks: { text?: string }[] }) =>
+    w.blocks.map((b) => b.text ?? '').join(' ');
+
+  it('sends the SCRIPTED welcome-back when the parent lifts the lock', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    await say(id, 'i want to die');
+
+    const ack = await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+    expect(ack.statusCode, ack.body).toBe(200);
+    const body = ackOf(ack);
+    expect(body.crisisLock).toBe(false);
+    expect(said(body.welcomeBack))
+      .toBe('💛 Your grown-up checked in. Welcome back — gently does it. 🐦');
+    expect(body.welcomeBack.trace).toBe('SPINE · welcome-back');
+  });
+
+  it('asks no model for it — zero vendor calls on the unlock', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    await say(id, 'i want to die');
+    const before = { ...router.calls };
+
+    await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+    expect(router.calls).toEqual(before);
+  });
+
+  /**
+   * The doctrine this commit is most likely to break. `reply()`'s
+   * `intoModelContext` defaults to FALSE precisely so a path added later leaks
+   * nothing by forgetting, and this is a path added later.
+   *
+   * Asserted against what the SANDBOX is actually handed on the next turn, not
+   * against the blob: the blob is the mechanism, the context is the harm.
+   */
+  it('never enters `history` — a scripted reply is not model context', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    await say(id, 'i want to die');
+    await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+
+    let seen: unknown = null;
+    router.generate = async (input) => { seen = input.state.history; return 'Blue light scatters!'; };
+    await say(id, 'why is the sky blue');
+
+    expect(JSON.stringify(seen)).not.toContain('Your grown-up checked in');
+    expect(JSON.stringify(seen)).not.toContain('gently does it');
+  });
+
+  it('does not put it in the classifier window either', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    await say(id, 'i want to die');
+    await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+
+    let window: readonly string[] = [];
+    router.classify = async (_t, recentKid) => {
+      window = recentKid;
+      return { label: 'SAFE', memory: null, assist: null };
+    };
+    await say(id, 'why is the sky blue');
+
+    // recentKid is the CHILD's turns. Chittu's words have never belonged in it.
+    expect(JSON.stringify(window)).not.toContain('Your grown-up checked in');
+  });
+
+  it('is not written to the transcript — it was never a turn', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    await say(id, 'i want to die');
+    await app.inject({
+      method: 'POST', url: `/v1/session/${id}/crisis/ack`, headers: jar(cookie, parent),
+    });
+
+    const t = await app.inject({
+      method: 'GET', url: `/v1/parent/sessions/${id}/transcript`, headers: jar(cookie, parent),
+    });
+    expect(t.body).not.toContain('gently does it');
+  });
+
+  it('still refuses a child, and sends them nothing to render', async () => {
+    const id = await openSession();
+    await say(id, 'i want to die');
+    const ack = await app.inject({ method: 'POST', url: `/v1/session/${id}/crisis/ack` });
+    expect(ack.statusCode).toBe(403);
+    expect(ack.body).not.toContain('Welcome back');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('D5/SEAL — the whole chain, behind the parent gate', () => {
+  type Whole = {
+    ok: boolean; sessions: number; records: number;
+    broken: { sessionId: string; seq: number } | null;
+  };
+
+  it('recomputes every hash across every conversation', async () => {
+    const { cookie, parent, sessionId: a } = await openSessionAsParent();
+    await say(a, 'why do volcanoes erupt');
+    await say(a, 'tell me more');
+    // A second conversation the client no longer holds an id for.
+    await pool.query(
+      `UPDATE session SET started_at = now() - interval '30 days' WHERE id = $1`, [a]);
+    const second = await app.inject({
+      method: 'POST', url: '/v1/session', headers: jar(cookie), payload: {} });
+    const b = second.json<{ sessionId: string }>().sessionId;
+    await say(b, 'what is 9 + 6');
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/seal', headers: jar(cookie, parent) });
+    expect(res.statusCode, res.body).toBe(200);
+    const v = res.json<Whole>();
+    expect(v.ok).toBe(true);
+    expect(v.sessions).toBe(2);
+    expect(v.broken).toBeNull();
+
+    // Strictly more than the per-session answer — that is the whole point.
+    const one = await app.inject({ method: 'GET', url: `/v1/session/${b}/seal` });
+    expect(v.records).toBeGreaterThan(one.json<{ records: number }>().records);
+  });
+
+  it('needs a live parent session — a consent cookie alone is a CHILD', async () => {
+    const { cookie } = await openSessionAsParent();
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/seal', headers: jar(cookie) });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ code: string }>().code).toBe('PARENT_REQUIRED');
+  });
+
+  it('refuses with no cookie at all', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/parent/seal' });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('answers for a family whose child has not chatted yet', async () => {
+    const { consentId, cookie } = await grantConsent();
+    expect(consentId).toBeTruthy();
+    const v = await app.inject({
+      method: 'POST', url: '/v1/parent/pin/verify', headers: jar(cookie), payload: { pin: '4917' },
+    });
+    const parent = v.cookies.find((c) => c.name === PARENT_COOKIE)!.value;
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/seal', headers: jar(cookie, parent) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Whole>()).toMatchObject({ ok: true, sessions: 0, records: 0, broken: null });
+  });
+
+  it('counts only this family’s chains', async () => {
+    const mine = await openSessionAsParent();
+    const theirs = await openSessionAsParent();
+    await say(mine.sessionId, 'why is the sky blue');
+    for (const t of ['a', 'b', 'c', 'd']) await say(theirs.sessionId, t);
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/seal', headers: jar(mine.cookie, mine.parent) });
+    const v = res.json<Whole>();
+    expect(v.sessions).toBe(1);
+    expect(v.records).toBe(2);
+  });
+
+  it('keeps the per-session verify working alongside it', async () => {
+    const { sessionId: id } = await openSessionAsParent();
+    await say(id, 'why is the sky blue');
+    const res = await app.inject({ method: 'GET', url: `/v1/session/${id}/seal` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ ok: boolean; records: number }>()).toMatchObject({ ok: true, records: 2 });
+  });
+
+  it('reports a break and says which conversation it is in', async () => {
+    const { cookie, parent, sessionId: id } = await openSessionAsParent();
+    for (const t of ['a', 'b', 'c']) await say(id, t);
+    try {
+      await pool.query(`ALTER TABLE audit_event DISABLE TRIGGER audit_no_update`);
+      await pool.query(
+        `UPDATE audit_event SET payload_hash = repeat('f', 64)
+          WHERE session_id = $1 AND seq = 2`, [id]);
+    } finally {
+      await pool.query(`ALTER TABLE audit_event ENABLE TRIGGER audit_no_update`);
+    }
+
+    const res = await app.inject({
+      method: 'GET', url: '/v1/parent/seal', headers: jar(cookie, parent) });
+    const v = res.json<Whole>();
+    expect(v.ok).toBe(false);
+    expect(v.broken).toEqual({ sessionId: id, seq: 2 });
+  });
+});

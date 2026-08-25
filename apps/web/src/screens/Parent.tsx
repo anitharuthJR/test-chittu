@@ -25,7 +25,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Api, DashboardResponse } from '../api';
 import { ApiError } from '../api';
-import { crisisLock, forgetConsent, session } from '../store';
+import { crisisLock, forgetConsent, nextId, push, session } from '../store';
 import {
   StatsPanel, SafetyPanel, AssistPanel, HelplinePanel, LearningPanel, ConversationsPanel,
 } from './dashboard-panels';
@@ -126,6 +126,37 @@ export function ParentDashboard(
   }
 
   /**
+   * D5/SEAL — "recompute every hash", over every conversation there has been.
+   *
+   * The per-session check above can only ask about the chat open in THIS tab,
+   * and on a parent's own phone there is none — the same shape of defect the
+   * crisis panel had. This one takes no session id at all, so it covers the
+   * conversations the browser never opened, which are most of them.
+   */
+  async function verifyWholeSeal(): Promise<void> {
+    try {
+      const r = await api.wholeSeal();
+      if (!r.ok) {
+        // Name the conversation as well as the record. "Record 4 is wrong",
+        // with a hundred chains behind it, tells a parent nothing they can act
+        // on — and this is the one screen whose whole claim is that they can
+        // check rather than trust.
+        setSeal(
+          `Chain BROKEN in conversation ${r.broken?.sessionId ?? '?'} at record `
+          + `${r.broken?.seq ?? '?'}. This should never happen; please tell us.`);
+        return;
+      }
+      setSeal(
+        `Chain verified — ${r.records} sealed record${r.records === 1 ? '' : 's'} across `
+        + `${r.sessions} conversation${r.sessions === 1 ? '' : 's'}, nothing altered.`);
+    } catch {
+      // Never "verified" on a failure to ask. An unanswered question is not a
+      // pass, and this is the screen where that distinction is the product.
+      setSeal("Couldn't check the chain just now.");
+    }
+  }
+
+  /**
    * Which session is actually locked, from the SERVER's answer.
    *
    * The first version read `session.value` — the session this browser tab
@@ -145,6 +176,28 @@ export function ParentDashboard(
     try {
       const r = await api.ackCrisis(lockedSession);
       crisisLock.value = r.crisisLock;
+      /**
+       * D4/UN — "Chat unlocked + gentle welcome-back message".
+       *
+       * The lock lifting used to be the whole event: the pause simply stopped,
+       * with nothing said to the child who had been sitting behind it. The words
+       * are the server's — a scripted spine, because this is the least
+       * appropriate moment in the product to improvise — and this screen only
+       * puts them where the child will come back to them.
+       *
+       * It goes in as a CHITTU reply with its trace, not as `system`: that role
+       * is our own UI copy, an error or a lockout notice, and a safety script
+       * rendered there would read as a toast.
+       *
+       * Only on success, and only when the server sent one. A greeting after a
+       * refused unlock would tell a child the pause is over when it is not.
+       */
+      if (r.welcomeBack) {
+        push({
+          id: nextId(), role: 'chittu',
+          blocks: r.welcomeBack.blocks, trace: r.welcomeBack.trace, layers: [],
+        });
+      }
       setNote('Chat is unlocked. Please stay nearby.');
       // Re-read, so the panel disappears and the flags reflect the acknowledgement.
       setD(await api.dashboard());
@@ -223,12 +276,21 @@ export function ParentDashboard(
       <section class="card">
         <h3>🔗 Tamper-evident record</h3>
         <p class="sub">
-          Every turn is sealed into a hash chain. This recomputes it: if a single
-          character had been altered or a record removed, the check fails.
+          Every turn is sealed into a hash chain. This recomputes every hash from
+          the beginning: if a single character had been altered or a record
+          removed, the check fails. The first button covers every conversation
+          your child has had, including the ones this device never opened.
         </p>
-        <button type="button" class="btn btn--secondary" onClick={() => { void verifySeal(); }}>
-          Verify the chain
-        </button>
+        <div class="card__actions">
+          <button type="button" class="btn btn--secondary"
+            onClick={() => { void verifyWholeSeal(); }}>
+            Verify every conversation
+          </button>
+          <button type="button" class="btn btn--secondary"
+            onClick={() => { void verifySeal(); }}>
+            Verify this conversation
+          </button>
+        </div>
         {seal !== null && <p class="notice" role="status">{seal}</p>}
       </section>
 

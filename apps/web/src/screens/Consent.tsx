@@ -1,5 +1,6 @@
 /**
- * W1 — consent and onboarding. Seven steps, then the verification gate.
+ * W1 — consent and onboarding. Seven steps, then the verification gate —
+ * eight screens, and the stepper counts all eight.
  *
  * Law 02 is "consent before existence", and this screen is where that is true
  * or not. Note what it does NOT do: it never holds a consent token, because
@@ -22,7 +23,18 @@ import type { Api, ConsentMethod, MethodOffer } from '../api';
 import { ApiError } from '../api';
 import { BAND_INFO, BOARD_GROUPS, COUNTRY_NAMES, METHOD_LABELS } from '../catalog';
 
+/** The form steps. `step > STEPS` is the verification gate. */
 const STEPS = 7;
+
+/**
+ * What a parent is actually counting: the seven form steps AND the gate.
+ *
+ * The stepper used to announce `Step ${step} of ${STEPS}`, so the last screen
+ * before a family decides to trust this said "Step 8 of 7". Separate from
+ * `STEPS` on purpose — `STEPS` is what the Next/Verify branch tests, and folding
+ * the gate into it would turn a label fix into a control-flow change.
+ */
+const TOTAL_STEPS = STEPS + 1;
 
 interface Draft {
   parentName: string;
@@ -119,8 +131,13 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
         A grown-up sets this up. Chittu cannot talk to your child until you finish.
       </p>
 
-      <ol class="stepper" aria-label={`Step ${step} of ${STEPS}`}>
-        {Array.from({ length: STEPS }, (_, i) => (
+      <ol class="stepper" aria-label={`Step ${step} of ${TOTAL_STEPS}`}>
+        {/* Eight segments, because eight is what it announces. Seven beside a
+            spoken "of 8" is the same bug wearing a different hat. The fill rule
+            is unchanged — `i < step` fills the step you are ON as well as the
+            ones behind it — so the bar is full on the gate rather than a
+            segment short of it. */}
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => (
           <li key={i} class={i < step ? 'is-done' : ''} />
         ))}
       </ol>

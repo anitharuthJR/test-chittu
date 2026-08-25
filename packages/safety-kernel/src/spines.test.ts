@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BANDS, COUNTRIES, GUARD_KINDS } from '@chittu/contracts';
 import type { Band } from '@chittu/contracts';
-import { CRISIS_MAIN, CRISIS_SOFT, SPINE, crisisMain, spineFor } from './spines.js';
+import {
+  CRISIS_MAIN, CRISIS_SOFT, CRISIS_WELCOME_BACK, SPINE, crisisMain, spineFor,
+} from './spines.js';
 import type { SpineKind } from './spines.js';
 import { helplineText } from './helplines.js';
 
@@ -211,5 +213,53 @@ describe('CRISIS_SOFT', () => {
     expect(typeof CRISIS_SOFT.en).toBe('string');
     expect(CRISIS_SOFT.en).not.toContain('{L}');
     expect(Object.isFrozen(CRISIS_SOFT)).toBe(true);
+  });
+});
+
+/**
+ * D4/UN — "Chat unlocked + gentle welcome-back message".
+ *
+ * A child returning from a crisis lock is the least appropriate moment in the
+ * product to improvise, so this is scripted like every other crisis string and
+ * asserted longhand. Ported from prototype/chittu-v3.html line 1192.
+ */
+describe('CRISIS_WELCOME_BACK', () => {
+  it('carries the welcome-back reply verbatim', () => {
+    expect(CRISIS_WELCOME_BACK.en).toBe(
+      '💛 Your grown-up checked in. Welcome back — gently does it. 🐦',
+    );
+  });
+
+  it('keeps a Tamil variant, like every other crisis string', () => {
+    expect(CRISIS_WELCOME_BACK.ta).toBe(
+      '💛 உன் பெரியவங்க பேசிட்டாங்க. மறுபடியும் வரவேற்பு — மெதுவா போலாம். 🐦',
+    );
+  });
+
+  it('is band-agnostic and frozen — one string, no slot', () => {
+    // Same reason as CRISIS_SOFT: coming back is the same for a 5 year old and
+    // a 16 year old, and inventing band variants nobody wrote is not a port.
+    expect(typeof CRISIS_WELCOME_BACK.en).toBe('string');
+    expect(Object.isFrozen(CRISIS_WELCOME_BACK)).toBe(true);
+  });
+
+  it('carries no {L} slot — the helplines were already given at the lock', () => {
+    expect(CRISIS_WELCOME_BACK.en).not.toContain('{L}');
+    expect(CRISIS_WELCOME_BACK.ta).not.toContain('{L}');
+  });
+
+  it('says a person checked in, and claims nothing about how the child feels', () => {
+    // "You're feeling better now" would be Chittu asserting something it cannot
+    // know, at the one moment that costs most. It reports the parent's action.
+    expect(CRISIS_WELCOME_BACK.en).toContain('Your grown-up checked in');
+    expect(CRISIS_WELCOME_BACK.en).not.toMatch(/better|all right|okay now|fine now/i);
+  });
+
+  it('does not re-open the subject or ask the child to explain', () => {
+    expect(CRISIS_WELCOME_BACK.en).not.toMatch(/\?/);
+  });
+
+  it('carries no engagement mechanic — no streak, no guilt, no "don\'t go"', () => {
+    expect(CRISIS_WELCOME_BACK.en).not.toMatch(/streak|missed you|don't go|come back soon/i);
   });
 });

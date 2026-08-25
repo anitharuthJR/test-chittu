@@ -214,6 +214,138 @@ describe('the seal chain under a database', () => {
     for (const sid of ids) expect((await audit.verify(sid)).ok).toBe(true);
   });
 
+  /**
+   * D5/SEAL — "recompute every hash".
+   *
+   * `verify(sessionId)` answers for one conversation. A parent asking whether
+   * anything was edited is not asking about one conversation, and the prototype's
+   * button recomputed the lot from GENESIS. `verifyChild` is that, over every
+   * chain the child has.
+   */
+  describe('verifyChild — every chain the child has', () => {
+    async function chainsFor(email: string, texts: string[][]) {
+      const fam = await makeFamily({ parentEmail: email });
+      const audit = auditRepo(pool);
+      const child = childRepo(pool, keys);
+      const ids: string[] = [];
+      for (const turns of texts) {
+        const sid = await withChildScope(pool, fam.childId, (tx) =>
+          child.openSession(tx, fam.childId, fam.consentId, 'builder'));
+        ids.push(sid);
+        for (const t of turns) {
+          await withChildScope(pool, fam.childId, (tx) =>
+            audit.append(tx, { sessionId: sid, role: 'child', layer: 'SEAL', text: t }));
+        }
+      }
+      return { fam, audit, ids };
+    }
+
+    it('recomputes every hash across every session', async () => {
+      const { fam, audit } = await chainsFor('wholechain@example.com',
+        [['a', 'b', 'c'], ['d', 'e'], ['f']]);
+      const v = await audit.verifyChild(fam.childId);
+      expect(v.ok, `broke at ${JSON.stringify(v.broken)}`).toBe(true);
+      expect(v.sessions).toBe(3);
+      expect(v.records).toBe(6);
+      expect(v.broken).toBeNull();
+    });
+
+    it('answers for a child who has no chains at all', async () => {
+      const fam = await makeFamily({ parentEmail: 'nochain@example.com' });
+      const v = await auditRepo(pool).verifyChild(fam.childId);
+      expect(v).toEqual({ ok: true, sessions: 0, records: 0, broken: null });
+    });
+
+    it('sees nothing of another family — a second child’s chains are not counted', async () => {
+      const mine = await chainsFor('mineseal@example.com', [['a', 'b']]);
+      await chainsFor('theirsseal@example.com', [['x', 'y', 'z']]);
+      const v = await mine.audit.verifyChild(mine.fam.childId);
+      expect(v.sessions).toBe(1);
+      expect(v.records).toBe(2);
+    });
+
+    /**
+     * The one that makes the rest worth having.
+     *
+     * `audit_event` refuses UPDATE and DELETE by trigger, so a tampered chain
+     * cannot be built through the front door — which is exactly why this test
+     * goes round it. The threat the seal answers is a compromise of Postgres
+     * itself, and someone who has that has the owner role and can drop a
+     * trigger. Disabling it here is what that attacker's afternoon looks like.
+     */
+    it('names the session and the record when a hash was edited', async () => {
+      const { fam, audit, ids } = await chainsFor('brokenchain@example.com',
+        [['a', 'b'], ['c', 'd', 'e']]);
+      const victim = ids[1]!;
+      try {
+        await pool.query(`ALTER TABLE audit_event DISABLE TRIGGER audit_no_update`);
+        await pool.query(
+          `UPDATE audit_event SET payload_hash = repeat('f', 64)
+            WHERE session_id = $1 AND seq = 1`, [victim]);
+      } finally {
+        await pool.query(`ALTER TABLE audit_event ENABLE TRIGGER audit_no_update`);
+      }
+
+      const v = await audit.verifyChild(fam.childId);
+      expect(v.ok).toBe(false);
+      expect(v.broken).toEqual({ sessionId: victim, seq: 1 });
+      // Still reports how much it looked at, so "0 records, all fine" and
+      // "5 records, one edited" cannot read the same on a parent's screen.
+      expect(v.records).toBe(5);
+      expect(v.sessions).toBe(2);
+    });
+
+    it('names the break when a prev_hash alone was edited', async () => {
+      // The gap PORT-REVIEW §5 records in the prototype: its loop checked only
+      // the record hash, so an edited link passed. This checks the link too, and
+      // this is the case that proves it — the record's own hash still recomputes.
+      const { fam, audit, ids } = await chainsFor('prevlink@example.com', [['a', 'b', 'c']]);
+      const victim = ids[0]!;
+      try {
+        await pool.query(`ALTER TABLE audit_event DISABLE TRIGGER audit_no_update`);
+        await pool.query(
+          `UPDATE audit_event SET prev_hash = repeat('e', 64)
+            WHERE session_id = $1 AND seq = 2`, [victim]);
+      } finally {
+        await pool.query(`ALTER TABLE audit_event ENABLE TRIGGER audit_no_update`);
+      }
+
+      const v = await audit.verifyChild(fam.childId);
+      expect(v.ok).toBe(false);
+      expect(v.broken).toEqual({ sessionId: victim, seq: 2 });
+    });
+
+    it('names the break when a record was REMOVED from the middle', async () => {
+      // Deletion is the tamper a hash-only walk cannot see: every surviving
+      // record still recomputes against its own stored prev. What gives it away
+      // is the gap in `seq`.
+      const { fam, audit, ids } = await chainsFor('deleted@example.com', [['a', 'b', 'c', 'd']]);
+      const victim = ids[0]!;
+      try {
+        await pool.query(`ALTER TABLE audit_event DISABLE TRIGGER audit_no_delete`);
+        await pool.query(`DELETE FROM audit_event WHERE session_id = $1 AND seq = 1`, [victim]);
+      } finally {
+        await pool.query(`ALTER TABLE audit_event ENABLE TRIGGER audit_no_delete`);
+      }
+
+      const v = await audit.verifyChild(fam.childId);
+      expect(v.ok).toBe(false);
+      expect(v.broken).toEqual({ sessionId: victim, seq: 2 });
+      expect(v.records).toBe(3);
+    });
+
+    it('agrees with the per-session verify on the same chain', async () => {
+      // Two implementations of one claim would be two claims. This pins them
+      // together on the ordinary case; `keep the per-session one` is a product
+      // decision, not a licence for the two to drift.
+      const { fam, audit, ids } = await chainsFor('agreeseal@example.com', [['a', 'b', 'c']]);
+      const one = await audit.verify(ids[0]!);
+      const all = await audit.verifyChild(fam.childId);
+      expect(one.ok).toBe(all.ok);
+      expect(one.records).toBe(all.records);
+    });
+  });
+
   it('hashes compose, so verify can recompute from what is stored', () => {
     // hash = sha(prev | payloadHash), and payloadHash is what the table stores.
     // Had the prototype's hash-the-payload-directly form been ported, verify()

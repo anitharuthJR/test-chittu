@@ -108,6 +108,27 @@ export const CRISIS_SOFT: { readonly en: string; readonly ta: string } = Object.
   ta: 'நான் உன் கூடவே இருக்கேன், உன் பெரியவங்களுக்கு தெரிவிச்சாச்சு. 💛 அமைதியான கதை கேக்கலாமா, அல்லது மெதுவா மூச்சு விடலாமா?',
 });
 
+/**
+ * D4/UN — "Chat unlocked + gentle welcome-back message". Prototype line 1192.
+ *
+ * The one thing a child hears on the way OUT of a crisis lock, and the reason it
+ * is scripted is the reason the whole crisis path is: this is the least
+ * appropriate moment in the product to improvise. A model asked to be warm here
+ * would reach for "are you feeling better?" — a question that reopens the
+ * subject — or "I missed you", which is both an attachment simulation and a
+ * lie. This says what actually happened: a person checked in.
+ *
+ * Band-agnostic by design, exactly like `CRISIS_SOFT`: coming back is the same
+ * for a 5 year old and a 16 year old.
+ *
+ * It is a REPLY, not a system notice, so it never enters `history` — the caller
+ * renders it and stops. A scripted reply is not context for a model to build on.
+ */
+export const CRISIS_WELCOME_BACK: { readonly en: string; readonly ta: string } = Object.freeze({
+  en: '\uD83D\uDC9B Your grown-up checked in. Welcome back \u2014 gently does it. \uD83D\uDC26',
+  ta: '\uD83D\uDC9B \u0B89\u0BA9\u0BCD \u0BAA\u0BC6\u0BB0\u0BBF\u0BAF\u0BB5\u0B99\u0BCD\u0B95 \u0BAA\u0BC7\u0B9A\u0BBF\u0B9F\u0BCD\u0B9F\u0BBE\u0B99\u0BCD\u0B95. \u0BAE\u0BB1\u0BC1\u0BAA\u0B9F\u0BBF\u0BAF\u0BC1\u0BAE\u0BCD \u0BB5\u0BB0\u0BB5\u0BC7\u0BB1\u0BCD\u0BAA\u0BC1 \u2014 \u0BAE\u0BC6\u0BA4\u0BC1\u0BB5\u0BBE \u0BAA\u0BCB\u0BB2\u0BBE\u0BAE\u0BCD. \uD83D\uDC26',
+});
+
 /** Prototype line 803. Band is a parameter here; the prototype read global `S.band`. */
 export function spineFor(kind: SpineKind, band: Band): string {
   const en = SPINE[kind].en;

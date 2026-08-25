@@ -85,6 +85,14 @@ export interface SessionResponse {
    * witness the turn that locked the session, so it cannot know this locally.
    */
   readonly crisisLock: boolean;
+  /**
+   * D1/H — the scripted welcome, already built, sometimes carrying one warm
+   * memory. Null on a RESUMED session, where the conversation is repainted
+   * instead. The client renders these blocks; it never composes them, because
+   * which stored fact may open a conversation is an allowlist decision and this
+   * side of the wire does not make those.
+   */
+  readonly welcome: { readonly blocks: readonly Block[]; readonly trace: string } | null;
 }
 
 export interface OwnMessagesResponse {
@@ -109,6 +117,20 @@ export interface SealResponse {
   readonly ok: boolean;
   readonly records: number;
   readonly brokenAt: number | null;
+}
+
+/**
+ * The whole-chain answer (D5/SEAL). It needs no session id, which is the point:
+ * a parent on their own phone has none, and the conversations they most want
+ * checked are the ones this browser never opened.
+ */
+export interface WholeSealResponse {
+  readonly ok: boolean;
+  /** Chains examined. */
+  readonly sessions: number;
+  /** Hashes recomputed. */
+  readonly records: number;
+  readonly broken: { readonly sessionId: string; readonly seq: number } | null;
 }
 
 export interface PinResponse {
@@ -316,6 +338,13 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
 
     seal: (sessionId: string) => go<SealResponse>(`/v1/session/${sessionId}/seal`),
 
+    /**
+     * Every chain the child has, recomputed from GENESIS. Requires a live parent
+     * session: it says how many conversations there have been, and a consent
+     * cookie alone is a child.
+     */
+    wholeSeal: () => go<WholeSealResponse>('/v1/parent/seal'),
+
     /** The child's own turns, for repainting after a reload. */
     ownMessages: (sessionId: string) =>
       go<OwnMessagesResponse>(`/v1/session/${sessionId}/messages`),
@@ -332,9 +361,18 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
       go<{ forgotten: boolean }>(
         `/v1/session/${sessionId}/memories/${memoryId}`, { method: 'DELETE' }),
 
-    /** The only unlock path in the system. Parent action, PIN-gated in the UI. */
+    /**
+     * The only unlock path in the system. Parent action, PIN-gated in the UI.
+     *
+     * `welcomeBack` is D4/UN's "gentle welcome-back message" — a scripted spine
+     * the server composed. The client renders it and composes none of its own:
+     * what a child hears on the way out of a crisis lock is not UI copy.
+     */
     ackCrisis: (sessionId: string) =>
-      go<{ crisisLock: boolean }>(`/v1/session/${sessionId}/crisis/ack`, { method: 'POST' }),
+      go<{
+        crisisLock: boolean;
+        welcomeBack?: { readonly blocks: readonly Block[]; readonly trace: string };
+      }>(`/v1/session/${sessionId}/crisis/ack`, { method: 'POST' }),
   };
 }
 

@@ -57,15 +57,25 @@ export function Chat(
           await repaint(s.sessionId);
           return;
         }
-        push({
-          id: nextId(), role: 'chittu',
-          blocks: [
-            { kind: 'big', emoji: '🐦' },
-            { kind: 'text', text: "Hello! I'm Chittu. Ask me anything, or pick something below." },
-          ],
-          trace: 'SPINE · welcome',
-          layers: [],
-        });
+        /**
+         * D1/H — "Scripted welcome + one warm memory if any".
+         *
+         * The words come from the SERVER, and this screen holds no copy of its
+         * own. The welcome may now carry a stored memory, and which stored fact
+         * may be spoken back to a child is an allowlist decision — the same one
+         * that governs `memAdd`. A greeting hard-coded here would be a second
+         * source of truth for scripted copy, and a client that picked the memory
+         * itself would be the client making that decision.
+         *
+         * Nothing is invented when the server sends none: saying nothing to a
+         * stale API is honest, and inventing a greeting is how the copy drifts.
+         */
+        if (s.welcome) {
+          push({
+            id: nextId(), role: 'chittu',
+            blocks: s.welcome.blocks, trace: s.welcome.trace, layers: [],
+          });
+        }
       })
       .catch((e: unknown) => {
         // A 403 here means the consent is not active. Saying "your grown-up

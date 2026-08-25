@@ -10,9 +10,11 @@ export { LEX, PROFANITY, L1_ORDER, L1_PATTERNS, scan } from './lexicon.js';
 export type { LexKind } from './lexicon.js';
 
 export {
-  SPINE, CRISIS_MAIN, CRISIS_SOFT, PROFANITY_REPLY, spineFor, crisisMain,
+  SPINE, CRISIS_MAIN, CRISIS_SOFT, CRISIS_WELCOME_BACK, PROFANITY_REPLY, spineFor, crisisMain,
 } from './spines.js';
 export type { SpineKind, SpineEntry, BandedText } from './spines.js';
+
+export { WELCOME, welcomeMemory, welcomeSpine } from './welcome.js';
 
 export { REGISTRY, helplineText } from './helplines.js';
 

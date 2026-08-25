@@ -58,10 +58,19 @@ function stubApi(overrides: Partial<Api> = {}): Api {
       sessionId: '11111111-1111-4111-8111-111111111111',
       band: 'builder' as const, country: 'IN' as const,
       resumed: false, crisisLock: false,
+      // The server builds the welcome (D1/H); the client only renders it.
+      welcome: {
+        blocks: [
+          { kind: 'big' as const, emoji: '🐦' },
+          { kind: 'text' as const, text: "Hello! I'm Chittu. Ask me anything, or pick something below." },
+        ],
+        trace: 'SPINE · welcome',
+      },
     })),
     ownMessages: vi.fn(async () => ({ restorable: true, note: null, turns: [] })),
     turn: vi.fn(),
     seal: vi.fn(),
+    wholeSeal: vi.fn(),
     memories: vi.fn(async () => ({ memories: [] })),
     dashboard: vi.fn(async () => DASHBOARD),
     transcript: vi.fn(),
@@ -295,7 +304,8 @@ describe('the parent PIN gate', () => {
 describe('reload', () => {
   const RESUMED = {
     sessionId: 'live-session', band: 'builder' as const, country: 'IN' as const,
-    resumed: true, crisisLock: false,
+    // No welcome on a resume: the conversation is repainted instead.
+    resumed: true, crisisLock: false, welcome: null,
   };
 
   it('puts the earlier conversation back on screen', async () => {
@@ -377,5 +387,346 @@ describe('band-aware surface', () => {
     const { container } = render(<App api={api} />);
     await waitFor(() => expect(container.querySelector('.band-explorer')).toBeTruthy());
     expect(session.value).toBeNull();
+  });
+});
+
+/**
+ * D1/H — "Scripted welcome + one warm memory if any".
+ *
+ * The client renders the welcome the SERVER built and holds no copy of its own.
+ * Which stored fact may be spoken back to a child is an allowlist decision
+ * (`welcomeMemory` in the kernel), and this screen is not allowed to make one —
+ * it does not even fetch the memory list to open a session.
+ */
+describe('the welcome', () => {
+  const welcomed = (text: string, trace = 'SPINE · welcome') => ({
+    sessionId: '11111111-1111-4111-8111-111111111111',
+    band: 'builder' as const, country: 'IN' as const,
+    resumed: false, crisisLock: false,
+    welcome: {
+      blocks: [{ kind: 'big' as const, emoji: '🐦' }, { kind: 'text' as const, text }], trace,
+    },
+  });
+
+  it('renders the scripted welcome the server sent', async () => {
+    const api = signedIn({
+      openSession: vi.fn(async () => welcomed("Hello! I'm Chittu. Ask me anything.")),
+    });
+    render(<App api={api} />);
+    await waitFor(() =>
+      expect(screen.getByText(/hello! i'm chittu\. ask me anything\./i)).toBeTruthy());
+  });
+
+  it('carries the warm memory when the server put one in', async () => {
+    const api = signedIn({
+      openSession: vi.fn(async () => welcomed(
+        "Hello! I'm Chittu. You're back — I remember: has a cat named Mani. Ask me anything.",
+        'SPINE · welcome + MEMORY',
+      )),
+    });
+    render(<App api={api} />);
+    await waitFor(() => expect(screen.getByText(/has a cat named mani/i)).toBeTruthy());
+  });
+
+  it('does not fetch the memory list to open a session', async () => {
+    // The decision is the server's. A client that reads the whole list to pick
+    // one has taken it back, and would take it back on a stale deploy too.
+    const api = signedIn({
+      openSession: vi.fn(async () => welcomed("Hello! I'm Chittu. Ask me anything.")),
+    });
+    render(<App api={api} />);
+    await waitFor(() => expect(api.openSession).toHaveBeenCalled());
+    await settle();
+    expect(api.memories).not.toHaveBeenCalled();
+  });
+
+  it('invents nothing when the server sends no welcome', async () => {
+    // A stale API is the case this covers. Saying nothing is honest; a hard-coded
+    // greeting in the client would be a second source of truth for scripted copy.
+    const api = signedIn({
+      openSession: vi.fn(async () => ({
+        sessionId: '11111111-1111-4111-8111-111111111111',
+        band: 'builder' as const, country: 'IN' as const,
+        resumed: false, crisisLock: false, welcome: null,
+      })),
+    });
+    render(<App api={api} />);
+    await waitFor(() => expect(api.openSession).toHaveBeenCalled());
+    await settle();
+    expect(messages.value).toHaveLength(0);
+  });
+
+  it('goes through the ordinary reply path, so the render guard covers it', async () => {
+    // The welcome now carries stored text a model wrote, so it must not have a
+    // rendering path of its own. It is pushed as a `chittu` message holding the
+    // server's blocks verbatim — the same shape a turn produces — which is what
+    // puts it through BlockRenderer's `guardBlocks`. A bespoke welcome renderer
+    // would be a second output channel, and `speak()` is the standing reminder
+    // of what those cost.
+    const blocks = [
+      { kind: 'big' as const, emoji: '🐦' },
+      { kind: 'text' as const, text: "Hello! I'm Chittu. Ask me anything." },
+    ];
+    const api = signedIn({
+      openSession: vi.fn(async () => ({
+        sessionId: '11111111-1111-4111-8111-111111111111',
+        band: 'builder' as const, country: 'IN' as const,
+        resumed: false, crisisLock: false,
+        welcome: { blocks, trace: 'SPINE · welcome' },
+      })),
+    });
+    render(<App api={api} />);
+    await waitFor(() => expect(api.openSession).toHaveBeenCalled());
+    await settle();
+
+    expect(messages.value).toHaveLength(1);
+    const m = messages.value[0]!;
+    expect(m.role).toBe('chittu');
+    // Verbatim: nothing reformatted, nothing added, nothing stripped here.
+    expect('blocks' in m ? m.blocks : null).toEqual(blocks);
+  });
+});
+
+/**
+ * D4/UN — "Chat unlocked + gentle welcome-back message".
+ *
+ * The words are the server's (a kernel spine); this screen renders them into
+ * the child's log. It is the LAST thing they see before typing again, so it is
+ * a Chittu reply with a trace, not the `system` role — that role is our own UI
+ * copy, an error or a lockout notice, and never a safety script.
+ */
+describe('the welcome-back after a crisis unlock', () => {
+  const WELCOME_BACK = {
+    blocks: [{
+      kind: 'text' as const,
+      text: '💛 Your grown-up checked in. Welcome back — gently does it. 🐦',
+    }],
+    trace: 'SPINE · welcome-back',
+  };
+
+  async function unlockAsParent(api: Api) {
+    globalThis.history.pushState({}, '', '/parent');
+    render(<App api={api} />);
+    const input = await screen.findByLabelText(/parent pin/i);
+    fireEvent.input(input, { target: { value: '4917' } });
+    fireEvent.click(screen.getByRole('button', { name: /unlock/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /spoken with them/i }));
+  }
+
+  const lockedDashboard = {
+    ...DASHBOARD,
+    stats: { ...DASHBOARD.stats, crisisLocked: true },
+    sessions: [{
+      id: 'locked-session', band: 'builder' as const,
+      startedAt: '2026-08-24T18:00:00.000Z', endedAt: null,
+      msgCount: 4, crisisLock: true,
+    }],
+  };
+
+  it('puts the scripted welcome-back into the chat the child comes back to', async () => {
+    const api = signedIn({
+      verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+      dashboard: vi.fn(async () => lockedDashboard),
+      ackCrisis: vi.fn(async () => ({ crisisLock: false, welcomeBack: WELCOME_BACK })),
+    });
+    await unlockAsParent(api);
+
+    await waitFor(() => expect(api.ackCrisis).toHaveBeenCalled());
+    await settle();
+    const last = messages.value[messages.value.length - 1];
+    expect(last?.role).toBe('chittu');
+    expect(JSON.stringify(last)).toContain('Your grown-up checked in');
+  });
+
+  it('renders it as a Chittu reply, not as our own UI copy', async () => {
+    // `system` is an error or a lockout notice. A safety script rendered in that
+    // role would be indistinguishable from a toast, at the moment it matters.
+    const api = signedIn({
+      verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+      dashboard: vi.fn(async () => lockedDashboard),
+      ackCrisis: vi.fn(async () => ({ crisisLock: false, welcomeBack: WELCOME_BACK })),
+    });
+    await unlockAsParent(api);
+    await waitFor(() => expect(api.ackCrisis).toHaveBeenCalled());
+    await settle();
+
+    expect(messages.value.filter((m) => m.role === 'system')).toHaveLength(0);
+    const last = messages.value[messages.value.length - 1];
+    expect(last && 'trace' in last ? last.trace : null).toBe('SPINE · welcome-back');
+  });
+
+  it('composes no welcome-back of its own when the server sends none', async () => {
+    const api = signedIn({
+      verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+      dashboard: vi.fn(async () => lockedDashboard),
+      ackCrisis: vi.fn(async () => ({ crisisLock: false })),
+    });
+    await unlockAsParent(api);
+    await waitFor(() => expect(api.ackCrisis).toHaveBeenCalled());
+    await settle();
+
+    expect(crisisLock.value).toBe(false);
+    expect(JSON.stringify(messages.value)).not.toContain('Welcome back');
+  });
+
+  it('says nothing at all when the unlock FAILED', async () => {
+    // A greeting after a refused unlock would tell a child the pause is over
+    // when it is not.
+    const api = signedIn({
+      verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+      dashboard: vi.fn(async () => lockedDashboard),
+      ackCrisis: vi.fn(async () => {
+        throw new ApiError(403, 'a parent PIN is required', 'PARENT_REQUIRED');
+      }),
+    });
+    await unlockAsParent(api);
+    await waitFor(() => expect(api.ackCrisis).toHaveBeenCalled());
+    await settle();
+
+    expect(JSON.stringify(messages.value)).not.toContain('Welcome back');
+    await waitFor(() => expect(screen.getByText(/enter your pin again to unlock/i)).toBeTruthy());
+  });
+});
+
+/**
+ * D5/SEAL — "Verify seal integrity / recompute every hash".
+ *
+ * Two buttons, deliberately. The per-session one answers about the conversation
+ * open in THIS tab, and is null on a parent's own phone — the same shape of
+ * defect the crisis panel had. The whole-chain one is what a parent is actually
+ * asking, and it needs no session id at all.
+ */
+describe('verifying the seal', () => {
+  const asParent = async (api: Api) => {
+    globalThis.history.pushState({}, '', '/parent');
+    render(<App api={api} />);
+    const input = await screen.findByLabelText(/parent pin/i);
+    fireEvent.input(input, { target: { value: '4917' } });
+    fireEvent.click(screen.getByRole('button', { name: /unlock/i }));
+  };
+
+  const parentApi = (o: Partial<Api> = {}) => signedIn({
+    verifyPin: vi.fn(async () => ({ ok: true, locked: false })),
+    ...o,
+  });
+
+  it('checks every conversation, with no session open in this tab', async () => {
+    const api = parentApi({
+      wholeSeal: vi.fn(async () => ({ ok: true, sessions: 3, records: 42, broken: null })),
+    });
+    await asParent(api);
+    fireEvent.click(await screen.findByRole('button', { name: /verify every conversation/i }));
+
+    await waitFor(() => expect(api.wholeSeal).toHaveBeenCalled());
+    // session.value is null — a parent on their own phone opened nothing.
+    expect(session.value).toBeNull();
+    expect(screen.getByText(/42 sealed records? across 3 conversations/i)).toBeTruthy();
+  });
+
+  it('names the conversation when the chain is broken', async () => {
+    const api = parentApi({
+      wholeSeal: vi.fn(async () => ({
+        ok: false, sessions: 2, records: 9, broken: { sessionId: 'abc-123', seq: 4 },
+      })),
+    });
+    await asParent(api);
+    fireEvent.click(await screen.findByRole('button', { name: /verify every conversation/i }));
+
+    await waitFor(() => expect(screen.getByText(/chain broken/i)).toBeTruthy());
+    expect(screen.getByText(/abc-123/)).toBeTruthy();
+  });
+
+  it('keeps the per-session check', async () => {
+    const api = parentApi({
+      seal: vi.fn(async () => ({ ok: true, records: 6, brokenAt: null })),
+    });
+    await asParent(api);
+    fireEvent.click(await screen.findByRole('button', { name: /^verify this conversation$/i }));
+    await waitFor(() => expect(screen.getByText(/no chat has started yet/i)).toBeTruthy());
+  });
+
+  it('says so rather than claiming a pass when the check itself fails', async () => {
+    const api = parentApi({
+      wholeSeal: vi.fn(async () => { throw new Error('offline'); }),
+    });
+    await asParent(api);
+    fireEvent.click(await screen.findByRole('button', { name: /verify every conversation/i }));
+    await waitFor(() => expect(screen.getByText(/couldn't check the chain/i)).toBeTruthy());
+  });
+});
+
+/**
+ * D1 — the consent wizard's step counter.
+ *
+ * The last screen a parent sees before they decide whether to trust this, and
+ * it announced "Step 8 of 7". Cosmetic, and cosmetic on this screen is not the
+ * same as cosmetic.
+ */
+describe('the consent step counter', () => {
+  const stepper = (c: Element) => c.querySelector('.stepper')!;
+
+  async function startConsent() {
+    const api = stubApi({
+      methods: vi.fn(async () => ({
+        country: 'IN' as const, methods: ['dev_stub' as const],
+        offers: [{ method: 'dev_stub' as const, available: true }],
+      })),
+    });
+    const r = render(<App api={api} />);
+    await screen.findByText(/a grown-up sets this up/i);
+    return r;
+  }
+
+  /** Fill whatever step `n` needs, then press Next. */
+  function advance(n: number): void {
+    if (n === 1) {
+      fireEvent.input(screen.getByLabelText(/your name/i), { target: { value: 'Lakshmi' } });
+      fireEvent.input(screen.getByLabelText(/your email/i), { target: { value: 'p@example.com' } });
+    }
+    if (n === 2) {
+      fireEvent.input(screen.getByLabelText(/first name/i), { target: { value: 'Meera' } });
+    }
+    if (n === 4) fireEvent.click(screen.getByRole('button', { name: /builder/i }));
+    if (n === 6) {
+      fireEvent.input(screen.getByLabelText(/^pin \(4–6 digits\)$/i), { target: { value: '4917' } });
+      fireEvent.input(screen.getByLabelText(/type it again/i), { target: { value: '4917' } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+  }
+
+  it('counts the verification gate — never "step 8 of 7"', async () => {
+    const { container } = await startConsent();
+    for (let n = 1; n <= 7; n++) advance(n);
+
+    // The gate: the last screen, and the eighth.
+    await waitFor(() => expect(screen.getByText(/prove you're the grown-up/i)).toBeTruthy());
+    const label = stepper(container).getAttribute('aria-label');
+    expect(label).toBe('Step 8 of 8');
+  });
+
+  it('counts the same total on every step, from the first', async () => {
+    const { container } = await startConsent();
+    expect(stepper(container).getAttribute('aria-label')).toBe('Step 1 of 8');
+    advance(1);
+    await waitFor(() =>
+      expect(stepper(container).getAttribute('aria-label')).toBe('Step 2 of 8'));
+  });
+
+  it('shows as many dots as it announces', async () => {
+    // A screen reader hearing "of 8" beside seven visible segments is the same
+    // bug wearing a different hat.
+    const { container } = await startConsent();
+    const announced = Number(/of (\d+)/.exec(stepper(container).getAttribute('aria-label')!)![1]);
+    expect(stepper(container).querySelectorAll('li')).toHaveLength(announced);
+  });
+
+  it('never announces a step past the total', async () => {
+    const { container } = await startConsent();
+    for (let n = 1; n <= 7; n++) advance(n);
+    await waitFor(() => expect(screen.getByText(/prove you're the grown-up/i)).toBeTruthy());
+
+    const [, at, total] = /Step (\d+) of (\d+)/
+      .exec(stepper(container).getAttribute('aria-label')!)!;
+    expect(Number(at)).toBeLessThanOrEqual(Number(total));
   });
 });

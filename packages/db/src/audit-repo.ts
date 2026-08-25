@@ -137,6 +137,77 @@ export function auditRepo(pool: DbPool) {
       return { ok: true, records: r.rows.length, brokenAt: null };
     },
 
+    /**
+     * D5/SEAL — "recompute every hash", over EVERY chain the child has.
+     *
+     * `verify(sessionId)` answers for one conversation. A parent asking whether
+     * anything was edited is not asking about one conversation, and the
+     * prototype's button recomputed the lot from GENESIS. Per session that is
+     * still what happens: each chain is seeded from its own `genesisFor`, so
+     * this is a loop over chains rather than one longer chain.
+     *
+     * The rows come back ordered by session and then by seq, so the walk is a
+     * single pass. `broken` names WHICH conversation as well as which record —
+     * a parent told "record 3 is wrong" with no session is told nothing.
+     *
+     * Reads from `pool`, like `verify`, and must be called OUTSIDE a
+     * `withChild` transaction. Taking a second handle inside one is how this
+     * repo has twice ended up reading outside the child scope.
+     */
+    async verifyChild(childId: string): Promise<{
+      ok: boolean;
+      /** Chains examined. */
+      sessions: number;
+      /** Hashes recomputed. */
+      records: number;
+      broken: { sessionId: string; seq: number } | null;
+    }> {
+      const r = await pool.query<{
+        session_id: string; seq: number; payload_hash: string;
+        prev_hash: string; hash: string;
+      }>(`SELECT a.session_id, a.seq, a.payload_hash, a.prev_hash, a.hash
+            FROM audit_event a JOIN session s ON s.id = a.session_id
+           WHERE s.child_id = $1
+           ORDER BY a.session_id ASC, a.seq ASC`, [childId]);
+
+      const seen = new Set<string>();
+      let prev = '';
+      let expectedSeq = 0;
+      let broken: { sessionId: string; seq: number } | null = null;
+
+      for (const row of r.rows) {
+        if (!seen.has(row.session_id)) {
+          seen.add(row.session_id);
+          prev = genesisFor(row.session_id);
+          expectedSeq = 0;
+        }
+        // Keep walking after a break rather than returning: `sessions` and
+        // `records` are what the parent is told was examined, and a count that
+        // stops at the first bad record understates the work every time.
+        if (broken === null) {
+          // Three checks, matching `verify()` clause for clause so the two
+          // cannot answer differently about the same chain. The `seq` one is
+          // belt-and-braces — every gap it would catch also breaks the prev
+          // link — and it is kept because the per-session verify has it.
+          //
+          // NEITHER catches a chain TRUNCATED at the tail: what remains still
+          // recomputes end to end. That is what `seal_anchor` is for (heads
+          // published outside the database), and it is not populated yet.
+          if (row.seq !== expectedSeq
+            || row.prev_hash !== prev
+            || sha(`${prev}|${row.payload_hash}`) !== row.hash) {
+            broken = { sessionId: row.session_id, seq: row.seq };
+          }
+        }
+        prev = row.hash;
+        expectedSeq = row.seq + 1;
+      }
+
+      return {
+        ok: broken === null, sessions: seen.size, records: r.rows.length, broken,
+      };
+    },
+
     async head(sessionId: string): Promise<string> {
       const r = await pool.query<{ hash: string }>(
         `SELECT hash FROM audit_event WHERE session_id = $1 ORDER BY seq DESC LIMIT 1`,

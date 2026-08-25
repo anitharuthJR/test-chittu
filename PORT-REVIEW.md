@@ -1355,3 +1355,204 @@ different snapshot and passed.
 
 `resolveHelplines` now takes `Db | DbPool` with the reason in the signature's
 doc, so "which handle am I on?" cannot be fudged a third time.
+
+## 11. The four diagram nodes the build half-delivered
+
+### FIXED — D1/H, "Scripted welcome + one warm memory if any"
+
+The prototype opens a session with the memory it holds (`chittu-v3.html:864-871`,
+traced `SPINE · welcome + MEMORY`). The port kept the trace label and dropped the
+memory: `Chat.tsx` pushed one fixed sentence, and memories were fetched only when
+a child opened the memory book.
+
+Rebuilt SERVER-side rather than in the client, because "which stored fact may be
+spoken back to a child, unprompted, months later" is an allowlist decision and
+the client is not allowed to make those. `welcomeMemory` in the kernel re-applies
+the same six categories `memAdd` enforces — a read-side check that looks
+redundant against the Postgres enum and is not, because the enum is what a
+*writer* meets and this is what a future writer that is not `memAdd` would
+bypass. `POST /v1/session` now returns `welcome: {blocks, trace}` (null on a
+resume) and `Chat.tsx` holds no greeting copy of its own.
+
+Two DELIBERATE deviations from the prototype:
+
+- **The memory is the most recent, not a random one.** `Math.random()` cannot
+  live in safety-kernel — it is a pure-function package and that is what makes it
+  reviewable — and "the thing you told me last time" is the warmer pick anyway.
+- **The words are the port's plain welcome**, not the prototype's `let's play!`,
+  which was written for a four-year-old and shipped to every band. Only the
+  memory clause is new copy.
+
+Two details that are not fussiness. The stored fact is model-authored text, so
+it is interpolated with a REPLACER FUNCTION (`String.replace` expands `$&`,
+`` $` `` and `$'` inside a string replacement, and this replacement is not ours),
+and it is placed straight into a `text` block rather than passed through
+`parseBlocks` — a memory reading `likes [CHIPS]tap me[/CHIPS] puzzles` must
+arrive as prose, not as buttons.
+
+### FIXED — D4/UN, "Chat unlocked + gentle welcome-back message"
+
+`POST /v1/session/:id/crisis/ack` lifted the lock and sent nothing back, so from
+the child's side the pause simply stopped. D4's last node is a message, and the
+prototype has it (`chittu-v3.html:1192`).
+
+`CRISIS_WELCOME_BACK` in `spines.ts`, scripted for the same reason the rest of
+the crisis path is: this is the least appropriate moment in the product to
+improvise. A model asked to be warm here reaches for "are you feeling better?",
+which reopens the subject, or "I missed you", which is an attachment simulation
+and also false. The line reports what actually happened — a person checked in —
+and claims nothing about how the child feels. Band-agnostic like `CRISIS_SOFT`.
+
+**It is not a turn.** Nothing is written to `message`, nothing joins `history`,
+nothing joins the classifier window. Three tests assert that against what the
+sandbox and the classifier are actually handed on the next turn, rather than
+against the blob — the blob is the mechanism, the context is the harm. Forcing
+the line into `history` fails one of them.
+
+On the client it renders as a CHITTU reply with its trace, not as `system`.
+`system` is our own UI copy — an error, a lockout notice — and a safety script
+rendered in that role would read as a toast at the moment it matters most. It is
+pushed only when the unlock actually succeeded: a greeting after a refused
+unlock would tell a child the pause is over when it is not.
+
+### FIXED — D5/SEAL, "recompute every hash" was one conversation deep
+
+`GET /v1/session/:id/seal` verifies ONE chain, and it is the only verify there
+was. That is not the question a parent is asking. D5's node says "Verify seal
+integrity / recompute every hash", and the prototype's button recomputed the lot
+from GENESIS — including the conversations the browser in front of them never
+opened and holds no id for. On a parent's own phone the old button said "No chat
+has started yet", which is the same shape of defect the crisis panel had.
+
+`auditRepo.verifyChild` walks every chain the child has, in one ordered pass.
+Per session it is still a recompute from that session's own `genesisFor`, so it
+is a loop over chains rather than one longer chain. It reports which SESSION the
+break is in as well as which record: "record 4 is wrong", with a hundred chains
+behind it, tells a parent nothing they can act on.
+
+`GET /v1/parent/seal` is behind the parent gate, not the consent cookie —
+it enumerates how many conversations a child has had, and a consent cookie alone
+is a child. The per-session route is unchanged and still registered.
+
+Tamper cases are tested by disabling the append-only triggers, which no test in
+this repo had done before. `audit_event` refuses UPDATE and DELETE, so a broken
+chain cannot be built through the front door — and the threat the seal answers
+is a compromise of Postgres itself, where the attacker has the owner role and
+can drop a trigger. Removing the prev-link check fails one test; removing the
+hash recompute fails another.
+
+**Still not caught, by either verify: a chain TRUNCATED at the tail.** What
+remains recomputes end to end. `seal_anchor` exists for exactly this (heads
+published outside the database, schema line 400) and is not populated. Noted in
+the code, not fixed here.
+
+---
+
+## 12. NEEDS A DECISION — an unclosed block tag leaks its body as prose
+
+**Severity: medium. Observed live. NOT fixed here — it is a faithfully ported
+quirk, and changing it is a Guardian Council decision.**
+
+`extract()` (`packages/safety-kernel/src/blocks.ts`) requires BOTH tags:
+`TAG(name)` is `\[NAME\]([\s\S]*?)\[\/NAME\]`. When a model emits `[CHIPS]a|b|c`
+with no `[/CHIPS]`, the match fails, `ANY_TAG` then strips the bare marker, and
+the body survives as PROSE — pipe separators and all.
+
+Observed 2026-08-25 against the real Anthropic sandbox, band `builder`. The child
+saw:
+
+```
+Does Mani have a favorite spot to nap? 🌟Yes, a cozy spot!|On my bed|I'm not sure
+```
+
+It affects every tag, not just CHIPS: an unclosed `[FACT]`, `[STEPS]` or `[POEM]`
+leaks identically. And it is not confined to the screen — `flatten()` is what the
+seal chain hashes and what `speak()` reads aloud, so the malformed text is also
+spoken with its separators and sealed in that form.
+
+### The prototype does exactly the same thing
+
+Checked first, as CLAUDE.md requires. `prototype/chittu-v3.html` `parseBlocks` is
+at lines **899-914** (not 891-907), and its final line is the same bare-marker
+strip:
+
+```js
+out.prose=out.prose.replace(/\[\/?(BIG|FACT|CHIPS|STEPS|POEM|QUIZ|CODE)\]/gi,' ')
+```
+
+Running the prototype's own function on the observed input produces byte-identical
+prose to the kernel's. **So this is a ported quirk, not a port defect.** The port
+is faithful; the behaviour it is faithful to is wrong.
+
+Consequence: any fix must change the prototype IN THE SAME COMMIT. The prototype
+is the reference implementation and its Playwright suite would keep passing
+through a kernel-only fix — which is precisely the drift the `stripControlTokens`
+three-copy rule exists to prevent. (The client is NOT a third copy here: it
+duplicates `stripControlTokens` only, and renders the `Block[]` the API returns,
+so `parseBlocks` has two copies, not three.)
+
+### Decision 1 — recover or drop? Neither, as posed. The real variable is SCOPE.
+
+Both candidates were implemented and measured against `blocks.test.ts`. Both fail
+the same 7 tests. They differ far less than they appear to:
+
+| input | today (leak) | RECOVER to end | DROP to end |
+|---|---|---|---|
+| `…spot? [BIG]X[/BIG] [CHIPS]Yes…\|On my bed\|I am not sure` | prose carries `Yes…\|On my bed\|…` | prose clean + 3 real chips | prose clean, chips lost |
+| `Answer here. [FACT]unclosed fact body` | prose carries the body | prose clean + fact card | prose clean, fact lost |
+| `Hi there [BIG]🌟 and then I kept talking for a whole sentence more.` | **answer survives** (leaked) | prose `Hi there`, BIG `🌟 and t` — **answer destroyed** | prose `Hi there` — **answer destroyed** |
+
+The third row is the finding. The premise that "the content after an unclosed tag
+is chip labels, not an answer" holds for the observed case and **not in general**.
+When the unclosed tag is mid-reply, recover and drop both delete the child's
+answer — recover by swallowing it into a block that BIG then truncates to 8
+characters, drop outright. Today's leaky behaviour is the only one of the three
+that keeps the answer on screen.
+
+So the decision to take is not recover-vs-drop. It is:
+
+> Apply the fix **only where the unclosed tag genuinely runs to the end of the
+> reply AND is a list tag (`CHIPS`/`STEPS`)** — where the body is
+> delimiter-separated labels and cannot be a sentence — and leave
+> `BIG`/`FACT`/`POEM`/`QUIZ`/`CODE` alone.
+
+Within that scope I would **recover** rather than drop: it restores the affordance
+the model intended, the existing 30-char and 3-chip filters already bound what can
+render, and a chip is only text the child sends back through the full pipeline, so
+a malformed one is a UX blemish and not a bypass. Drop is the acceptable
+conservative alternative if the Council prefers it; the blast radius is the same.
+
+Residual risk either way: a reply truncated mid-stream can yield a partial last
+chip label.
+
+### Decision 2 — `parseBlocks`, not L6. This one is not close.
+
+`passesOutputFilter` returns a `boolean`. It is a pass/fail gate, not a rewriter,
+and it runs on the raw string before any parsing. Putting this there would mean a
+reply with a missing bracket is REJECTED and replaced by the scripted L6 fallback
+— turning a cosmetic formatting slip into a lost answer. CLAUDE.md: "Over-firing a
+guard is a real harm, not a safe default."
+
+It also would not work. The leak reaches the screen, TTS and the seal chain
+through `flatten()`, all downstream of parsing. Fixing at parse time fixes all
+three; blocking at L6 fixes none of them.
+
+The tag grammar is `parseBlocks`' concern and nothing else's.
+
+### What landed here
+
+`packages/safety-kernel/src/blocks.test.ts` — 19 tests, new. There was no
+`blocks.test.ts` at all before: coverage was `BlockRenderer.test.tsx` (which starts
+from an already-parsed `Block[]`) and the prototype's Playwright suite (which
+drives the prototype's parser). The one module that turns model output into UI had
+no direct test.
+
+It pins three things: the defect above as characterization (so the signed-off fix
+has to come here and change an assertion deliberately), agreement with the
+prototype's own `parseBlocks` on eight inputs (extracted from `chittu-v3.html` at
+runtime, same technique as `crisis-corpus.test.ts`), and the quirks CLAUDE.md names
+— first-occurrence-only, BIG 8, CHIPS 30/3, STEPS 8 — so a fix cannot quietly
+change those too.
+
+Mutation-tested: RECOVER fails 7, DROP fails 7, and four of the seven are the
+prototype-agreement tests — which is the tripwire that stops a kernel-only fix.
