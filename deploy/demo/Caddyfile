@@ -1,0 +1,39 @@
+# Chittu demo — chittu.tulifo.ai
+#
+# basic_auth is the ONLY gate on this deployment. The hostname becomes public
+# knowledge the moment Let's Encrypt logs the certificate (Certificate
+# Transparency is public and permanent), so the password is doing all the
+# work: make it real, never remove the block, and note that it covers /v1 —
+# the API — not just the page.
+#
+# Generate the hash on the box:   caddy hash-password
+# Validate after every edit:      caddy validate --config /etc/caddy/Caddyfile
+# Apply:                          sudo systemctl reload caddy
+#
+# Certificates are automatic (Let's Encrypt) — the security group must allow
+# 80 and 443 from anywhere or issuance fails. The web build is served static
+# from /srv/chittu-web (rsync'd from apps/web/dist), with the SPA fallback the
+# wouter-preact router needs. /v1 and /health proxy to the API on loopback.
+
+chittu.tulifo.ai {
+	encode zstd gzip
+
+	basic_auth {
+		# Replace with the output of `caddy hash-password` before reloading.
+		demo REPLACE_WITH_HASH_FROM_caddy_hash-password
+	}
+
+	handle /v1/* {
+		reverse_proxy localhost:8080
+	}
+
+	handle /health {
+		reverse_proxy localhost:8080
+	}
+
+	handle {
+		root * /srv/chittu-web
+		try_files {path} /index.html
+		file_server
+	}
+}

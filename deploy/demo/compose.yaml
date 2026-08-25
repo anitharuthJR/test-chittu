@@ -1,0 +1,86 @@
+# Chittu demo stack — one small box, dev mode, no local LLM.
+#
+# This is NOT the deployment path. That is infra/ (Fargate + RDS + KMS), which
+# remains unapplied. This file restates the repo's compose.yaml dev profile for
+# a single internet-facing demo host (chittu.tulifo.ai), with three deliberate
+# differences:
+#
+#   - the image is LOADED, never built here. Build on an arm64 Mac and ship it
+#     (`docker save chittu-api | gzip | ssh box 'gunzip | docker load'`), so the
+#     box never needs node, pnpm or a compiler and a t4g.small (2 GB) is enough.
+#   - the API binds to LOOPBACK only. Caddy is the sole listener on 80/443 and
+#     the only path to the API; Postgres publishes no port at all.
+#   - CHITTU_DEV_MASTER_KEY is REQUIRED. Without it the dev key provider mints
+#     an ephemeral randomBytes(32) per boot (packages/db/src/crypto.ts), and
+#     every restart makes existing ciphertext — parent email, child first name,
+#     message bodies, memory facts — unreadable. Loud by design; wrong for a
+#     box that stops between demos.
+#
+# Run from this directory, after `docker load` and with .env populated:
+#   docker compose up -d
+#
+# Full procedure: docs/runbooks/demo-deploy.md
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chittu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chittu}
+      POSTGRES_DB: chittu
+    # No `ports:` — reachable from the compose network only. The chittu/chittu
+    # default is acceptable exactly because nothing outside this network can
+    # ever reach the socket.
+    volumes:
+      - chittu-demo-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chittu -d chittu']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Runs to completion, then exits — same shape as the repo's dev profile and
+  # the ECS migrate task: migrate first, then the service. bootstrapDb()
+  # deliberately does not migrate, so skipping this leaves an empty database.
+  migrate:
+    image: chittu-api
+    pull_policy: never # only ever docker-load'ed; never resolve the bare name against a registry
+    command: ['dist/migrate.js']
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://chittu:${POSTGRES_PASSWORD:-chittu}@postgres:5432/chittu
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    image: chittu-api
+    pull_policy: never
+    environment:
+      # The image defaults to production, in which mode it refuses to start
+      # without KMS + a provider key. The demo opts out here, in the open:
+      # development is the only env where dev_stub consent completes and the
+      # local key provider's allowlist permits running without KMS.
+      NODE_ENV: development
+      DATABASE_URL: postgres://chittu:${POSTGRES_PASSWORD:-chittu}@postgres:5432/chittu
+      # Required — see the header. Generate once (openssl rand -base64 32),
+      # keep it for the life of the demo data.
+      CHITTU_DEV_MASTER_KEY: ${CHITTU_DEV_MASTER_KEY:?set it in .env (openssl rand -base64 32) — without a stable key, every API restart makes stored demo data unreadable}
+      # Absent => stub router, announced on the API's first log line. The best
+      # demo material (consent, CPA maths, crisis lock, L1 guards, dashboard,
+      # seal verify) makes zero model calls either way.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '127.0.0.1:8080:8080' # loopback only — Caddy proxies, nothing else reaches it
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  chittu-demo-data:

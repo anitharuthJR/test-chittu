@@ -4,10 +4,14 @@ Architecture §14 chose Terraform over CDK for one reason: G4 requires the DPIA 
 data flows match production, and an auditor can read Terraform. That only holds if the files
 here are the truth, so read this section before you read anything else.
 
-## Status: NOTHING HERE HAS EVER BEEN APPLIED
+## Status: THE PRODUCTION-PATH CONFIGURATION HAS NEVER BEEN APPLIED
 
-No AWS account has been touched. There is no state file, no S3 backend, no DynamoDB lock
-table, and no resource anywhere that this configuration created. Written 2026-08-25.
+No AWS account has been touched by the four modules or `envs/dev`. They have no state
+file, no S3 backend, no DynamoDB lock table, and no resource anywhere that they created.
+Written 2026-08-25.
+
+(`envs/demo` is a separate, disposable lane with its own status — see its section below.
+Nothing in it changes the sentence above.)
 
 **How far it has actually been checked:**
 
@@ -38,7 +42,31 @@ modules/
   observability/  log groups + the data-protection policy that masks at ingest
 envs/
   dev/            wires the four together
+  demo/           ONE EC2 box for chittu.tulifo.ai — a separate lane, shares no modules
 ```
+
+## envs/demo — the demo lane
+
+One `t4g.small` in the default VPC running the compose stack from `deploy/demo/`, per
+`docs/runbooks/demo-deploy.md`. It deliberately imports none of the four modules: those
+describe the Fargate + RDS production topology, and dressing a demo box in them would make
+a rehearsal read as the real thing.
+
+- **Status: APPLIED 2026-08-25** into account 430313601196 (`ap-south-1`): instance
+  `i-04e0ddcc0b509612d` on the adopted EIP `13.205.39.18`, bootstrap verified over SSH.
+  **The state is local and lives in the worktree that applied it** — if that worktree is
+  removed, copy `infra/envs/demo/terraform.tfstate` to the surviving checkout first, or
+  the env must be re-imported to be managed again.
+- **Local state, on purpose.** No resource in this env carries a secret — the box's
+  secrets (`CHITTU_DEV_MASTER_KEY`, provider key, Caddy hash) live in on-box files the
+  runbook creates, outside Terraform. A hand-bootstrapped S3 backend for a disposable env
+  is ceremony without a beneficiary. State is gitignored like all state here.
+- **The Elastic IP has two modes** (`eip_allocation_id`): adopt an existing allocation —
+  data source + association only, so `destroy` keeps the address and the
+  `chittu.tulifo.ai` A record stays valid — or null, where Terraform creates and owns one
+  and `destroy` orphans the DNS record until it is repointed.
+- Teardown is `terraform -chdir=infra/envs/demo destroy` plus the runbook's teardown
+  notes (GoDaddy record, and the EIP if it was the adopted, hand-allocated one).
 
 `staging/` and `prod/` are **not** written. They are the same four modules with different
 tfvars, and writing them now would mean inventing values — instance sizes, retention,

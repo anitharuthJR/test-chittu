@@ -38,10 +38,13 @@ logs/
 
 # Terraform. Provider binaries are hundreds of MB; lock files ARE committed
 # (they pin provider versions), backend.tf and *.tfvars are not (they name real
-# accounts). Nothing here has ever been applied — see infra/README.md.
+# accounts). The production path has never been applied — see infra/README.md;
+# envs/demo IS applied, with deliberately local (untracked) state.
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
 crash.log
 infra/envs/*/backend.tf
 infra/envs/*/terraform.tfvars
+infra/envs/*/plan-output.txt
