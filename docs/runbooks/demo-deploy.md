@@ -2,8 +2,18 @@
 
 **What this is:** one small EC2 box that lets a person be shown the product without an AWS
 build-out. **What it is not:** the deployment path. That is `infra/` (Fargate + RDS + KMS),
-which remains unapplied, and this box moves nothing on G1–G5 — it runs dev-mode consent and
-dev-mode keys, which production refuses by construction.
+which remains unapplied. The box runs dev-mode keys and still offers `dev_stub` consent —
+both of which production refuses by construction — so it rehearses none of the production
+key path and moves nothing on **G2–G5**.
+
+**G1 is the exception, and it is not a simulation.** Since 2026-08-25 this box also offers
+`automated_id_check` against a LIVE Didit workflow: anyone past the basic-auth wall who
+picks "Photo ID check" verifies a real government document and spends one of the 500 free
+verifications for the month. Tell a demo audience before they photograph their own ID —
+§10 is the caveat, §5 the settings, and `DIDIT_ENVIRONMENT=sandbox` the way to show the
+flow without any of it. Being live does not CLEAR G1 either: the gate is live but not
+signed off, waiting on a DPO/DPIA decision and a read of Didit's DPA rather than on code.
+`docs/chittu-status.md` carries the row.
 
 **Shape:** `t4g.small` (arm64) · Docker running `deploy/demo/compose.yaml` (postgres →
 migrate → api) · Caddy serving the built PWA and proxying `/v1`, with automatic HTTPS on
@@ -13,38 +23,26 @@ migrate → api) · Caddy serving the built PWA and proxying `/v1`, with automat
 
 Running cost ≈ **$17–24/mo**; stopped between demos ≈ **$6/mo**. Table in §9.
 
-> **Current state (2026-08-26): FULLY DEPLOYED, refreshed to `main` @ 3c7ded9.**
+> **Current state (2026-08-26): FULLY DEPLOYED, `main` @ `d48fa22` (deployment 3).**
 > `infra/envs/demo` applied into account **430313601196** (`ap-south-1`): instance
 > `i-04e0ddcc0b509612d` (`t4g.small`) on the adopted EIP **13.205.39.18** =
 > `chittu.tulifo.ai` (Let's Encrypt cert valid to Nov 2026). Compose stack healthy
-> (postgres + migrated schema + api), image `chittu-api:latest` = `602929d9cf92`.
-> **The router is Anthropic**, not the stub — a key was added to `/opt/chittu/.env`
-> after the first deploy, and the boot line says so. Basic auth user `demo`; the
-> password and the demo family's parent PIN are with Arun, not in this repo.
-> CLI access is the `devops` profile via `aws login` (temporary — re-run
+> (postgres + migrated schema + api), image `chittu-api:latest` = `c2d6cc4c2e68`.
+> Boot banner: **Anthropic router**, `/ops` mounted with 1 operator, **automated ID
+> check offered against a live workflow**, grounded corpus `UNAVAILABLE` (the correct
+> three-state answer for an Anthropic-only box, not an outage). Basic auth user
+> `demo`; the password and the demo family's parent PIN are with Arun, not in this
+> repo. CLI access is the `devops` profile via `aws login` (temporary — re-run
 > `aws login --profile devops` when expired).
 >
-> **The 2026-08-26 refresh**, for the record, because two of its three findings
-> are traps the next refresh can fall into as well:
->
-> - Migrations `0007_reading_stats`, `0008_automated_id_check` and `0009_ops_users`
->   applied on the ledger's first run against the existing demo data; 34 tables.
-> - **The image would not boot, and no cheap lane said so.** `@chittu/reading-coach`
->   (#58) was in neither of the Dockerfile's two hand-maintained package lists, so
->   the runtime image carried a dangling pnpm symlink and died on
->   `ERR_MODULE_NOT_FOUND` at its first line — with 1881 tests green. Fixed, and
->   `apps/api/src/dockerfile-workspace.test.ts` now guards both lists.
-> - **Shipping `deploy/demo/compose.yaml` turned the ops console OFF.**
->   `CHITTU_OPS_TOKENS` was set in the box's `.env` and named in the box's
->   hand-edited compose file but never in the repo's, and compose passes only what
->   the block names — the same trap the file's own Didit comment warns about. The
->   variable is in the repo's block now. If you hand-edit compose ON THE BOX again,
->   the next `scp` deletes it; put it in the repo instead.
+> Every deployment and config change to this box is listed under **Deployment log**
+> below, along with the two traps the 2026-08-26 refresh found. This block is only
+> ever the CURRENT answer; the log is the history.
 >
 > Verified after the refresh: `/health` ok, the boot banner (Anthropic router,
-> `/ops` mounted with 1 operator, ID check not offered, corpus `UNAVAILABLE` —
-> which is the correct three-state answer for an Anthropic-only box, not an
-> outage), the deployed web bundle byte-identical to the built one, and
+> `/ops` mounted with 1 operator, corpus `UNAVAILABLE` — which is the correct
+> three-state answer for an Anthropic-only box, not an outage), the deployed web
+> bundle byte-identical to the built one, and
 > `scripts/smoke-dist.mjs` driven against the deployed API over an SSH forward:
 > 32/32, both bands — Law 02, consent cookie never in the body, scripted crisis
 > spine, L1 before any classifier, no control-token leak, category-only parent
@@ -52,6 +50,11 @@ Running cost ≈ **$17–24/mo**; stopped between demos ≈ **$6/mo**. Table in 
 > the demo database; `docker compose down -v` and re-onboarding clears them.
 > The browser UI behind basic auth was NOT re-walked — §7 by hand still wants a
 > human with the password.
+>
+> That banner also read `automated ID check: NOT offered`, which is the one line
+> of it that has since changed: the Didit keys were added later the same day and
+> the box now reports `offered, live workflow`. The header is the current answer;
+> this block is a record of the refresh, not of today.
 >
 > **Gotcha found by the walk:** never hand out the URL in
 > `https://user:pass@chittu.tulifo.ai` form. A page loaded that way carries the
@@ -62,12 +65,60 @@ Running cost ≈ **$17–24/mo**; stopped between demos ≈ **$6/mo**. Table in 
 
 ---
 
+## Deployment log
+
+**Nothing tracks deployments automatically, so this table is the record.** The
+`deployment` table in the schema is NOT a ledger despite the name — it is a one-row
+singleton (`only_row boolean PRIMARY KEY CHECK (only_row)`) holding `env` and `region`, and
+its whole job is letting the database refuse `dev_stub` in production. `migrate.ts` writes
+it `ON CONFLICT DO NOTHING`, so on this box `set_at` reads `2026-08-25 11:55:41+00` — the
+first migration ever run here, unchanged by every deployment since. Do not read it as a
+deployment time.
+
+Append a row when you ship. A deployment is a NEW IMAGE on the box; a change to
+`/opt/chittu/.env` followed by a restart is a config change and gets its own row marked as
+one, because the two fail in different ways and "what is running" is not the same question
+as "what is configured".
+
+| # | When | Image | `main` @ | What it carried |
+|---|---|---|---|---|
+| 1 | 2026-08-25 ~11:54 UTC | *(id not recoverable — replaced by #2)* | `fcec3d0` (#56) | First deploy. §1–§7 walked end-to-end in the browser: consent (dev_stub) → chat → maths (zero model calls) → crisis (scripted spine, IN helplines, lock) → parent PIN → category-only flags → unlock → seal verify. Stub router; no provider key on the box yet. |
+| — | 2026-08-25, later | *(unchanged)* | — | **Config only.** `ANTHROPIC_API_KEY` added to `/opt/chittu/.env`; api recreated. Router went from stub to Anthropic. No new image, which is why the runbook went on describing a stub router that was not running. |
+| 2 | 2026-08-26 ~01:56 IST | `602929d9cf92` | `3c7ded9` (#62) | Nine commits of catch-up: reading coach (#58), layer-6 grounding (#60), D5 dashboard nodes (#57), Didit ID verification (#61), the picture input, the corpus banner fix, the ops users page. Migrations `0007`–`0009` applied. Found and fixed the boot bug in #66 and the ops-console regression below. |
+| — | 2026-08-25 20:xx UTC | *(unchanged)* | — | **Config only.** Didit keys added (`DIDIT_ENVIRONMENT=live`); api recreated. G1's real rail went live on the box — see the header. No new image. |
+| 3 | 2026-08-26 ~04:00 IST | `c2d6cc4c2e68` | `d48fa22` (#70) | The two consent scopes that were declared but ungrantable (#70), the default container lane (#69), and the Didit-retention and G1 doc corrections (#67, #68). **No migrations** — `0 applied this run, 9 known, 34 tables`. `pnpm verify` all green INCLUDING the container lane, so the image was booted and driven (32/32) before it was shipped. After the restart: `/health` ok, `/ops` still mounted and the ID rail still offered — the two settings the previous deployment silently dropped. |
+
+**The deployed smoke walk is a ONE-SHOT — do not re-run it as a health check.**
+`scripts/smoke-dist.mjs` uses a fixed `smoke-<band>@example.com`, and `parent.email_hash`
+is `NOT NULL UNIQUE`, so a second run against the same database fails on a duplicate parent
+— which reads as a broken deployment and is not one. Deployment 2 used it (writing the two
+families still in there); deployment 3 relied on the container lane instead, which drives
+the identical image locally against a throwaway database and can run as often as you like.
+
+**Two traps the 2026-08-26 refresh found**, both worth re-reading before the next one:
+
+- **The image would not boot, and no cheap lane said so.** `@chittu/reading-coach` (#58) was
+  in neither of the Dockerfile's two hand-maintained package lists, so the runtime image
+  carried a dangling pnpm symlink and died on `ERR_MODULE_NOT_FOUND` at its first line —
+  with 1881 tests green. Fixed in #66; `apps/api/src/dockerfile-workspace.test.ts` guards
+  both lists, and #69 made the container lane part of `pnpm verify` by default so the
+  artifact is booted before it is shipped.
+- **Shipping `deploy/demo/compose.yaml` turned the ops console OFF.** `CHITTU_OPS_TOKENS`
+  was set in the box's `.env` and named in the box's hand-edited compose file but never in
+  the repo's, and compose passes only what the block names — the same trap the file's own
+  Didit comment warns about. The variable is in the repo's block now. **If you hand-edit
+  compose ON THE BOX, the next `scp` deletes it; put it in the repo instead.**
+
+---
+
 ## 0. Which mode this runs in, honestly
 
-- `NODE_ENV=development` — the only environment where `dev_stub` consent completes (G1:
-  every real adapter is blocked on something external) and where the local key provider's
-  allowlist permits running without KMS. Correct for a demo; the database refuses
-  `dev_stub` in prod.
+- `NODE_ENV=development` — the only environment where `dev_stub` consent completes, and
+  where the local key provider's allowlist permits running without KMS. Correct for a demo;
+  the database refuses `dev_stub` in prod. **`dev_stub` is no longer the only method offered
+  here.** That parenthetical used to read "every real adapter is blocked on something
+  external", and it stopped being true on 2026-08-25: `automated_id_check` is live on this
+  box against a real Didit workflow (§10). The rest are still blocked.
 - `CHITTU_DEV_MASTER_KEY` is **required** by the compose file. Without a stable key the dev
   provider mints `randomBytes(32)` per boot and every API restart makes previously stored
   ciphertext unreadable — loud by design, wrong for a box that stops between demos.

@@ -201,8 +201,13 @@ Read these two documents before any non-trivial change — they are the authorit
   `terraform.tfstate` in the MAIN checkout, with no backend. `infra/envs/dev` and the
   Fargate + RDS + KMS path it stands for are still `fmt` / `init -backend=false` / `validate`
   clean and have never had a `plan` or an `apply`; do not describe THAT as deployed
-  infrastructure. Nor is the demo box the deployment path — it runs dev-mode consent and
-  dev-mode keys, which production refuses by construction, and it moves nothing on G1–G5.
+  infrastructure. Nor is the demo box the deployment path — it runs dev-mode keys and still
+  offers `dev_stub` consent, both of which production refuses by construction, so it moves
+  nothing on G2–G5. **G1 is the exception and it is NOT a simulation:** since 2026-08-25
+  that box runs `automated_id_check` against a LIVE Didit workflow, so anyone past the
+  basic-auth wall who picks "Photo ID check" verifies a real government document and spends
+  one of the 500 free monthly verifications. Being live does not CLEAR G1 either — that
+  gate waits on a DPO/DPIA decision and a read of Didit's DPA, not on code.
   See `docs/runbooks/demo-deploy.md`. `staging/`, `prod/`, `model/` and `training/` are
   deliberately unwritten — see `infra/README.md` for why inventing them would be worse than
   their absence.
