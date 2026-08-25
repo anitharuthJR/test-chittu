@@ -89,6 +89,23 @@ describe('route()', () => {
   it('names a provider, model and prompt version for every vendor cell', () => {
     const r = router();
     for (const category of Object.keys(DEFAULT_CELLS) as (keyof typeof DEFAULT_CELLS)[]) {
+      /**
+       * `embedding` is the exception, and it is the only one: it names `local`,
+       * because Anthropic has no embeddings API for it to name. With only the
+       * Anthropic adapter configured — which is this router — routing it is
+       * REFUSED rather than falling back to a reachable cell.
+       *
+       * That refusal is what turns the grounded corpus off in an
+       * Anthropic-only deployment, and off is a supported state: no CORPUS
+       * layer is stamped and answers come from the truth wall. It is
+       * deliberately NOT a boot refusal (see main.ts) — an unreachable
+       * enrichment must not stop a service that can still guard every turn.
+       */
+      if (category === 'embedding') {
+        expect(DEFAULT_CELLS.embedding.provider).toBe('local');
+        expect(() => r.route(category)).toThrow(RouteRefused);
+        continue;
+      }
       const d = r.route(category);
       expect(d.provider).toBe('anthropic');
       expect(d.model).toBeTruthy();
@@ -102,7 +119,7 @@ describe('route()', () => {
     const r = router({ cleared: new Set<string>() });
     expect(() => r.route('sandbox')).toThrow(RouteRefused);
     await expect(r.classify('hello', [])).rejects.toThrow(RouteRefused);
-    await expect(r.generate({ text: 'hello', state: state(), subject: null }))
+    await expect(r.generate({ text: 'hello', state: state(), subject: null, grounding: null }))
       .rejects.toThrow(RouteRefused);
     expect(recorded, 'an uncleared provider is never called').toHaveLength(0);
   });
@@ -135,9 +152,9 @@ describe('route()', () => {
         rows: [{ category: 'sandbox', provider: 'anthropic', model: 'claude-opus-5', country: 'GB' }],
       }),
     });
-    await r.generate({ text: 'hi', state: state({ country: 'GB' }), subject: null });
+    await r.generate({ text: 'hi', state: state({ country: 'GB' }), subject: null, grounding: null });
     expect(recorded[0]!.body.model).toBe('claude-opus-5');
-    await r.generate({ text: 'hi', state: state({ country: 'IN' }), subject: null });
+    await r.generate({ text: 'hi', state: state({ country: 'IN' }), subject: null, grounding: null });
     expect(recorded[1]!.body.model).toBe(DEFAULT_CELLS.sandbox.model);
   });
 
@@ -155,9 +172,9 @@ describe('route()', () => {
 
   it('routes homework and learn to their own cells', async () => {
     const r = router();
-    await r.generate({ text: 'help', state: state({ mode: 'homework' }), subject: null });
+    await r.generate({ text: 'help', state: state({ mode: 'homework' }), subject: null, grounding: null });
     expect(recorded[0]!.body.model).toBe(DEFAULT_CELLS.homework.model);
-    await r.generate({ text: 'why', state: state({ mode: 'learn' }), subject: null });
+    await r.generate({ text: 'why', state: state({ mode: 'learn' }), subject: null, grounding: null });
     expect(recorded[1]!.body.model).toBe(DEFAULT_CELLS.curriculum.model);
   });
 });
@@ -187,7 +204,7 @@ describe('the request we actually send', () => {
     await router().generate({
       text: 'why is the sky blue',
       state: state({ band: 'explorer', board: 'TN', kid: 'Arjun' }),
-      subject: 'science',
+      subject: 'science', grounding: null,
     });
     const body = recorded[0]!.body;
     expect(body.system).toMatch(/The child is 4-7/);
@@ -200,11 +217,11 @@ describe('the request we actually send', () => {
   it('omits memories when the parent switched memory off', async () => {
     const memories = [{ id: 'm1', category: 'PET' as const, fact: 'has a cat named Mani', since: '' }];
     await router().generate({
-      text: 'hi', state: state({ memOn: false, memories }), subject: null });
+      text: 'hi', state: state({ memOn: false, memories }), subject: null, grounding: null });
     expect(recorded[0]!.body.system).not.toMatch(/Mani/);
 
     await router().generate({
-      text: 'hi', state: state({ memOn: true, memories }), subject: null });
+      text: 'hi', state: state({ memOn: true, memories }), subject: null, grounding: null });
     expect(recorded[1]!.body.system).toMatch(/Mani/);
   });
 });
@@ -268,7 +285,7 @@ describe('failure handling', () => {
 
   it('treats an empty completion as a failure, not as silence', async () => {
     respond = () => ({ status: 200, body: { content: [] } });
-    await expect(router().generate({ text: 'hi', state: state(), subject: null }))
+    await expect(router().generate({ text: 'hi', state: state(), subject: null, grounding: null }))
       .rejects.toThrow(/empty completion/);
   });
 
@@ -276,7 +293,7 @@ describe('failure handling', () => {
     respond = () => ({ status: 400, body: { error: { message: 'bad request' } } });
     try {
       await router().generate({
-        text: 'my secret is that i live at 4 Elm Street', state: state(), subject: null });
+        text: 'my secret is that i live at 4 Elm Street', state: state(), subject: null, grounding: null });
       expect.unreachable();
     } catch (e) {
       expect((e as Error).message).not.toMatch(/Elm Street/);
@@ -408,7 +425,7 @@ describe('the router reports what a call cost, and nothing about who made it', (
     const seen: ModelUsage[] = [];
     const r = router();
     await r.generate({ text: 'a very distinctive sentence about my dog Rusty',
-      state: state(), subject: null }, (u) => seen.push(u));
+      state: state(), subject: null, grounding: null }, (u) => seen.push(u));
     const serialised = JSON.stringify(seen);
     expect(serialised).not.toMatch(/Rusty|distinctive|session|child/i);
     expect(Object.keys(seen[0]!).sort()).toEqual(
@@ -457,7 +474,7 @@ describe('the child is asked ONCE — the pipeline\'s history already holds the 
           { role: 'user', content: 'second question' },
         ],
       }),
-      subject: null,
+      subject: null, grounding: null,
     });
     const msgs = recorded[0]!.body.messages as { role: string; content: string }[];
     expect(msgs.map((m) => m.content)).toEqual(
@@ -484,7 +501,7 @@ describe('the child is asked ONCE — the pipeline\'s history already holds the 
     await router().generate({
       text: 'only question',
       state: state({ history: [], recentKid: [] }),
-      subject: null,
+      subject: null, grounding: null,
     });
     expect((recorded[0]!.body.messages as { content: string }[]).map((m) => m.content))
       .toEqual(['only question']);

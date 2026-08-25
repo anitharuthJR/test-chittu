@@ -37,6 +37,8 @@ import {
 } from '@chittu/safety-kernel';
 import { passageById } from '@chittu/reading-coach';
 import { resolveHelplines } from './helplines/resolve.js';
+import { embedderFor, type Embedder } from './corpus/embed.js';
+import { groundingPort } from './corpus/ground.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
   setParentCookie, clearParentCookie, parentFor,
@@ -69,6 +71,17 @@ export interface BuildOptions {
    * test of its own instead.
    */
   readonly rateLimitMax?: number;
+  /**
+   * Overrides the corpus embedder, which is otherwise DERIVED FROM THE ROUTER
+   * (`embedderFor`) so that clearance and metering apply to it.
+   *
+   * Present only so a test can drive retrieval without a local endpoint on the
+   * box. A deployment should leave it unset and let the routing decide: the
+   * `embedding` cell names the provider, `provider_clearance` clears it, and a
+   * provider without an embeddings API is refused by capability rather than by
+   * configuration.
+   */
+  readonly embed?: Embedder;
 }
 
 const MODES: readonly Mode[] = [
@@ -93,6 +106,16 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
   const env = opts.env ?? 'dev';
   const router = opts.router ?? stubRouter();
   const store = createStore(opts.pool, opts.keys);
+  /**
+   * The corpus embedder comes from the ROUTER, so an embedding call — which
+   * carries a child's turn to a provider — is routed, cleared and metered like
+   * every other. Null when the router cannot embed at all (the stub, or a
+   * deployment with no embedding-capable provider), and null is what turns the
+   * corpus off: `runTurn` then stamps no CORPUS layer rather than one that ran
+   * nothing.
+   */
+  const embed = opts.embed ?? embedderFor(router);
+  const groundFor = embed ? groundingPort(opts.pool, embed) : null;
 
   const app = Fastify({
     logger: opts.logger ?? false,
@@ -700,6 +723,13 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           classify: (text, history, ctx) =>
             router.classify(text, history, ctx, (u) => usage.push(u)),
           generate: (input) => router.generate(input, (u) => usage.push(u)),
+          // `tx`, not `pool` — the turn's own transaction. See corpus/ground.ts.
+          // Spread rather than assigned `undefined`, which `exactOptionalPropertyTypes`
+          // rejects for an optional method anyway.
+          ...(groundFor ? {
+            ground: groundFor(tx, { band: state.band, country: state.country },
+              (u) => usage.push(u)),
+          } : {}),
           seal: store.sealFor(tx, req.params.id),
           now: () => new Date().toISOString(),
           newId: () => randomUUID(),

@@ -97,6 +97,34 @@ export interface SandboxInput {
   readonly text: string;
   readonly state: SessionState;
   readonly subject: Subject | null;
+  /**
+   * The verified fact retrieved at layer 6, or null when there was none.
+   *
+   * Null covers all three of "we looked and found nothing", "we could not
+   * look" and "no corpus is wired", because the SANDBOX does not need to tell
+   * them apart — rule 11 behaves identically for all three, which is to say it
+   * falls back to the truth wall. The TRACE tells them apart, because a human
+   * reading it very much does need to.
+   */
+  readonly grounding: string | null;
+}
+
+/**
+ * What layer 6 did. Three outcomes, none of them collapsible into the others.
+ *
+ * `unavailable` exists because a retrieval that threw is not a miss. A miss is
+ * a fact about the corpus — we looked, it has nothing on this. `unavailable` is
+ * a fact about the deployment — the embedder is down, so we never looked. The
+ * child sees the same honest "I'm not totally sure" either way, and the
+ * operator sees the difference, which is the only place the difference can do
+ * any good. Same shape as the classifier's FAST-PATH-ONLY.
+ */
+export type GroundingOutcome = 'hit' | 'miss' | 'unavailable' | 'off';
+
+export interface GroundingQuery {
+  readonly text: string;
+  readonly board: string;
+  readonly subject: Subject | null;
 }
 
 /** Everything that touches the world. Injected so turns stay countable. */
@@ -118,6 +146,24 @@ export interface PipelinePorts {
     text: string, recentKid: readonly string[], ctx: RouteContext,
   ): Promise<ClassifierOutcome>;
   generate(input: SandboxInput): Promise<string>;
+  /**
+   * Layer 6 retrieval. Returns the verified text to ground on, or null for a
+   * miss; THROWS when it could not look at all.
+   *
+   * Throwing rather than returning a third value is deliberate and matches
+   * `classify`: an embedder that is down, a database that refused, a vector of
+   * the wrong width — none of those are things a caller should have to
+   * enumerate, and every one of them must land as `unavailable` rather than as
+   * a quiet null. A port that returned `null` for both would make "the
+   * embedder has been down for a week" indistinguishable from "the corpus is
+   * thin on volcanoes", which is precisely the confusion this layer was
+   * rebuilt to end.
+   *
+   * OPTIONAL, because a deployment with no corpus is legitimate — and its
+   * absence is visible: `runTurn` does not stamp the CORPUS layer at all when
+   * nothing is wired, so the walk cannot claim a layer ran that does not exist.
+   */
+  ground?(q: GroundingQuery): Promise<string | null>;
   seal: SealAppender;
   now(): string;
   newId(): string;
@@ -397,8 +443,35 @@ async function continueAfterMaths(
   }
 
   // ---- 6. CORPUS / SUBJECT DETECT --------------------------------------
-  walk.layers.push('CORPUS', 'SUBJECT');
+  /**
+   * Subject first, because retrieval narrows by it.
+   *
+   * The layer stamps are pushed in PIPELINE_ORDER regardless — CORPUS before
+   * SUBJECT — so the walk still describes the fixed order rather than the call
+   * order. What changed is that CORPUS is now stamped only when a retrieval
+   * genuinely ran. It used to be pushed unconditionally next to a bare
+   * `detectSubject()` call, so every trace in the system claimed a corpus
+   * lookup that did not exist. A layer that reports it ran when nothing ran is
+   * worse than a missing layer: it is a missing layer that answers questions.
+   */
   const subject = detectSubject(text);
+  let grounding: string | null = null;
+  let groundState: GroundingOutcome = 'off';
+  if (ports.ground) {
+    walk.layers.push('CORPUS');
+    try {
+      grounding = await ports.ground({ text, board: state.board, subject });
+      groundState = grounding === null ? 'miss' : 'hit';
+    } catch {
+      // Retrieval failure must never become silent free generation. The turn
+      // continues — a corpus is an improvement to an answer, not a gate on one
+      // — but it continues MARKED, and `grounding` stays null so the truth
+      // wall is what the model falls back to.
+      grounding = null;
+      groundState = 'unavailable';
+    }
+  }
+  walk.layers.push('SUBJECT');
 
   // ---- 7. L2 CLASSIFIER ------------------------------------------------
   walk.layers.push('L2_CLASSIFIER');
@@ -469,7 +542,7 @@ async function continueAfterMaths(
   walk.layers.push('L5_SANDBOX');
   let raw: string;
   try {
-    raw = await ports.generate({ text, state: forModel, subject });
+    raw = await ports.generate({ text, state: forModel, subject, grounding });
   } catch {
     return await reply(afterCls, walk, ports, SAFE_FALLBACK, `SANDBOX · unavailable · ${clsNote}`);
   }
@@ -528,7 +601,23 @@ async function continueAfterMaths(
     );
   }
 
+  /**
+   * `GROUNDED CORPUS` on a hit is the prototype's exact string
+   * (chittu-v3.html:1142), which appends it only when `S.lastGrounding` is
+   * truthy. The two other states are new, and they are the point: the
+   * prototype could get away with silence on a miss because its corpus was
+   * fifteen regexes that could not fail to run. A retrieval that crosses a
+   * network can, and "no marker" would then mean either "nothing matched" or
+   * "the embedder has been down since Tuesday".
+   */
+  const CORPUS_NOTE: Record<GroundingOutcome, string> = {
+    hit: ' · GROUNDED CORPUS',
+    miss: ' · CORPUS MISS',
+    unavailable: ' · CORPUS UNAVAILABLE',
+    off: '',
+  };
   const trace = `SANDBOX (Law 05) · ${clsNote}`
+    + CORPUS_NOTE[groundState]
     + (subject ? ` · PED(${subject})` : '')
     + (afterCls.memOn && afterCls.memories.length ? ` · MEM(${afterCls.memories.length})` : '');
 

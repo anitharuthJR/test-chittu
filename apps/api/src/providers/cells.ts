@@ -64,6 +64,19 @@ export const MODEL_CATALOGUE: Readonly<Record<string, readonly string[]>> = Obje
     'chittu-baseline',
     'chittu-baseline-8b',
     'mlx-community/Qwen3-4B-Instruct-2507-4bit',
+    /**
+     * The grounded corpus's embedder, and the only entry here that is not a
+     * model answering a child. It reads the child's turn and returns a vector.
+     *
+     * CHANGING THIS IS NOT LIKE CHANGING THE OTHERS. A different chat model
+     * gives different answers, which is visible. A different EMBEDDING model
+     * gives a vector of possibly the right width in a space with no
+     * relationship to the one the corpus was embedded in — retrieval keeps
+     * working, returns unrelated facts, and labels them "verified". Point a
+     * cell here only alongside re-embedding the whole corpus
+     * (`corpus/cli.ts import`).
+     */
+    'mxbai-embed-large',
   ]),
 });
 

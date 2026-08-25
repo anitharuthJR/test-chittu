@@ -164,7 +164,26 @@ async function chooseRouter() {
    * says "overrides IN EFFECT" — true of the config, false of the capability —
    * and every turn falls back with a trace nobody is reading.
    */
+  /**
+   * `embedding` IS EXCLUDED, and the exclusion is the point rather than an
+   * exemption.
+   *
+   * Every other category is load-bearing: a deployment that cannot reach its
+   * classifier or its sandbox cannot serve a child at all, so refusing to boot
+   * is the correct, loud outcome. The grounded corpus is an ENRICHMENT — an
+   * unreachable embedding cell means answers come from the truth wall instead
+   * of from a verified fact, which is exactly the behaviour the product has
+   * when the corpus is empty.
+   *
+   * Including it would refuse to start every deployment that runs Anthropic
+   * alone, which is all of them today: `DEFAULT_CELLS.embedding` names `local`,
+   * because Anthropic has no embeddings API to name.
+   *
+   * The absence is not silent — `buildServer` wires no grounding port, the
+   * pipeline stamps no CORPUS layer, and the banner below says so at boot.
+   */
   const unreachable = CATEGORIES
+    .filter((c) => c !== 'embedding')
     .map((c) => ({ category: c, provider: resolved.cells[c].provider }))
     .filter((x) => adapters[x.provider] === undefined);
   if (unreachable.length > 0) {
@@ -252,8 +271,40 @@ console.warn(opsTokens === ''
   ? '[chittu] ops console: NOT mounted (set CHITTU_OPS_TOKENS to enable)'
   : `[chittu] ops console: /ops, ${opsTokens.split(',').length} operator(s)`);
 
+const router = await chooseRouter();
+
+/**
+ * Whether the grounded corpus is live, decided by ROUTING rather than by an
+ * environment variable.
+ *
+ * `buildServer` derives the embedder from the router, so the question is
+ * whether the `embedding` cell resolves to a provider that is cleared,
+ * reachable AND capable of embedding. Asking `route()` is how we find out, and
+ * asking it here means the answer is on the boot log rather than inferred from
+ * traces a week later.
+ *
+ * No country in hand at boot, so this gets the conservative clearance rule —
+ * cleared for every enabled market. That is the right check for a banner: it
+ * says the corpus is on only where it is on everywhere.
+ */
+{
+  let status: string;
+  try {
+    const d = router.route('embedding');
+    status = `ON — ${d.provider}/${d.model}`;
+  } catch (e) {
+    status = `OFF — ${e instanceof Error ? e.message : String(e)}`;
+  }
+  console.warn(`[chittu] grounded corpus: ${status}`);
+  if (status.startsWith('OFF')) {
+    console.warn(
+      '[chittu]   no CORPUS layer will be stamped, and answers fall back to the '
+      + 'truth wall. Set CHITTU_LOCAL_BASE_URL and clear the provider to enable.');
+  }
+}
+
 const app = await buildServer({
-  pool, keys, router: await chooseRouter(), logger: loggerOptions,
+  pool, keys, router, logger: loggerOptions,
   ...(isProd ? { env: 'prod' as const } : {}),
   ...(opsTokens === '' ? {} : { opsTokens }),
 });

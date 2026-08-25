@@ -17,3 +17,4 @@ export * from './helpline-repo.js';
 export * from './engagement-repo.js';
 export * from './metering-repo.js';
 export * from './signal-repo.js';
+export * from './corpus-repo.js';

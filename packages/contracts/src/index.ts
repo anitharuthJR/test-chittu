@@ -308,10 +308,35 @@ export interface ModelReply {
 }
 
 /** One interface per vendor. `controlTokens` is that vendor's own litter. */
+export interface EmbedRequest {
+  readonly input: string;
+}
+
+export interface EmbedReply {
+  readonly vector: number[];
+  /** Absent, not zero, when the endpoint does not report it — see `ModelReply`. */
+  readonly tokensIn?: number;
+}
+
 export interface ProviderAdapter {
   readonly id: string;
   readonly controlTokens: RegExp;
   complete(req: ModelRequest, route: RouteDecision): Promise<ModelReply>;
+  /**
+   * OPTIONAL, because an embeddings API is a capability a provider either has
+   * or does not — Anthropic has none, and no cell assignment can give it one.
+   *
+   * This is why it is a separate method rather than a `complete()` with a
+   * different prompt: an embedding is not a chat completion. There is no
+   * system prompt, no message list, no `maxTokens`, and the reply is a vector
+   * rather than text. Folding it into `complete` would mean a `ModelReply`
+   * whose `text` field is a serialised array, which nothing downstream could
+   * be trusted to notice.
+   *
+   * A route to a provider without this must REFUSE. `RouteDecision` naming a
+   * model is not evidence the provider can produce a vector.
+   */
+  embed?(req: EmbedRequest, route: RouteDecision): Promise<EmbedReply>;
 }
 
 // ---------------------------------------------------------------------------

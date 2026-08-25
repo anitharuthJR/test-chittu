@@ -97,7 +97,7 @@ describe('the wire is OpenAI-shaped, not Anthropic-shaped', () => {
   });
 
   it('folds the system prompt into messages[0], with no top-level system', async () => {
-    await router().generate({ text: 'why is the sky blue', state: state(), subject: 'science' });
+    await router().generate({ text: 'why is the sky blue', state: state(), subject: 'science', grounding: null });
     const body = recorded[0]!.body;
     expect(body.system, 'a top-level system field is Anthropic\'s shape').toBeUndefined();
     expect(body.messages[0].role).toBe('system');
@@ -107,7 +107,7 @@ describe('the wire is OpenAI-shaped, not Anthropic-shaped', () => {
 
   it('reads the reply from choices[0].message.content', async () => {
     respond = () => ({ status: 200, body: chat('Sunlight scatters blue light!') });
-    const out = await router().generate({ text: 'why', state: state(), subject: null });
+    const out = await router().generate({ text: 'why', state: state(), subject: null, grounding: null });
     expect(out).toBe('Sunlight scatters blue light!');
   });
 
@@ -201,14 +201,14 @@ describe('failure handling matches the other adapter, because the port is one co
     respond = (n) => n === 0
       ? { status: 429, body: { error: { message: 'busy' } } }
       : { status: 200, body: chat('Answer') };
-    expect(await router().generate({ text: 'why', state: state(), subject: null }))
+    expect(await router().generate({ text: 'why', state: state(), subject: null, grounding: null }))
       .toBe('Answer');
     expect(recorded).toHaveLength(2);
   });
 
   it('does NOT retry a 400', async () => {
     respond = () => ({ status: 400, body: { error: { message: 'bad model' } } });
-    await expect(router().generate({ text: 'why', state: state(), subject: null }))
+    await expect(router().generate({ text: 'why', state: state(), subject: null, grounding: null }))
       .rejects.toThrow(/400/);
     expect(recorded).toHaveLength(1);
   });
@@ -216,20 +216,20 @@ describe('failure handling matches the other adapter, because the port is one co
   it('times out rather than hanging a child\'s turn, and names the endpoint', async () => {
     respond = () => ({ status: 200, body: chat('slow'), delayMs: 120 });
     const r = createRouter({ adapters: { local: adapter({ timeoutMs: 20 }) }, cells });
-    await expect(r.generate({ text: 'why', state: state(), subject: null }))
+    await expect(r.generate({ text: 'why', state: state(), subject: null, grounding: null }))
       .rejects.toThrow(/timed out.*127\.0\.0\.1/);
   });
 
   it('treats an empty completion as a failure, not as silence', async () => {
     respond = () => ({ status: 200, body: chat('') });
-    await expect(router().generate({ text: 'why', state: state(), subject: null }))
+    await expect(router().generate({ text: 'why', state: state(), subject: null, grounding: null }))
       .rejects.toThrow(/empty completion/);
   });
 
   it('never puts the child\'s words into the error message', async () => {
     respond = () => ({ status: 400, body: { error: { message: 'bad request' } } });
     const err = await router().generate({
-      text: 'my secret is bananabread', state: state(), subject: null,
+      text: 'my secret is bananabread', state: state(), subject: null, grounding: null,
     }).catch((e: unknown) => e);
     expect(String((err as Error).message)).not.toContain('bananabread');
     expect(String((err as Error).stack ?? '')).not.toContain('bananabread');
@@ -241,7 +241,7 @@ describe('failure handling matches the other adapter, because the port is one co
     const r = createRouter({
       adapters: { local: localAdapter({ baseUrl: 'http://127.0.0.1:1/v1', sleep: async () => {} }) },
       cells });
-    const err = await r.generate({ text: 'why', state: state(), subject: null })
+    const err = await r.generate({ text: 'why', state: state(), subject: null, grounding: null })
       .catch((e: unknown) => e);
     expect((err as ProviderError).provider).toBe(LOCAL_ID);
     expect(String((err as Error).message)).toMatch(/127\.0\.0\.1:1/);
@@ -253,7 +253,7 @@ describe('metering reports what the endpoint said, and nothing when it said noth
     respond = () => ({ status: 200, body:
       chat('Answer', { prompt_tokens: 137, completion_tokens: 29 }) });
     const usage: { tokensIn: number; tokensOut: number; provider: string }[] = [];
-    await router().generate({ text: 'why', state: state(), subject: null },
+    await router().generate({ text: 'why', state: state(), subject: null, grounding: null },
       (u) => usage.push(u));
     // Distinct primes, so a transposition cannot pass.
     expect(usage[0]).toMatchObject({ provider: 'local', tokensIn: 137, tokensOut: 29 });
@@ -285,9 +285,16 @@ describe('the catalogue and the price list agree with each other', () => {
     // `llm-kit/Modelfile.chittu` and `Modelfile.chittu-8b` build the first two;
     // `llm-kit/train.sh` produces the third. A catalogue entry for a model
     // nobody here can start is a cell that refuses at runtime.
+    //
+    // `mxbai-embed-large` is the odd one out: it is PULLED (`ollama pull
+    // mxbai-embed-large`, documented in .env.example) rather than built here,
+    // and it answers no child — it embeds their turn for corpus retrieval. It
+    // earns its place by the same test as the others, which is whether someone
+    // following this repository can actually start it.
     expect([...(MODEL_CATALOGUE['local'] ?? [])].sort()).toEqual([
       'chittu-baseline', 'chittu-baseline-8b',
       'mlx-community/Qwen3-4B-Instruct-2507-4bit',
+      'mxbai-embed-large',
     ]);
   });
 });

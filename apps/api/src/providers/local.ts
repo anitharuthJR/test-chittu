@@ -84,6 +84,14 @@ export interface LocalOptions {
    * working setup as an outage.
    */
   readonly timeoutMs?: number;
+  /**
+   * Shorter than `timeoutMs`, because the two calls fail differently. A slow
+   * completion is a child waiting for their answer; a slow EMBEDDING is a child
+   * waiting for an enrichment to an answer they will get either way. An
+   * embedding model is also far smaller than a chat model, so a wait this long
+   * means something is wrong rather than merely loaded.
+   */
+  readonly embedTimeoutMs?: number;
   readonly maxRetries?: number;
   readonly fetchImpl?: typeof fetch;
   readonly sleep?: (ms: number) => Promise<void>;
@@ -103,6 +111,7 @@ export function localAdapter(opts: LocalOptions): ProviderAdapter {
     baseUrl,
     apiKey,
     timeoutMs = 60_000,
+    embedTimeoutMs = 15_000,
     maxRetries = 1,
     fetchImpl = globalThis.fetch,
     sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)),
@@ -195,6 +204,85 @@ export function localAdapter(opts: LocalOptions): ProviderAdapter {
           ? `${last.message} (endpoint ${baseUrl})`
           : `request failed (endpoint ${baseUrl})`,
         wasRetryable);
+    },
+
+    /**
+     * `/v1/embeddings` — the grounded corpus's retrieval vectors.
+     *
+     * THE SAME ENDPOINT, AND THAT IS THE ARGUMENT FOR IT BEING HERE. A child's
+     * turn text is what gets embedded, so an embedding call is a call that
+     * shows a vendor a child's words. `provider_clearance` exists to decide
+     * which vendors may do that in which markets, and the header above says so
+     * in as many words: "Being reachable is not being promoted: a cell still
+     * has to name it, and provider_clearance still has to clear it."
+     *
+     * This method used to live in `apps/api/src/corpus/embed.ts` as a direct
+     * fetch, which meant every embedding call bypassed clearance AND metering
+     * entirely while the comment above claimed otherwise. Routing it through
+     * the adapter is what makes the claim true.
+     *
+     * NO RETRY, deliberately, where `complete` has one. A dropped sandbox call
+     * costs a child their answer; a dropped embedding costs them the GROUNDING
+     * on an answer they still get. The pipeline marks the turn CORPUS
+     * UNAVAILABLE and falls back to the truth wall, so failing fast is better
+     * than holding a child's turn open to retry an enrichment.
+     */
+    async embed(req, route) {
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (apiKey !== undefined && apiKey !== '') headers['authorization'] = `Bearer ${apiKey}`;
+
+      let res: Response;
+      try {
+        res = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/embeddings`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ model: route.model, input: req.input }),
+          signal: AbortSignal.timeout(embedTimeoutMs),
+        });
+      } catch (e) {
+        // NO REQUEST BODY IN THE ERROR — it holds a child's turn. Same rule as
+        // `complete`, and it matters identically here.
+        throw new ProviderError(
+          LOCAL_ID, null,
+          e instanceof DOMException && e.name === 'TimeoutError'
+            ? `embeddings timed out after ${embedTimeoutMs}ms (endpoint ${baseUrl})`
+            : `embeddings request failed (endpoint ${baseUrl})`,
+          true);
+      }
+
+      if (!res.ok) {
+        let detail = res.statusText;
+        try {
+          const body = await res.json() as { error?: { message?: string } };
+          detail = body.error?.message?.slice(0, 200) ?? detail;
+        } catch { /* a non-JSON error body; the status is enough */ }
+        throw new ProviderError(
+          LOCAL_ID, res.status, `embeddings HTTP ${res.status} ${detail}`,
+          RETRYABLE.has(res.status));
+      }
+
+      const body = await res.json() as {
+        data?: { embedding?: number[] }[];
+        usage?: { prompt_tokens?: number };
+      };
+      const vector = body.data?.[0]?.embedding;
+      /**
+       * NEVER a zero vector, and never an empty one. A zero vector is a valid
+       * `vector(1024)`: pgvector would rank the whole corpus against it and
+       * hand back its three nearest neighbours — arbitrary facts, ordered
+       * confidently, given to a model under a heading that reads "verified".
+       * Worse than no grounding by a margin that is hard to overstate.
+       */
+      if (!Array.isArray(vector) || vector.length === 0) {
+        throw new ProviderError(LOCAL_ID, res.status, 'embeddings reply had no vector', true);
+      }
+
+      const reply: { vector: number[]; tokensIn?: number } = { vector };
+      // Absent, not zero — same reason as `complete`: a zero is priced and
+      // stamped with a real rate version, and reads on the ops console as a
+      // call that cost nothing rather than one nobody counted.
+      if (body.usage?.prompt_tokens !== undefined) reply.tokensIn = body.usage.prompt_tokens;
+      return reply;
     },
   };
 }

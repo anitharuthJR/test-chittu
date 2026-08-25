@@ -36,6 +36,19 @@ export interface ProviderRouter {
     onUsage?: UsageSink,
   ): Promise<ClassifierOutcome>;
   generate(input: SandboxInput, onUsage?: UsageSink): Promise<string>;
+  /**
+   * A retrieval vector for the grounded corpus.
+   *
+   * OPTIONAL on this interface because the stub has no corpus and should not
+   * pretend to — a deployment without embedding stamps NO CORPUS layer in the
+   * walk, rather than one that ran nothing.
+   *
+   * `ctx` is NOT optional the way it is on `route()`. Every embedding call
+   * carries a child's turn to a provider, so there is always a country to
+   * check clearance against, and a caller that cannot supply one has no
+   * business making the call.
+   */
+  embed?(text: string, ctx: RouteContext, onUsage?: UsageSink): Promise<number[]>;
 }
 
 /**

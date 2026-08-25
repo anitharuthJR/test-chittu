@@ -60,6 +60,10 @@ export const RATES: Readonly<Record<string, Readonly<Record<string, Rate>>>> = O
     'chittu-baseline': { inPerMTok: 0, outPerMTok: 0 },
     'chittu-baseline-8b': { inPerMTok: 0, outPerMTok: 0 },
     'mlx-community/Qwen3-4B-Instruct-2507-4bit': { inPerMTok: 0, outPerMTok: 0 },
+    // The grounded corpus's embedder. `outPerMTok` is zero because an embedding
+    // generates no tokens at all — the one place in this table where a zero is
+    // a fact about the call rather than about who bills for it.
+    'mxbai-embed-large': { inPerMTok: 0, outPerMTok: 0 },
   }),
 });
 

@@ -73,9 +73,28 @@ export const DEFAULT_CELLS: Readonly<Record<RouterCategory, CellConfig>> = Objec
     provider: 'anthropic', model: 'claude-sonnet-5',
     promptVersion: SANDBOX_PROMPT_VERSION,
   },
+  /**
+   * THE ONLY CELL THAT CANNOT POINT AT ANTHROPIC, and it used to.
+   *
+   * It read `{ provider: 'anthropic', model: 'claude-sonnet-5',
+   * promptVersion: 'embedding-v0' }` — dead config that could never have
+   * worked, because Anthropic ships no embeddings API. Nothing refused it
+   * either: `main.ts`'s reachability check asks whether an ADAPTER exists for
+   * the named provider, and the Anthropic adapter very much does. What it
+   * could not do was embed.
+   *
+   * `ProviderAdapter.embed` is optional for exactly this reason, and
+   * `router.embed()` refuses a provider that lacks it. A capability is not
+   * something a cell assignment can confer.
+   *
+   * `mxbai-embed-large` is 1024-dimensional, which is why `corpus_chunk.embedding`
+   * is `vector(1024)`. Changing the model means re-embedding the whole corpus:
+   * a different 1024-d model passes every check we have and retrieves from a
+   * vector space unrelated to the one the corpus lives in.
+   */
   embedding: {
-    provider: 'anthropic', model: 'claude-sonnet-5',
-    promptVersion: 'embedding-v0',
+    provider: 'local', model: 'mxbai-embed-large',
+    promptVersion: 'embedding-v1',
   },
 });
 
@@ -242,7 +261,7 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
     },
 
     async generate(input, onUsage) {
-      const { state, subject } = input;
+      const { state, subject, grounding } = input;
       // Homework and curriculum have their own cells in §12.2; both point at
       // the same engine in Phase 1, so the category is chosen for the metering
       // and clearance record rather than to change the model today.
@@ -260,7 +279,17 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
         board: state.board,
         subject,
         memories: state.memOn ? state.memories.map((m) => m.fact) : [],
-        grounding: null,
+        /**
+         * Was hardcoded `null` while rule 11 of the fifteen hard rules already
+         * said "If GROUNDED KNOWLEDGE is provided, answer FROM it" — a prompt
+         * clause with nothing behind it, which is the most expensive kind of
+         * safety text there is: it reads as a working control in review.
+         *
+         * The pipeline retrieves at layer 6 and passes the result down. Null is
+         * still the common case and still correct: it means the truth wall,
+         * not free generation.
+         */
+        grounding,
         modeHint: MODE_HINTS[state.mode] ?? null,
         mathMethod: MATH_METHOD[state.board] ?? null,
       });
@@ -291,6 +320,50 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
       }, decision, category, onUsage);
 
       return reply.text;
+    },
+
+    /**
+     * A vector for the grounded corpus, through the same route → clearance →
+     * meter path as everything else.
+     *
+     * WHY THIS EXISTS RATHER THAN A DIRECT FETCH. What gets embedded is the
+     * child's turn, verbatim. That makes an embedding call a call that shows a
+     * provider a child's words, which is precisely the thing
+     * `provider_clearance` governs. The first version of the grounded corpus
+     * called the endpoint directly from `corpus/embed.ts`, so every embedding
+     * bypassed clearance and metering while `local.ts`'s header claimed
+     * "provider_clearance still has to clear it". This is that claim made true.
+     *
+     * `route()` throws `RouteRefused` for an uncleared provider or a missing
+     * adapter, and the capability check below adds the third case. All three
+     * reach the pipeline as CORPUS UNAVAILABLE — honestly marked, truth wall
+     * answering — rather than as a silent absence of grounding.
+     *
+     * NOT `callAdapter`: that function is typed to `complete` and reports
+     * `tokensOut`, which an embedding does not have. Sharing it would mean a
+     * usage row claiming output tokens that were never generated.
+     */
+    async embed(text, ctx, onUsage) {
+      const { adapter, decision } = adapterFor('embedding', ctx);
+      if (adapter.embed === undefined) {
+        throw new RouteRefused(
+          'embedding', decision.provider,
+          `${decision.provider} has no embeddings API — a cell cannot grant one`);
+      }
+      const started = Date.now();
+      const reply = await adapter.embed({ input: text }, decision);
+      onUsage?.({
+        category: 'embedding',
+        provider: decision.provider,
+        model: decision.model,
+        promptVersion: decision.promptVersion,
+        tokensIn: reply.tokensIn ?? 0,
+        // An embedding generates no tokens. Zero is the honest number here,
+        // unlike `tokensIn`, where zero would mean "nobody counted".
+        tokensOut: 0,
+        latencyMs: Date.now() - started,
+      });
+      return reply.vector;
     },
   };
 }
