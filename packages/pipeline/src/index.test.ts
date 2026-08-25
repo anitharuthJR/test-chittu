@@ -11,6 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createChain, type SealChain } from '@chittu/seal';
+import { passesOutputFilter } from '@chittu/safety-kernel';
 import type { ClassifierOutcome } from '@chittu/contracts';
 import { runTurn, GUARD_EFFECTS, SAFE_FALLBACK, type SessionState, type PipelinePorts } from './index.js';
 
@@ -382,5 +383,53 @@ describe('what the turn OBSERVED, for training-signal capture', () => {
     const out = await runTurn(base, 'can you help me with something', h.ports);
     expect(out.signal?.layer).toBe('L5_SANDBOX');
     expect(out.signal?.observedToken).toBe('PII');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('an escalation token survives however the vendor spells its reasoning', () => {
+  /**
+   * The comparison at the sandbox is `===` on the stripped reply, so anything
+   * left in front of the token defeats it. `stripControlTokens` used to slice
+   * only on a literal lowercase `</think>` while DELETING four tag names
+   * case-insensitively — so one of these eight fired and seven did not, each of
+   * the seven rendering the model's reasoning about a child's self-harm to that
+   * child with no crisis lock, no helplines and no parent flag.
+   *
+   * L6 does not catch it. It tests for banned content, and reasoning is not
+   * banned content — `passesOutputFilter('she said she wants to die CRISIS')`
+   * is true.
+   *
+   * These are what a model actually emits, not what the regex contains.
+   */
+  it.each([
+    ['lowercase, the one that always worked', '<think>REASONING</think>CRISIS'],
+    ['thinking', '<thinking>REASONING</thinking>CRISIS'],
+    ['reasoning', '<reasoning>REASONING</reasoning>CRISIS'],
+    ['shouted', '<THINK>REASONING</THINK>CRISIS'],
+    ['title case', '<Think>REASONING</Think>CRISIS'],
+    ['a space before the bracket', '<think>REASONING</think >CRISIS'],
+    ['a tool call', '<tool_call>REASONING</tool_call>CRISIS'],
+    ['mismatched open and close', '<think>REASONING</THINK>CRISIS'],
+    ['a special token with a pipe in it', '<|a|b|>CRISIS'],
+    ['two blocks, different spellings', '<think>a</think>x<reasoning>REASONING</reasoning>CRISIS'],
+  ])('%s', async (_label, template) => {
+    const reasoning = 'she said she wants to die and i should say something';
+    const h = harness({ generate: template.replace('REASONING', reasoning) });
+    const out = await runTurn(base, 'everything feels like a lot', h.ports);
+
+    expect(out.response.crisisLock, 'the crisis token did not fire').toBe(true);
+    expect(shown(out.response), "the model's reasoning was rendered to the child")
+      .not.toMatch(/wants to die|i should say/);
+    expect(out.response.flags.some((f) => f.kind === 'SAFETY'),
+      'no parent flag was raised').toBe(true);
+  });
+
+  it('L6 would NOT have caught the welded form — which is why this matters', () => {
+    // The sentence that reached the child under the old behaviour, run through
+    // the filter that was supposed to be the backstop.
+    expect(passesOutputFilter('she said she wants to die and i should say something CRISIS'))
+      .toBe(true);
   });
 });

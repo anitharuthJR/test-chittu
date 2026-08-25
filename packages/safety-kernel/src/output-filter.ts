@@ -8,8 +8,10 @@
  * these patterns are documented below and left intact; changing them is a Guardian
  * Council decision, not a port decision.
  *
- * Pure: no I/O, no clock, no state. Both regexes are un-flagged for /g, so `.test`
- * carries no lastIndex between calls and the module-level constants are safe.
+ * Pure: no I/O, no clock, no state. `BANNED_OUT` is un-flagged for /g, so `.test`
+ * carries no lastIndex between calls. The strip's three patterns ARE /g, and the
+ * one used with `.exec` resets `lastIndex` on both sides of the loop — a stale
+ * index would make this function's answer depend on its previous call.
  */
 
 import type { PipelineLayer } from '@chittu/contracts';
@@ -43,14 +45,58 @@ export function passesOutputFilter(text: string): boolean {
    ahead of a real answer. Handling only the closed form let those render to the
    child as literal text. Nothing here is ever legitimate in a reply: the visual
    grammar uses square brackets, so any angle-bracket control token is an
-   artefact. */
+   artefact.
+
+   THE SLICE FIRES ON ANY CLOSING CONTROL TAG, and that is a 2026-08-25
+   correction to the port rather than the port. The original tested
+   `indexOf('</think>')` — case-sensitive, one spelling — while DELETING via a
+   /gi pattern covering four tag names. So exactly one of eight spellings a
+   model actually emits was sliced, and the other seven had their delimiters
+   deleted and the reasoning welded onto the answer:
+
+     <think>…</think>CRISIS          -> "CRISIS"                     the guard fires
+     <thinking>…</thinking>CRISIS    -> "she wants to die CRISIS"    matches nothing
+     <THINK>…</THINK>CRISIS          -> "she wants to die CRISIS"    matches nothing
+     <think>…</think >CRISIS         -> survives whole               matches nothing
+     <tool_call>…</tool_call>CRISIS  -> "she wants to die CRISIS"    matches nothing
+
+   The escalation tokens are compared EXACTLY (packages/pipeline/src/index.ts),
+   so each of those turns locks nothing, shows no helplines, flags no parent —
+   and renders the model's reasoning about a child's self-harm to that child.
+   L6 does not catch it: it tests for banned content, and reasoning is not
+   banned content. This was recorded as an accepted "ported gap" in
+   output-filter.test.ts until it was driven end to end.
+
+   Widening a ported safety regex is a Guardian Council decision, and this one
+   was made explicitly. It errs in the SAFE direction by construction: a wider
+   slice keeps strictly less of what a model said, never more.
+
+   `[^>]*` in the special-token pattern is the same correction, one class down:
+   the original `[^|>]*` could not match a token containing a pipe, so
+   `<|a|b|>CRISIS` survived intact and missed the same way. */
+const CLOSING_CONTROL = /<\s*\/\s*(?:thinking|think|reasoning|tool_call)\s*>/gi;
+const ANY_CONTROL = /<\s*\/?\s*(?:thinking|think|reasoning|tool_call)\s*>/gi;
+const SPECIAL_TOKEN = /<\|[^>]*\|>/g;
+
 export function stripControlTokens(text: string): string {
   if (!text) return '';
   let out = text;
-  if (out.indexOf('</think>') !== -1) {            // drop reasoning up to the LAST close
-    out = out.slice(out.lastIndexOf('</think>') + 8); // 8 = '</think>'.length
-  }
-  out = out.replace(/<\/?(think|tool_call|thinking|reasoning)>/gi, ' ');
-  out = out.replace(/<\|[^|>]*\|>/g, ' ');         // <|im_start|>-style special tokens
+
+  // The LAST close tag, whatever its spelling.
+  //
+  // `matchAll`, not `exec` in a loop. `exec` on a module-level /g regex carries
+  // `lastIndex` between calls, so the function's answer would depend on its
+  // previous call — the one thing a guard in this package may never do. The
+  // obvious fix is to reset `lastIndex` around the loop, and that reset is
+  // UNREACHABLE: a loop that runs to null has already been reset by `exec`
+  // itself. Deleting it broke no test, which is the definition of a defence
+  // that is not one. `matchAll` clones the regex per the spec and never touches
+  // the original, so there is no state to get wrong.
+  let cut = -1;
+  for (const m of out.matchAll(CLOSING_CONTROL)) cut = (m.index ?? 0) + m[0].length;
+  if (cut !== -1) out = out.slice(cut);
+
+  out = out.replace(ANY_CONTROL, ' ');
+  out = out.replace(SPECIAL_TOKEN, ' ');
   return out.replace(/\s+/g, ' ').trim();
 }

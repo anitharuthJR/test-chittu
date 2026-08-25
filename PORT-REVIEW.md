@@ -777,7 +777,7 @@ escaping error reports what the loop actually decided.
 
 Both pre-date this change and neither is fixed here; both are in `main` today.
 
-**The `</think>` slice fires on ONE spelling.** `stripControlTokens` slices on a
+**FIXED 2026-08-25 — see the entry below.** ~~The `</think>` slice fires on ONE spelling.~~ `stripControlTokens` slices on a
 case-sensitive `indexOf('</think>')` while deleting via a `/gi` pattern, so
 `<thinking>`, `<reasoning>`, `<THINK>`, `</think >` and `<tool_call>` are all
 deleted rather than sliced — and weld exactly as `<think>` used to. Driven end
@@ -903,6 +903,67 @@ model learns to EMIT — as `text`. An out-of-vocabulary label is how a
 scripted-response guarantee gets violated quietly, a year later, in a dataset
 nobody re-reads. Now `CHECK (label IS NULL OR label IN (…))`; nullable stays
 legal because a SAFE example need not carry one.
+
+### FIXED (2026-08-25) — the `</think>` slice fired on one spelling in eight
+
+Recorded in the entry above as pre-existing, and pinned in
+`packages/safety-kernel/src/output-filter.test.ts` as an accepted **"ported
+gap"** whose comment called it a leak of reasoning "as text". Driven end to end,
+it is not that.
+
+`stripControlTokens` tested `indexOf('</think>')` — one case-sensitive literal —
+while DELETING four tag names through a `/gi` pattern. So the delimiter the
+slice needs was removed for every spelling the slice could not see:
+
+```
+FIRES   "<think>she said she wants to die</think>CRISIS"         -> "CRISIS"
+MISSED  "<thinking>she said she wants to die</thinking>CRISIS"   -> "she said she wants to die CRISIS"
+MISSED  "<reasoning>…</reasoning>CRISIS"                         -> "she said she wants to die CRISIS"
+MISSED  "<THINK>…</THINK>CRISIS"                                 -> "she said she wants to die CRISIS"
+MISSED  "<Think>…</Think>CRISIS"                                 -> "she said she wants to die CRISIS"
+MISSED  "<think>…</think >CRISIS"                                -> survives whole, brackets included
+MISSED  "<tool_call>…</tool_call>CRISIS"                         -> "she said she wants to die CRISIS"
+MISSED  "<|a|b|>CRISIS"                                          -> survives whole
+```
+
+One in eight. The escalation tokens are compared with `===`, so each of the
+other seven locks nothing, shows no helplines, flags no parent — and renders the
+model's reasoning about a child's self-harm to that child. **L6 is not a
+backstop for it**: `passesOutputFilter('she said she wants to die CRISIS')` is
+`true`, because reasoning is not banned content.
+
+**This is a Guardian Council decision and it was taken deliberately.**
+`output-filter.ts`'s header says the ported regexes' known gaps are "left
+intact; changing them is a Guardian Council decision, not a port decision". The
+gap was recorded when it looked cosmetic. It is not, and the correction errs in
+the safe direction by construction: a wider slice keeps strictly **less** of
+what a model said, never more.
+
+**Changed in all three copies together**, which is what CLAUDE.md requires: the
+kernel, `apps/web/src/safety/render-guard.ts` (the deliberate duplicate) and
+`prototype/chittu-v3.html`'s `stripThink` (the reference). `render-guard.test.ts`
+pins the first two and fails on drift — proved by mutating the client back,
+which fails 10 tests.
+
+**One behaviour genuinely changed, and it is worth arguing rather than
+adjusting.** `'Answer</tool_call>'` returned `'Answer'` and now returns `''`. A
+close tag CLOSES reasoning, so text before one is reasoning by definition —
+which is already how `'<think>reason</think>'` behaved. The cost is that a model
+emitting a real answer followed by a stray close tag now yields the friendly
+fallback via L6. A degraded turn, chosen over the alternative, because keeping
+text on the "before the close tag" side is exactly what welded a model's
+reasoning onto its answer.
+
+**And a defence that was not one.** The first version reset `lastIndex` around
+an `exec` loop. Deleting both resets broke zero tests — because a loop that runs
+to `null` has already been reset by `exec` itself, so the reset is unreachable.
+Replaced with `matchAll`, which clones the regex and has no state to get wrong,
+and the purity test now asserts the property (same input, same answer, forever)
+rather than the mechanism.
+
+Mutations, each verified red: the one-spelling literal → 26; no slice at all →
+33; no whitespace tolerance → 4; special tokens without a pipe → 3; the client
+drifting back → 10.
 
 ### FIXED (2026-08-25) — the real-Postgres lane had an extension race
 

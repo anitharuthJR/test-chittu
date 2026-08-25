@@ -34,7 +34,10 @@ describe('stripControlTokens', () => {
     expect(stripControlTokens('<think> <think> <tool_call> Real answer'))
       .toBe('Real answer');
     expect(stripControlTokens('<tool_call>Answer')).toBe('Answer');
-    expect(stripControlTokens('Answer</tool_call>')).toBe('Answer');
+    // '' since 2026-08-25: a close tag CLOSES reasoning, so what precedes one
+    // is reasoning and goes. L6 turns the empty result into the friendly
+    // fallback, which is the direction to fail in.
+    expect(stripControlTokens('Answer</tool_call>')).toBe('');
   });
 
   it('strips <|im_start|>-style special tokens', () => {
@@ -112,21 +115,36 @@ describe('guardBlocks', () => {
 
   /**
    * An inherited gap, pinned deliberately so nobody rediscovers it as a
-   * surprise. Only the literal `</think>` triggers the slice; every other
-   * reasoning tag is merely REPLACED, so its contents survive as prose. The
-   * kernel has the same hole and its suite records it the same way. Fixing it
-   * belongs in the kernel — the client must not diverge unilaterally, because
-   * the drift pin below is what keeps the two honest.
+   * surprise — until it was driven end to end and turned out not to be
+   * cosmetic at all. Only the literal lowercase `</think>` triggered the slice;
+   * every other reasoning tag was merely REPLACED, so its contents survived as
+   * prose. `<reasoning>she said she wants to die</reasoning>CRISIS` therefore
+   * arrived welded, stopped equalling the escalation token, and rendered the
+   * model's reasoning about a child's self-harm to that child — with no crisis
+   * lock. L6 does not catch that: reasoning is not banned content.
+   *
+   * Fixed in the KERNEL on 2026-08-25 and mirrored here, which is the order
+   * CLAUDE.md requires. The pin below is what keeps the two honest.
    */
-  it('KNOWN GAP: non-<think> reasoning tags leave their contents behind', () => {
+  it('slices at ANY reasoning tag, not only the literal lowercase </think>', () => {
     const { blocks } = guardBlocks(
       [{ kind: 'text', text: '<reasoning>should I say i love you?</reasoning>Hi!' }],
       strict);
-    expect(blocks).toEqual([{ kind: 'text', text: 'should I say i love you? Hi!' }]);
-    // Server-side this text still has to clear L6, which is what actually stops
-    // it reaching a child. The client wall is thinner here than it looks.
-    expect(kernelStrip('<reasoning>should I say i love you?</reasoning>Hi!'))
-      .toBe('should I say i love you? Hi!');
+    expect(blocks).toEqual([{ kind: 'text', text: 'Hi!' }]);
+    expect(kernelStrip('<reasoning>should I say i love you?</reasoning>Hi!')).toBe('Hi!');
+  });
+
+  it.each([
+    '<thinking>she said she wants to die</thinking>CRISIS',
+    '<THINK>she said she wants to die</THINK>CRISIS',
+    '<think>she said she wants to die</think >CRISIS',
+    '<tool_call>she said she wants to die</tool_call>CRISIS',
+    '<|a|b|>CRISIS',
+  ])('the client and the kernel agree on %j', (raw) => {
+    // The drift pin, on the cases the fix was written for. If the kernel is
+    // widened again and this file is not, these are what say so.
+    expect(stripControlTokens(raw)).toBe('CRISIS');
+    expect(kernelStrip(raw)).toBe('CRISIS');
   });
 
   it('leaves a BIG emoji alone — stripping whitespace would mangle it', () => {

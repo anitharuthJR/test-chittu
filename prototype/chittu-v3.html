@@ -630,11 +630,19 @@ const PROVIDER = {
 function stripThink(t){
   if(!t) return '';
   var out = t;
-  if(out.indexOf('</think>') !== -1){            // drop reasoning up to the LAST close
-    out = out.slice(out.lastIndexOf('</think>') + 8);
-  }
-  out = out.replace(/<\/?(think|tool_call|thinking|reasoning)>/gi, ' ');
-  out = out.replace(/<\|[^|>]*\|>/g, ' ');       // <|im_start|>-style special tokens
+  /* The slice fires on ANY closing control tag, in any spelling. The original
+     tested indexOf('</think>') — one case-sensitive literal — while DELETING
+     four tag names case-insensitively, so seven of eight spellings a model
+     actually emits had their delimiter deleted and the reasoning welded onto
+     the answer. Escalation tokens are compared exactly, so those turns showed
+     the model's reasoning about a child's self-harm to that child and locked
+     nothing. Corrected 2026-08-25, in the kernel and here together. */
+  var cut = -1, m;
+  /* matchAll clones the regex, so no lastIndex survives the call. */
+  for(m of out.matchAll(/<\s*\/\s*(?:thinking|think|reasoning|tool_call)\s*>/gi)) cut = m.index + m[0].length;
+  if(cut !== -1) out = out.slice(cut);
+  out = out.replace(/<\s*\/?\s*(?:thinking|think|reasoning|tool_call)\s*>/gi, ' ');
+  out = out.replace(/<\|[^>]*\|>/g, ' ');        // <|im_start|>-style special tokens
   return out.replace(/\s+/g, ' ').trim();
 }
 

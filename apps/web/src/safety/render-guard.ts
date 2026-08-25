@@ -28,12 +28,13 @@ import { ESCALATION_TOKENS } from '@chittu/contracts';
  * emitting `<think> <think> <tool_call>` with no close tag on a puberty
  * question, and it reached a child as visible text.
  */
-const CONTROL_TAGS = /<\/?(?:think|thinking|reasoning|tool_call)>/gi;
+const CONTROL_TAGS = /<\s*\/?\s*(?:thinking|think|reasoning|tool_call)\s*>/gi;
 
 /** `<|im_start|>`-style special tokens, whatever the vendor calls them. */
-const SPECIAL_TOKENS = /<\|[^|>]*\|>/g;
+const SPECIAL_TOKENS = /<\|[^>]*\|>/g;
 
-const CLOSE_THINK = '</think>';
+/** Any CLOSING control tag, in any spelling. See the kernel for why. */
+const CLOSING_TAGS = /<\s*\/\s*(?:thinking|think|reasoning|tool_call)\s*>/gi;
 
 export function stripControlTokens(text: string): string {
   if (!text) return '';
@@ -41,8 +42,18 @@ export function stripControlTokens(text: string): string {
   // Everything before the LAST close tag is reasoning, not answer. Slicing
   // rather than replacing is what stops a model's plan ("should I say i love
   // you?") from surviving as prose after the tags are removed.
-  const close = out.lastIndexOf(CLOSE_THINK);
-  if (close !== -1) out = out.slice(close + CLOSE_THINK.length);
+  //
+  // ANY closing spelling, not `lastIndexOf('</think>')`. The kernel's original
+  // sliced on one case-sensitive literal while deleting four names case-
+  // insensitively, so `<thinking>…</thinking>CRISIS` arrived welded and stopped
+  // matching the escalation token. Fixed in the kernel on 2026-08-25 and
+  // mirrored here; `render-guard.test.ts` fails if these drift.
+  // `matchAll` clones the regex, so no `lastIndex` survives a call. See the
+  // kernel for why the obvious reset-around-`exec` is a defence that is not one.
+  let cut = -1;
+  for (const m of out.matchAll(CLOSING_TAGS)) cut = (m.index ?? 0) + m[0].length;
+  if (cut !== -1) out = out.slice(cut);
+
   out = out.replace(CONTROL_TAGS, ' ').replace(SPECIAL_TOKENS, ' ');
   return out.replace(/\s+/g, ' ').trim();
 }

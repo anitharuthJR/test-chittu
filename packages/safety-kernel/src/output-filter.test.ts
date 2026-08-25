@@ -216,8 +216,18 @@ describe('stripControlTokens', () => {
     expect(stripControlTokens('<tool_call>Answer')).toBe('Answer');
   });
 
-  it('strips stray close tags of the other kinds', () => {
-    expect(stripControlTokens('Answer</tool_call>')).toBe('Answer');
+  it('drops what precedes a stray close tag, and says nothing rather than guessing', () => {
+    // CHANGED 2026-08-25, and worth arguing rather than adjusting: this used to
+    // return 'Answer'. Under the widened slice a close tag CLOSES reasoning, so
+    // text before it is reasoning by definition and goes — which is already how
+    // '<think>reason</think>' behaves two tests below.
+    //
+    // The cost is that a model emitting a real answer followed by a stray
+    // '</tool_call>' now yields '', which L6 turns into the friendly fallback.
+    // A degraded turn, chosen over the alternative: keeping text on the "before
+    // the close tag" side is exactly what welded a model's reasoning about a
+    // child's self-harm onto its answer.
+    expect(stripControlTokens('Answer</tool_call>')).toBe('');
   });
 
   it('strips <|im_start|>-style special tokens', () => {
@@ -242,24 +252,91 @@ describe('stripControlTokens', () => {
     expect(stripControlTokens('</think>Only a close tag')).toBe('Only a close tag');
   });
 
+  /**
+   * THESE SIX WERE PINNED AS AN ACCEPTED "ported gap" UNTIL 2026-08-25.
+   *
+   * The comment said only the literal lowercase `</think>` triggers the slice,
+   * "so reasoning wrapped in any other tag survives as text" — filed as a
+   * cosmetic leak. It is not cosmetic. The sandbox's escalation tokens are
+   * compared EXACTLY, so a welded reply stops matching and that turn locks
+   * nothing, shows no helplines and flags no parent, while the model's
+   * reasoning about a child's self-harm renders to that child. Driven end to
+   * end, one of eight spellings fired and seven did not.
+   *
+   * Widening a ported safety regex is a Council decision and this one was taken
+   * deliberately. It errs safe by construction: a wider slice keeps strictly
+   * less of what a model said.
+   */
   it.each([
-    // ported gap: only the literal lowercase '</think>' triggers the
-    // slice-to-last-close, so reasoning wrapped in any other tag survives as text.
-    ['<thinking>hidden reasoning</thinking>Answer', 'hidden reasoning Answer'],
-    ['<reasoning>hidden reasoning</reasoning>Answer', 'hidden reasoning Answer'],
-    ['<THINK>hidden reasoning</THINK>Answer', 'hidden reasoning Answer'],
-    ['<think>hidden reasoning</THINK>Answer', 'hidden reasoning Answer'],
-    ['<think>hidden reasoning, no close tag. Answer', 'hidden reasoning, no close tag. Answer'],
-    // ported gap: the special-token class excludes '|', so a token containing one survives.
-    ['<|a|b|>x', '<|a|b|>x'],
-  ])('ported gap — %j strips to %j', (input, expected) => {
+    ['<thinking>hidden reasoning</thinking>Answer', 'Answer'],
+    ['<reasoning>hidden reasoning</reasoning>Answer', 'Answer'],
+    ['<THINK>hidden reasoning</THINK>Answer', 'Answer'],
+    ['<Think>hidden reasoning</Think>Answer', 'Answer'],
+    ['<think>hidden reasoning</THINK>Answer', 'Answer'],
+    ['<tool_call>hidden reasoning</tool_call>Answer', 'Answer'],
+    // Whitespace inside the tag, which a real model emits and the old literal
+    // comparison could not see at all — it survived whole, brackets included.
+    ['<think>hidden reasoning</think >Answer', 'Answer'],
+    ['<think>hidden reasoning< / think >Answer', 'Answer'],
+    // The special-token class excluded '|', so a token containing one survived
+    // and missed the same way.
+    ['<|a|b|>CRISIS', 'CRISIS'],
+    ['<|im_start|>assistant Answer', 'assistant Answer'],
+  ])('%j strips to %j', (input, expected) => {
     expect(stripControlTokens(input)).toBe(expected);
   });
 
-  it('strips a tool call payload wrapper but keeps its body', () => {
-    // ported gap, same root cause: only <think> gets the slice treatment.
-    expect(stripControlTokens('<tool_call>{"name":"x"}</tool_call>Answer'))
-      .toBe('{"name":"x"} Answer');
+  it('still keeps an UNCLOSED tag\'s trailing text — there is nothing to slice at', () => {
+    // The unclosed case is genuinely different: with no close tag the slice has
+    // no anchor, so the tags are deleted and what follows is all we have. That
+    // is the observed live shape "<think> <think> <tool_call>" ahead of a real
+    // answer, and it must keep the answer.
+    expect(stripControlTokens('<think>hidden reasoning, no close tag. Answer'))
+      .toBe('hidden reasoning, no close tag. Answer');
+    expect(stripControlTokens('<think> <think> <tool_call> Real answer'))
+      .toBe('Real answer');
+  });
+
+  it('slices at the LAST close tag even when the spellings differ', () => {
+    expect(stripControlTokens('<think>a</think>leaked<reasoning>b</reasoning>Real answer'))
+      .toBe('Real answer');
+  });
+
+  it('drops a tool call payload entirely, rather than keeping its body', () => {
+    // Previously '{"name":"x"} Answer' — a tool-call payload rendered to a
+    // child, and one more way a reply stops equalling an escalation token.
+    expect(stripControlTokens('<tool_call>{"name":"x"}</tool_call>Answer')).toBe('Answer');
+  });
+
+  /**
+   * The whole point, stated as the thing that goes wrong. Each of these is a
+   * vendor emitting reasoning and then the exact escalation token; each must
+   * leave the token comparable, because `packages/pipeline` compares it with
+   * `===`.
+   */
+  it.each([
+    '<think>she said she wants to die</think>CRISIS',
+    '<thinking>she said she wants to die</thinking>CRISIS',
+    '<reasoning>she said she wants to die</reasoning>CRISIS',
+    '<THINK>she said she wants to die</THINK>CRISIS',
+    '<think>she said she wants to die</think >CRISIS',
+    '<tool_call>she said she wants to die</tool_call>CRISIS',
+    '<Think>she said she wants to die</Think>CRISIS',
+    '<|a|b|>CRISIS',
+  ])('an escalation token stays exactly comparable behind %j', (raw) => {
+    expect(stripControlTokens(raw)).toBe('CRISIS');
+  });
+
+  it('is pure — the same input answers the same way forever', () => {
+    // The strip's patterns are /g and one drives a search. A stale `lastIndex`
+    // would make this function's answer depend on its previous call, which is
+    // the one thing a guard in this package may never do. `matchAll` clones the
+    // regex, so there is no state; this asserts the property rather than the
+    // mechanism, and would catch a future switch back to a stateful `exec`.
+    const inputs = ['<think>a</think>CRISIS', '<thinking>b</thinking>SPINE', 'plain answer'];
+    const first = inputs.map(stripControlTokens);
+    for (let i = 0; i < 4; i += 1) expect(inputs.map(stripControlTokens)).toEqual(first);
+    expect(first).toEqual(['CRISIS', 'SPINE', 'plain answer']);
   });
 });
 
