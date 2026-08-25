@@ -48,6 +48,23 @@ export const MODEL_CATALOGUE: Readonly<Record<string, readonly string[]>> = Obje
     'claude-sonnet-5',
     'claude-opus-5',
   ]),
+  /**
+   * The self-hosted lane. These are the two Ollama tags `llm-kit/` actually
+   * builds — `Modelfile.chittu` (qwen3:4b) and `Modelfile.chittu-8b` (qwen3:8b)
+   * — plus the MLX path `llm-kit/train.sh` produces, so a cell can name what
+   * this repository can actually serve and nothing else.
+   *
+   * BEING IN THE CATALOGUE IS NOT A PROMOTION. It means a cell may be pointed
+   * here; `provider_clearance` still decides whether a turn may go, and
+   * architecture §13.2's gate — three seeds, zero criticals — still decides
+   * whether the model is fit to answer a child. Phase 6 is blocked on the Tamil
+   * eval set being rebuilt, and this changes nothing about that.
+   */
+  local: Object.freeze([
+    'chittu-baseline',
+    'chittu-baseline-8b',
+    'mlx-community/Qwen3-4B-Instruct-2507-4bit',
+  ]),
 });
 
 export const CATEGORIES: readonly RouterCategory[] = Object.freeze([

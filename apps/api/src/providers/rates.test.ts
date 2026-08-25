@@ -15,12 +15,29 @@ describe('every catalogued model has a rate', () => {
   });
 
   it('rates are per MILLION tokens and output is dearer than input', () => {
-    for (const models of Object.values(RATES)) {
+    for (const [provider, models] of Object.entries(RATES)) {
+      // `local` is the one legitimate zero, and it is named rather than
+      // exempted by a `> 0` that quietly became `>= 0`. A self-hosted model has
+      // no vendor invoice; a HOSTED model priced at zero is a rate somebody
+      // forgot, which is exactly what this assertion is for.
+      if (provider === 'local') continue;
       for (const [model, r] of Object.entries(models)) {
         expect(r.inPerMTok, `${model} input`).toBeGreaterThan(0);
         expect(r.outPerMTok, `${model} output`).toBeGreaterThanOrEqual(r.inPerMTok);
       }
     }
+  });
+
+  it('the self-hosted lane is priced at zero, and only that lane', () => {
+    for (const [model, r] of Object.entries(RATES['local'] ?? {})) {
+      expect(r.inPerMTok, `${model} input`).toBe(0);
+      expect(r.outPerMTok, `${model} output`).toBe(0);
+    }
+    // Zero means "nobody sends us a bill", not "free": the GPU and the
+    // electricity are real, they are just not per-token. If a hosted provider
+    // ever appears here at zero, the assertion above is what says so.
+    expect(Object.keys(RATES).filter((p) => p !== 'local' && p !== 'anthropic'))
+      .toEqual([]);
   });
 });
 

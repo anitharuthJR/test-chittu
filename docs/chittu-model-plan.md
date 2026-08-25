@@ -168,7 +168,7 @@ prose reaching it would have taken a ten-digit mobile number and refused its own
 documented example. Neither was visible for as long as the table had no writers.
 It is now a whitelist of lowercase words and exactly six placeholders.
 
-### Phase 3 — A second provider — **BLOCKED on the vendor's own terms**
+### Phase 3 — A second provider — **DONE**, and not the one the plan named
 
 `MODEL_CATALOGUE` has one provider. Until it has two, the claim that routing is
 provider-agnostic is untested.
@@ -214,7 +214,36 @@ dangerous. They are fixed, and stripping plus the emptiness check moved into
 `callAdapter` so that **no adapter can forget them** — which is the actual
 substance of "routing is provider-agnostic". See `PORT-REVIEW.md`.
 
-**What must happen before phase 3 resumes** is decision 5 in §5 below.
+**The second provider is the SELF-HOSTED lane**, and the deciding fact is that
+it was never a new feature: `prototype/chittu-v3.html` has had
+`PROVIDER.mode = 'local'` since v3 — an OpenAI-compatible endpoint, with twelve
+Playwright tests behind it — and the port carried the Anthropic branch across
+and left this one. PORT-REVIEW did not record the omission.
+
+Why it, over the alternatives:
+
+- **It has no counterparty.** Google is out on its own terms above; OpenAI on
+  the same ground; a second Anthropic model would test the CELL layer and
+  nothing about the port.
+- **It actually tests provider-agnosticism.** The wire is genuinely different —
+  `/chat/completions`, the system prompt folded into `messages[0]`,
+  `choices[0].message.content`. Sending Anthropic's shape to it produces a model
+  that never saw its own prompt: no error, no 400, just a model behaving as
+  though the fifteen hard rules were never written.
+- **It is what §12.2 says the classifier must be.** "There is no kid-safety
+  classifier to buy … self-hosting the L2 classifier is not merely the cheaper
+  option; it is the only model-level option on the board. Nobody sells the thing."
+- **`llm-kit/` already runs it.** `chittu-baseline` (qwen3:4b) and
+  `chittu-baseline-8b` are built by Modelfiles in this repository.
+
+**Being reachable is not being promoted.** A cell still has to name it,
+`provider_clearance` still has to clear it, and §13.2's gate — three seeds, zero
+criticals — still decides whether the model is fit to answer a child. Phase 6 is
+still blocked on the Tamil eval set being rebuilt. This is the wire; the model
+behind it is a separate decision with its own gate.
+
+**Vertex AI is not foreclosed, and is the right hosted option to pursue** — see
+decision 5 in §5, which is now narrower than it was.
 
 Work: a `gemini` adapter implementing `ProviderAdapter` (3 members), an entry in
 `MODEL_CATALOGUE`, a `provider_clearance` row per market **after Seat 10 review**,
@@ -350,9 +379,32 @@ Two cautions from the file that bear directly on us:
    `audit_event` seals the trace label and names no provider — so it is the
    cross-border-transfer evidence a DPIA would ask for.*
 
-5. **Which second provider, now that Google is ruled out by its own terms?**
-   Phase 3 cannot resume without an answer. The options, none of which an
-   engineer should pick alone:
+5. **Is Vertex AI cleared for a minor-facing service?** This is now the whole
+   of the hosted question, and it is a lawyer's answer rather than an engineer's.
+   What is established:
+   - The **Gemini Developer API** (`generativelanguage.googleapis.com`) is out.
+     Its Additional Terms say "You must be 18 years of age or older to use the
+     APIs" and forbid use in a service "directed towards or … likely to be
+     accessed by individuals under the age of 18".
+   - **Vertex AI is a different contract** — Google Cloud terms, not those
+     Additional Terms. The GCP Service Specific Terms and the Generative AI
+     Prohibited Use Policy were both read and neither carries an age clause —
+     **but neither confirms Vertex is in scope of that policy**, so this is
+     "not ruled out", never "cleared".
+   - Authentication is a **Google Cloud API key or application default
+     credentials**, Google's own docs recommending "an API key for testing and
+     application default credentials for production". Keys are project-scoped
+     and live in APIs & Services > Credentials — an AI Studio key is a different
+     credential for the endpoint that is already ruled out.
+   - The free tier has human reviewers reading input and output. Only the paid
+     tier is discussable.
+
+   Answering it yes still needs a `provider_clearance` row, which is a named
+   human's legal assertion and not an engineering act.
+
+   ~~Which second provider, now that Google is ruled out by its own terms?~~
+   *Answered: the self-hosted lane shipped. The remaining options, if a hosted
+   second vendor is still wanted:*
    - **Vertex AI** (same models, Google Cloud terms rather than the Gemini API
      Additional Terms, service-account auth, different endpoint). Needs its own
      terms review — the age clause may not carry over, and that is precisely the

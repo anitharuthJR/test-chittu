@@ -1,9 +1,10 @@
 import { buildServer } from './server.js';
 import { stubRouter } from './providers.js';
 import { anthropicAdapter } from './providers/anthropic.js';
+import { localAdapter } from './providers/local.js';
 import { createRouter } from './providers/router.js';
 import { readClearance, enabledMarkets } from './providers/clearance.js';
-import { readCells, resolveCells, describeCells } from './providers/cells.js';
+import { CATEGORIES, readCells, resolveCells, describeCells } from './providers/cells.js';
 import { bootstrapDb } from './db-bootstrap.js';
 import { resolveKeys } from './keys/index.js';
 import { startSweepTimer } from './helplines/sweep.js';
@@ -25,6 +26,12 @@ if (fromFile.length > 0) {
 const port = Number(process.env['PORT'] ?? 8080);
 const isProd = process.env['NODE_ENV'] === 'production';
 const apiKey = process.env['ANTHROPIC_API_KEY'] ?? '';
+/**
+ * The self-hosted lane — an OpenAI-compatible endpoint (Ollama, mlx_lm, vLLM).
+ * Absent by default: a deployment opts in by naming a URL, and a laptop that
+ * has not started one is not a broken deployment.
+ */
+const localUrl = process.env['CHITTU_LOCAL_BASE_URL'] ?? '';
 
 /**
  * Config first, connections second.
@@ -34,10 +41,18 @@ const apiKey = process.env['ANTHROPIC_API_KEY'] ?? '';
  * was shadowed by a missing-DATABASE_URL error and never seen. Refuse on the
  * cheapest, most specific thing first.
  */
-if (isProd && apiKey === '') {
+/**
+ * NO PROVIDER AT ALL is the refusal, not "no Anthropic key".
+ *
+ * This read `apiKey === ''` while there was one provider, and it would have
+ * been wrong the moment there were two: a deployment running the self-hosted
+ * lane alone would have been refused for missing a key it does not use.
+ */
+if (isProd && apiKey === '' && localUrl === '') {
   throw new Error(
-    'refusing to start: ANTHROPIC_API_KEY is not set, so the only available '
-    + 'router is the stub — and the stub classifies every turn SAFE.',
+    'refusing to start: no provider is configured. Set ANTHROPIC_API_KEY or '
+    + 'CHITTU_LOCAL_BASE_URL — with neither, the only available router is the '
+    + 'stub, and the stub classifies every turn SAFE.',
   );
 }
 
@@ -96,16 +111,18 @@ async function chooseRouter() {
   const overrides = describeCells(resolved);
   const cells = resolved.cells;
 
-  if (apiKey === '') {
+  if (apiKey === '' && localUrl === '') {
     if (isProd) {
       throw new Error(
-        'refusing to start: ANTHROPIC_API_KEY is not set, so the only available '
-        + 'router is the stub — and the stub classifies every turn SAFE.',
+        'refusing to start: no provider is configured. Set ANTHROPIC_API_KEY or '
+        + 'CHITTU_LOCAL_BASE_URL — with neither, the only available router is '
+        + 'the stub, and the stub classifies every turn SAFE.',
       );
     }
     console.warn(
-      '[chittu] no ANTHROPIC_API_KEY — using the offline stub router. '
-      + 'Every turn classifies SAFE and the sandbox echoes a fixed reply.',
+      '[chittu] no ANTHROPIC_API_KEY and no CHITTU_LOCAL_BASE_URL — using the '
+      + 'offline stub router. Every turn classifies SAFE and the sandbox echoes '
+      + 'a fixed reply.',
     );
     if (overrides.length > 0) {
       // Checked above, and deliberately NOT described as being in effect: the
@@ -117,7 +134,48 @@ async function chooseRouter() {
     return stubRouter();
   }
 
-  const adapters = { anthropic: anthropicAdapter({ apiKey }) };
+  /**
+   * Only the providers this deployment can actually reach.
+   *
+   * A cell pointing at a provider with no adapter is refused by `route()` —
+   * `RouteRefused`, which the pipeline turns into an honest degraded turn — so
+   * an absent adapter fails loudly rather than falling back to a cleared cell.
+   * The boot log below says which are present, because "routing overrides IN
+   * EFFECT" is a statement about config and not about capability.
+   */
+  const adapters: Record<string, ReturnType<typeof anthropicAdapter>> = {};
+  if (apiKey !== '') adapters['anthropic'] = anthropicAdapter({ apiKey });
+  if (localUrl !== '') {
+    adapters['local'] = localAdapter({
+      baseUrl: localUrl,
+      ...(process.env['CHITTU_LOCAL_API_KEY']
+        ? { apiKey: process.env['CHITTU_LOCAL_API_KEY'] } : {}),
+    });
+    console.warn(
+      `[chittu] self-hosted provider available at ${localUrl}. Being reachable `
+      + 'is not being promoted: a cell still has to name it, and '
+      + 'provider_clearance still has to clear it.');
+  }
+  console.warn(`[chittu] providers configured: ${Object.keys(adapters).join(', ')}`);
+
+  /**
+   * A CELL NAMING A PROVIDER THIS DEPLOYMENT CANNOT REACH is a boot-time
+   * refusal in production, not a per-turn surprise. Without it the config log
+   * says "overrides IN EFFECT" — true of the config, false of the capability —
+   * and every turn falls back with a trace nobody is reading.
+   */
+  const unreachable = CATEGORIES
+    .map((c) => ({ category: c, provider: resolved.cells[c].provider }))
+    .filter((x) => adapters[x.provider] === undefined);
+  if (unreachable.length > 0) {
+    const detail = unreachable.map((x) => `${x.category} -> ${x.provider}`).join(', ');
+    if (isProd) {
+      throw new Error(
+        `refusing to start: routing names providers this deployment cannot reach `
+        + `(${detail}). Configure them, or point the cells somewhere reachable.`);
+    }
+    console.warn(`[chittu] cells name unreachable providers: ${detail}`);
+  }
 
   // The positive counterpart to the stub warning above. dev.sh used to print
   // this by inspecting its own shell, which .env.local made unreliable; the

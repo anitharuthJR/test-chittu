@@ -121,5 +121,6 @@ Read these two documents before any non-trivial change — they are the authorit
 ## When building the backend (Phase 1)
 
 - TypeScript + Fastify, Postgres (+pgvector), modular monolith. Provider calls go behind one router interface (`route(category) → {provider, model, promptVersion}`).
+- **There are two providers**: `anthropic` and `local` (an OpenAI-compatible endpoint — Ollama, `mlx_lm.server`, vLLM — set `CHITTU_LOCAL_BASE_URL`). The second exists to TEST the provider-agnostic claim, and it does because the wire genuinely differs: `/chat/completions`, the system prompt folded into `messages[0]`, `choices[0].message.content`. Sending Anthropic's shape to it produces a model that never saw its own prompt — no error, just a model ignoring the fifteen hard rules. **Google is ruled out by its own terms** for the Developer API; Vertex is a different contract and unresolved (model-plan §5 decision 5).
 - The client must become thin: all guards server-side; browser only renders blocks/chips and does TTS.
 - Port the 246-assertion Playwright suite into API-level contract tests; the red-team corpus is a CI release gate (zero criticals to ship).

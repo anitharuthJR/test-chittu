@@ -48,6 +48,19 @@ export const RATES: Readonly<Record<string, Readonly<Record<string, Rate>>>> = O
     'claude-sonnet-5': { inPerMTok: 3, outPerMTok: 15 },
     'claude-opus-5': { inPerMTok: 15, outPerMTok: 75 },
   }),
+  /**
+   * ZERO MEANS "NOBODY SENDS US A BILL FOR THIS CALL", not "free". The
+   * electricity and the GPU are real; they are just not per-token and not
+   * billed by anyone this table can price, and the ops console should be read
+   * that way. Leaving these UNPRICED instead would be worse: the test below
+   * treats an unpriced catalogue entry as a tripwire for a rate somebody
+   * forgot, and this is not one.
+   */
+  local: Object.freeze({
+    'chittu-baseline': { inPerMTok: 0, outPerMTok: 0 },
+    'chittu-baseline-8b': { inPerMTok: 0, outPerMTok: 0 },
+    'mlx-community/Qwen3-4B-Instruct-2507-4bit': { inPerMTok: 0, outPerMTok: 0 },
+  }),
 });
 
 /**

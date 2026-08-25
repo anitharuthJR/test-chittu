@@ -974,6 +974,59 @@ Mutations, each verified red: the turn joins the context before the guards → 7
 scripted replies enter the context → 4; the window comes from the context again
 → 5; the blocked exchange is committed → 1; a sandbox escalation is committed → 2.
 
+### FIXED (2026-08-25) — the local provider was never ported
+
+`prototype/chittu-v3.html` has had a second provider since v3:
+`PROVIDER.mode = 'local'`, an OpenAI-compatible endpoint (chittu-v3.html:652),
+with twelve Playwright tests behind it in `tests/local-provider.spec.js`. The
+port carried the Anthropic branch across and left this one, and this register
+did not record the omission — so "the router is real" was true of one vendor and
+the claim it was written to support, that everything above `route()` is
+provider-blind, had nothing testing it.
+
+`apps/api/src/providers/local.ts` is that branch, ported. The wire is genuinely
+different, which is the point:
+
+```
+              Anthropic                     local
+path          /v1/messages                  /chat/completions
+system        a top-level field             folded into messages[0]
+auth          x-api-key header              optional bearer, usually none
+reply         content[] blocks, typed       choices[0].message.content
+```
+
+The shape difference is not cosmetic. Sending Anthropic's body to this endpoint
+produces a model that never saw its own system prompt — no error, no 400, just a
+model behaving as though the fifteen hard rules were never written. That reads
+as a bad model rather than a bad request, and it is exactly the class of failure
+a second provider exists to make visible.
+
+**It strips no control tokens**, and on this engine that matters more than
+anywhere: a fine-tuned Qwen3 emits `<think>…</think>` as an artefact of its chat
+template, so the reasoning preamble is the ordinary case and not the edge one.
+Twenty-five tests, including the four escalation tokens driven end to end
+through the real pipeline.
+
+**Being in `MODEL_CATALOGUE` is not a promotion.** A cell still has to name it,
+`provider_clearance` still has to clear it, and §13.2's gate still decides
+whether the model is fit to answer a child. Phase 6 remains blocked on the Tamil
+eval set.
+
+**Two boot-time refusals were wrong once there were two providers**, and are
+fixed with it: the production refusal read `ANTHROPIC_API_KEY === ''`, so a
+deployment running the self-hosted lane alone would have been refused for
+missing a key it does not use; and a cell naming a provider this deployment
+cannot reach now refuses at boot rather than per-turn, because "routing
+overrides IN EFFECT" is a statement about config and says nothing about
+capability.
+
+Mutations, each verified red: Anthropic's shape sent to an OpenAI endpoint → 1;
+the adapter strips control tokens → 5; an empty completion treated as silence
+→ 1; an absent token count reported as zero → 1. That last one was silent until
+it was asserted on the ADAPTER rather than through the router, which fills
+`?? 0` and makes "the server said nothing" and "the server said zero" the same
+value.
+
 ### FIXED (2026-08-25) — `session.runtime_enc` was where a teen's words lived
 
 Session 001 ruled that a teen's message body is never stored.
