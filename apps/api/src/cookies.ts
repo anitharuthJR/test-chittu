@@ -27,6 +27,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 export const CONSENT_COOKIE = 'chittu_consent';
 export const PARENT_COOKIE = 'chittu_parent';
+export const IDCHECK_COOKIE = 'chittu_idcheck';
 
 /** Long enough that a family is not re-enrolled weekly; short enough to matter. */
 const CONSENT_MAX_AGE = 90 * 24 * 60 * 60;      // seconds
@@ -131,4 +132,96 @@ export function clearParentCookie(reply: FastifyReply, opts: CookieEnv): void {
 /** The consent id this request is an authenticated parent for, if any. */
 export function parentFor(req: FastifyRequest, key: Buffer): string | null {
   return verifyParentSession(req.cookies[PARENT_COOKIE], key);
+}
+
+// ---------------------------------------------------------------------------
+// Pending ID check
+// ---------------------------------------------------------------------------
+
+/**
+ * An hour. Long enough to find your passport and a well-lit wall; short enough
+ * that a shared tablet does not carry somebody else's half-finished check.
+ */
+export const IDCHECK_TTL_MS = 60 * 60_000;
+
+/**
+ * Which verification this browser is part-way through.
+ *
+ * WHY A COOKIE AT ALL. The parent leaves for the vendor's hosted page and comes
+ * back, so every scrap of client state is gone. The alternatives were worse:
+ * `localStorage` is forbidden here and asserted against, and putting the consent
+ * id in the return URL publishes it to the vendor, to browser history, and to
+ * anything that logs a Referer.
+ *
+ * SIGNED, NOT STORED — the same trick as the parent session. An HMAC over
+ * `consentId|challengeId|expiry` under the deterministic index key. No table, no
+ * migration, nothing at rest.
+ *
+ * **`sameSite` is Lax here, and Strict everywhere else in this file.** That is
+ * not an oversight and must not be "fixed": the parent returns from the vendor
+ * by a cross-site top-level navigation, and a Strict cookie is NOT SENT on one.
+ * With Strict this cookie is invisible on exactly the request it exists for, and
+ * every ID check would land back on an empty form having apparently forgotten
+ * the parent. Lax is the weakest relaxation that permits it — the cookie still
+ * rides no cross-site POST, no iframe and no subresource.
+ *
+ * The relaxation is affordable because this cookie is not a credential. It names
+ * a pending verification; it cannot approve one. The verdict is still fetched
+ * from the vendor by this server, over its own connection, on the strength of an
+ * API key the browser never sees.
+ */
+export interface PendingIdCheck {
+  readonly consentId: string;
+  readonly challengeId: string;
+}
+
+export function mintIdCheck(
+  pending: PendingIdCheck, key: Buffer, now: number = Date.now(),
+): string {
+  const payload = `${pending.consentId}|${pending.challengeId}|${now + IDCHECK_TTL_MS}`;
+  return `${payload}|${sign(payload, key)}`;
+}
+
+/** @returns the pending check, or null if forged, malformed, or expired. */
+export function verifyIdCheck(
+  value: string | undefined, key: Buffer, now: number = Date.now(),
+): PendingIdCheck | null {
+  if (typeof value !== 'string') return null;
+  const cut = value.lastIndexOf('|');
+  if (cut <= 0) return null;
+  const payload = value.slice(0, cut);
+  const given = Buffer.from(value.slice(cut + 1), 'base64url');
+  const want = Buffer.from(sign(payload, key), 'base64url');
+  if (given.length !== want.length || !timingSafeEqual(given, want)) return null;
+
+  const parts = payload.split('|');
+  if (parts.length !== 3) return null;
+  const [consentId, challengeId, rawExpiry] = parts as [string, string, string];
+  const expiry = Number(rawExpiry);
+  if (!Number.isFinite(expiry) || expiry <= now) return null;
+  if (consentId === '' || challengeId === '') return null;
+  return { consentId, challengeId };
+}
+
+export function setIdCheckCookie(
+  reply: FastifyReply, pending: PendingIdCheck, key: Buffer, opts: CookieEnv,
+): void {
+  reply.setCookie(IDCHECK_COOKIE, mintIdCheck(pending, key), {
+    httpOnly: true,
+    sameSite: 'lax',          // see above — Strict is invisible on the return hop
+    secure: opts.env !== 'dev',
+    path: '/',
+    maxAge: Math.floor(IDCHECK_TTL_MS / 1000),
+  });
+}
+
+export function clearIdCheckCookie(reply: FastifyReply, opts: CookieEnv): void {
+  reply.clearCookie(IDCHECK_COOKIE, {
+    httpOnly: true, sameSite: 'lax', secure: opts.env !== 'dev', path: '/',
+  });
+}
+
+/** The verification this browser is part-way through, if any. */
+export function pendingIdCheck(req: FastifyRequest, key: Buffer): PendingIdCheck | null {
+  return verifyIdCheck(req.cookies[IDCHECK_COOKIE], key);
 }

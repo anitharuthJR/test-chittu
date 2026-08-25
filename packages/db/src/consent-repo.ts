@@ -45,6 +45,14 @@ export interface StoredConsent {
   readonly childId: string;
   readonly parentId: string;
   readonly record: ConsentRecord;
+  /**
+   * Name-match attempts already spent on the automated ID rail.
+   *
+   * Read from the row rather than taken from the request, because an attempt
+   * count the caller supplies is not a bound at all — and this one exists to
+   * stop a stolen session being used to guess the name on somebody's ID.
+   */
+  readonly verifyAttempts: number;
 }
 
 /** Tokens are compared by hash, and the hash is keyed — see migration 0002. */
@@ -93,7 +101,7 @@ interface ConsentRow {
   memory_on: boolean; learn_on: boolean; band: Band; board: string;
   issued_at: string | null; expires_at: string | null;
   revoked_at: string | null; revoke_reason: string | null;
-  seal_hash: string; created_at: string;
+  seal_hash: string; created_at: string; verify_attempts: number;
 }
 
 export function consentRepo(pool: DbPool, keys: KeyProvider) {
@@ -158,7 +166,7 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
            method, record.status, JSON.stringify(record.scopes), record.memoryOn,
            record.learnOn, record.band, record.board, record.sealHash]);
 
-        return { consentId: cr.rows[0]!.id, childId, parentId, record };
+        return { consentId: cr.rows[0]!.id, childId, parentId, record, verifyAttempts: 0 };
       });
     },
 
@@ -211,6 +219,7 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
       return {
         consentId: row.id, childId: row.child_id, parentId: row.parent_id,
         record: rowToRecord(row, name),
+        verifyAttempts: row.verify_attempts ?? 0,
       };
     },
 
@@ -229,7 +238,26 @@ export function consentRepo(pool: DbPool, keys: KeyProvider) {
       return {
         consentId: row.id, childId: row.child_id, parentId: row.parent_id,
         record: rowToRecord(row, name),
+        verifyAttempts: row.verify_attempts ?? 0,
       };
+    },
+
+    /**
+     * Record one spent name-match attempt and return the new total.
+     *
+     * Capped in SQL as well as in the adapter: `verify_attempts_sane` refuses a
+     * fourth, so a caller that forgets to check the bound hits the database's
+     * refusal rather than looping forever. `LEAST` keeps the UPDATE itself from
+     * being the thing that violates the constraint.
+     */
+    async noteVerifyAttempt(consentId: string): Promise<number> {
+      const r = await pool.query<{ verify_attempts: number }>(
+        `UPDATE consent_record
+            SET verify_attempts = LEAST(verify_attempts + 1, 3)
+          WHERE id = $1 AND status = 'verifying'
+        RETURNING verify_attempts`,
+        [consentId]);
+      return r.rows[0]?.verify_attempts ?? 0;
     },
 
     /** Decrypts the child's first name. Needs the child's own DEK. */

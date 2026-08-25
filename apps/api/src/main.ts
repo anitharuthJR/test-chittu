@@ -303,10 +303,79 @@ const router = await chooseRouter();
   }
 }
 
+/**
+ * The automated ID rail (`automated_id_check`).
+ *
+ * Self-gating: with no key and no workflow the method is filtered out of
+ * `/v1/consent/methods` and a parent is never shown it. That is deliberately
+ * the DEFAULT — this rail sends a parent to a third party to photograph a
+ * government ID, and it should take a positive act to turn on, not an omission
+ * to turn off.
+ */
+const diditKey = process.env['DIDIT_API_KEY'] ?? '';
+const diditWorkflow = process.env['DIDIT_WORKFLOW_ID'] ?? '';
+/**
+ * Allowlisted, not denylisted. An unrecognised value is refused rather than
+ * quietly treated as one of the two — the same rule the key-provider guard
+ * learned the hard way, where anything unrecognised defaulted to *permitted*.
+ */
+const diditEnvRaw: 'live' | 'sandbox' = (() => {
+  const v = process.env['DIDIT_ENVIRONMENT'] ?? 'sandbox';
+  if (v === 'live' || v === 'sandbox') return v;
+  console.error(`[chittu] DIDIT_ENVIRONMENT must be 'live' or 'sandbox', got '${v}'`);
+  process.exit(1);
+})();
+/**
+ * Sandbox credentials in production are refused at BOOT, not at the first
+ * parent.
+ *
+ * A sandbox workflow approves whatever it is shown. Reaching production with
+ * one configured would mint real, legally-operative consent records off
+ * verifications that never happened — and it would do it silently, looking
+ * exactly like a working rail. Same shape as `reject_dev_stub_in_prod`: refuse
+ * the combination rather than trusting nobody assembles it.
+ */
+if (isProd && diditKey !== '' && diditEnvRaw === 'sandbox') {
+  console.error(
+    '[chittu] refusing to start: DIDIT_ENVIRONMENT=sandbox with NODE_ENV=production. '
+    + 'A sandbox workflow approves anything; in production that mints consent for '
+    + 'verifications that never happened. Set DIDIT_ENVIRONMENT=live.');
+  process.exit(1);
+}
+/**
+ * Overridable endpoint, so the rail can be driven end-to-end without live
+ * credentials and so a deployment can sit behind its own egress proxy.
+ *
+ * Refused over plain HTTP in production: this request carries the API key that
+ * authorises reading identity decisions, and a cleartext hop would hand it to
+ * anything on the path.
+ */
+const diditBase = process.env['DIDIT_BASE_URL'] ?? '';
+if (isProd && diditBase !== '' && !diditBase.startsWith('https://')) {
+  console.error(
+    '[chittu] refusing to start: DIDIT_BASE_URL must be https in production — '
+    + 'it carries the key that authorises reading identity decisions.');
+  process.exit(1);
+}
+const didit = diditKey !== '' && diditWorkflow !== ''
+  ? {
+      apiKey: diditKey,
+      workflowId: diditWorkflow,
+      environment: diditEnvRaw,
+      ...(diditBase !== '' ? { baseUrl: diditBase } : {}),
+      ...(process.env['DIDIT_CALLBACK_URL']
+        ? { callbackUrl: process.env['DIDIT_CALLBACK_URL'] } : {}),
+    }
+  : undefined;
+console.warn(didit === undefined
+  ? '[chittu] automated ID check: NOT offered (set DIDIT_API_KEY + DIDIT_WORKFLOW_ID)'
+  : `[chittu] automated ID check: offered, ${diditEnvRaw} workflow`);
+
 const app = await buildServer({
   pool, keys, router, logger: loggerOptions,
   ...(isProd ? { env: 'prod' as const } : {}),
   ...(opsTokens === '' ? {} : { opsTokens }),
+  ...(didit ? { didit } : {}),
 });
 /**
  * Bind address. Defaults to loopback and must be opted OUT of.

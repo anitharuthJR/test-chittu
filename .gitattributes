@@ -1,0 +1,22 @@
+# Diff classification.
+#
+# WHY THIS FILE EXISTS. `packages/consent/src/adapters.ts` contains one NUL byte
+# — the canonicalisation separator in `hashEvidence`, which is deliberate and
+# documented at the call site. Git's binary heuristic looks for a NUL in the
+# first 8000 bytes and finds it, so the whole file rendered as
+# "Bin 10958 -> 13377 bytes" in every diff, every `--stat`, and every review.
+#
+# That is a real hazard here rather than a cosmetic one. This repository's rule
+# is that safety logic must be readable in a diff — "a deleted prompt line looks
+# like nothing in a diff" is why the prompt clauses have their own tests — and
+# `adapters.ts` is the consent port: it decides which verification rails exist,
+# which jurisdictions each serves, and how evidence is hashed. A silent diff on
+# that file is exactly the failure the rule is written against.
+#
+# `diff` forces textual treatment regardless of content. It changes nothing
+# about how the bytes are stored or checked out.
+*.ts   diff
+*.tsx  diff
+
+# Genuine binaries, marked so no future glob drags them into textual diffs.
+*.woff2 binary

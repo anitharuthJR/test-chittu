@@ -12,7 +12,7 @@
  * production runs. Tests use a real Postgres 16 + pgvector server.
  */
 
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +23,7 @@ import {
   assertActiveConsent, draftConsent, markVerifying, activate, revoke,
   selectAdapter, methodsFor, offersFor, ConsentError, ConsentAdapterError,
   checkPinPolicy, PIN_MESSAGE, hashPin, verifyPin, registerAttempt,
-  type ConsentMethod,
+  type ConsentMethod, type DiditConfig,
 } from '@chittu/consent';
 import type { DbPool, KeyProvider } from '@chittu/db';
 import { meteringRepo, sessionPseudonym, signalRepo } from '@chittu/db';
@@ -44,6 +44,7 @@ import { buildCertification } from './certification.js';
 import {
   setConsentCookie, clearConsentCookie, readConsentCookie,
   setParentCookie, clearParentCookie, parentFor,
+  setIdCheckCookie, clearIdCheckCookie, pendingIdCheck,
 } from './cookies.js';
 
 export interface BuildOptions {
@@ -84,6 +85,14 @@ export interface BuildOptions {
    * configuration.
    */
   readonly embed?: Embedder;
+  /**
+   * Credentials for the automated ID rail (`automated_id_check`).
+   *
+   * ABSENT MEANS THE METHOD IS NOT OFFERED. It is filtered out of
+   * `/v1/consent/methods` rather than advertised and then failing when a parent
+   * picks it — the same reason `available` exists on the adapter at all.
+   */
+  readonly didit?: DiditConfig;
 }
 
 const MODES: readonly Mode[] = [
@@ -106,6 +115,17 @@ const MODES: readonly Mode[] = [
  */
 export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> {
   const env = opts.env ?? 'dev';
+  /**
+   * Registry options for the adapter selection calls.
+   *
+   * `attemptsUsed` is threaded in per-request at `finalize` because it is
+   * per-consent state; everything else is process-wide config.
+   */
+  const registry = (attemptsUsed?: number) => ({
+    env,
+    ...(opts.didit ? { didit: opts.didit } : {}),
+    ...(attemptsUsed !== undefined ? { attemptsUsed } : {}),
+  });
   const router = opts.router ?? stubRouter();
   const store = createStore(opts.pool, opts.keys);
   /**
@@ -181,8 +201,8 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     }
     return reply.send({
       country,
-      methods: methodsFor(country, { env }),      // completable today
-      offers: offersFor(country, { env }),        // everything valid, with blockedOn
+      methods: methodsFor(country, registry()),   // completable today
+      offers: offersFor(country, registry()),     // everything valid, with blockedOn
     });
   });
 
@@ -222,7 +242,7 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     if (bad) return reply.code(400).send({ error: PIN_MESSAGE[bad], code: bad });
 
     let adapter;
-    try { adapter = selectAdapter(b.method, { env }); }
+    try { adapter = selectAdapter(b.method, registry()); }
     catch (e) { return reply.code(400).send({ error: (e as ConsentAdapterError).message }); }
     if (!adapter.jurisdictions.includes(b.country)) {
       return reply.code(400).send({ error: `${b.method} is not offered in ${b.country}` });
@@ -240,38 +260,116 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
     await store.consent.createDraft(
       draft, b.method, record.law, await hashPin(b.pin), record);
 
+    // A rail that hands off to a vendor loses every scrap of client state at the
+    // redirect, so the server remembers which verification this browser is
+    // part-way through. Signed, httpOnly, and not a credential — see cookies.ts.
+    if (challenge.redirectUrl) {
+      setIdCheckCookie(
+        reply,
+        { consentId: record.id, challengeId: challenge.challengeId },
+        await opts.keys.indexKey(),
+        { env },
+      );
+    }
+
     return reply.code(201).send({
       consentId: record.id,
       challengeId: challenge.challengeId,
       instructions: challenge.instructions,
+      // Only rails that hand off to a vendor-hosted page set this. The client
+      // renders the hand-off when it is present and never assumes one exists.
+      ...(challenge.redirectUrl ? { redirectUrl: challenge.redirectUrl } : {}),
       law: record.law,
       status: record.status,
     });
   });
 
-  app.post<{ Params: { id: string }; Body: { challengeId: string; proof?: unknown } }>(
-    '/v1/consent/:id/finalize', async (req, reply) => {
-      const stored = await store.consent.byId(opts.pool, req.params.id);
-      if (!stored) return reply.code(404).send({ error: 'no such consent' });
-      const adapter = selectAdapter(stored.record.method, { env });
-      try {
-        const evidence = await adapter.complete(req.body.challengeId, req.body.proof);
-        const active = activate(markVerifying2(stored.record), evidence);
-        const { token } = await store.consent.activate(req.params.id, evidence, active);
-        // The token goes into an httpOnly cookie and NOT into the body. It is a
-        // bearer credential: anything that can read it can open a session as
-        // this child, and a response body is readable by every script on the
-        // page and by anything that logs responses.
-        setConsentCookie(reply, token, { env });
-        return reply.send({ ledger: active });
-      } catch (e) {
-        // A failed verification must NOT produce a consent. Say so plainly.
-        return reply.code(422).send({
-          error: e instanceof Error ? e.message : 'verification failed',
-          status: stored.record.status,
-        });
+  /**
+   * Complete a verification. Shared by both entry points below, because they
+   * differ only in how they learn WHICH verification — everything after that,
+   * including every refusal, must be identical or the two paths drift.
+   */
+  async function completeVerification(
+    consentId: string, challengeId: string, proof: unknown,
+    reply: FastifyReply,
+  ) {
+    const stored = await store.consent.byId(opts.pool, consentId);
+    if (!stored) return reply.code(404).send({ error: 'no such consent' });
+    // Attempts come from the ROW, never from the request. A bound the caller
+    // supplies is not a bound.
+    const adapter = selectAdapter(stored.record.method, registry(stored.verifyAttempts));
+    try {
+      const evidence = await adapter.complete(challengeId, proof);
+      const active = activate(markVerifying2(stored.record), evidence);
+      const { token } = await store.consent.activate(consentId, evidence, active);
+      // The token goes into an httpOnly cookie and NOT into the body. It is a
+      // bearer credential: anything that can read it can open a session as
+      // this child, and a response body is readable by every script on the
+      // page and by anything that logs responses.
+      setConsentCookie(reply, token, { env });
+      // The verification is over, so the breadcrumb that pointed at it is
+      // rubbish now. Clearing it also means a second finalize on the same
+      // browser cannot re-enter a flow that already succeeded.
+      clearIdCheckCookie(reply, { env });
+      return reply.send({ ledger: active });
+    } catch (e) {
+      // A failed verification must NOT produce a consent. Say so plainly.
+      const adapterErr = e instanceof ConsentAdapterError ? e : null;
+
+      // Spend an attempt only when the parent got something wrong that they
+      // could get right — a mismatched name. A vendor outage or a capture still
+      // in progress is not their mistake and must not burn the budget that
+      // decides whether they are allowed to try again.
+      if (adapterErr?.code === 'name_mismatch') {
+        await store.consent.noteVerifyAttempt(consentId);
       }
-    });
+      // Nothing more can come of this rail, so stop pointing the browser at it.
+      if (adapterErr && !adapterErr.retryable) clearIdCheckCookie(reply, { env });
+
+      return reply.code(422).send({
+        error: e instanceof Error ? e.message : 'verification failed',
+        // `code` and `retryable` let the client tell "type it again" from "this
+        // rail is over, take the other one" without reading English out of
+        // `error`.
+        code: adapterErr?.code ?? 'verification_failed',
+        retryable: adapterErr?.retryable ?? false,
+        status: stored.record.status,
+      });
+    }
+  }
+
+  app.post<{ Params: { id: string }; Body: { challengeId: string; proof?: unknown } }>(
+    '/v1/consent/:id/finalize', async (req, reply) =>
+      completeVerification(req.params.id, req.body.challengeId, req.body.proof, reply));
+
+  /**
+   * Finish an ID check the parent has just come back from.
+   *
+   * No consent id and no challenge id in the path or the body: both come from
+   * the signed cookie set at `draft`, for the same reason nothing else here
+   * takes an id from the client. The body carries ONE thing — the name as
+   * printed on the document — and a name decides nothing on its own. The
+   * verdict is fetched from the vendor by this server.
+   */
+  app.post<{ Body: { fullName?: string } }>('/v1/consent/verify-id', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { fullName: { type: 'string', maxLength: 120 } },
+      },
+    },
+  }, async (req, reply) => {
+    const pending = pendingIdCheck(req, await opts.keys.indexKey());
+    if (!pending) {
+      return reply.code(404).send({
+        error: 'no ID check in progress', code: 'no_pending_check', retryable: false,
+      });
+    }
+    return completeVerification(
+      pending.consentId, pending.challengeId,
+      { fullName: req.body?.fullName ?? '' }, reply);
+  });
 
   /**
    * Who this request is, from the cookie alone.

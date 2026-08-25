@@ -48,6 +48,13 @@ export const SENSITIVE_PATHS: readonly string[] = Object.freeze([
   'fact', 'memory', 'memories',
   // Credentials and session secrets.
   'pin', 'apiKey', 'api_key', 'token', 'password', 'secret',
+  // The identity-verification vendor's decision payload. The client narrows it
+  // before it can reach a caller, so these should never appear — listed anyway,
+  // because "should never" and "cannot" are different guarantees and this is
+  // the cheaper of the two.
+  'fullName', 'full_name', 'first_name', 'last_name', 'date_of_birth',
+  'document_number', 'mrz', 'portrait_image', 'front_image', 'back_image',
+  'documentName', 'vendor_data', 'x-api-key', 'req.headers["x-api-key"]',
   'req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]',
   'headers.authorization', 'headers.cookie',
 ]);

@@ -1,0 +1,36 @@
+# Parent-typed name vs the name printed on the document, and whether they are
+# the same person.
+#
+# WRITTEN FROM NAMES, NOT FROM THE NORMALISER. CLAUDE.md is explicit that a
+# corpus derived from the rule it tests is testing itself, and three instruments
+# in this repo have already been caught doing exactly that. Every row here is a
+# way a parent plausibly types their name against a way a document plausibly
+# prints it — the rules were then made to fit, not the other way round.
+#
+# expect	typed	on document	note
+MATCH	R. Karthik	KARTHIK RAJENDRAN	TN initial is the father's name, not a middle name
+MATCH	Karthik R	KARTHIK RAJENDRAN	same, written the other way round
+MATCH	Karthik R.	KARTHIK RAJENDRAN	trailing initial with a stop
+MATCH	Karthik	KARTHIK RAJENDRAN	parent omits the surname entirely
+MATCH	KARTHIK RAJENDRAN	Karthik Rajendran	document shouts, parent does not
+MATCH	Priya Krishnan	PRIYA KRISHNAN	the ordinary case
+MATCH	Krishnan Priya	PRIYA KRISHNAN	document reverses the order
+MATCH	José Álvarez	JOSE ALVAREZ	diacritics survive in one rendering only
+MATCH	Anne-Marie Dubois	ANNE MARIE DUBOIS	hyphen against a space
+MATCH	Dr Priya Krishnan	PRIYA KRISHNAN	honorific typed, absent on the ID
+MATCH	Thiru Karthik Rajendran	KARTHIK RAJENDRAN	Tamil honorific
+MATCH	Md Rafiq	MD RAFIQ	Md is Mohammad, a name — must not be stripped as a title
+MATCH	Md Rafiq Ahmed	MD RAFIQ AHMED	same, three tokens
+MATCH	S. Lakshmi Narayanan	LAKSHMI NARAYANAN SUBRAMANIAN	leading initial plus two given names
+MATCH	  Priya   Krishnan  	PRIYA KRISHNAN	stray whitespace
+MATCH	O'Brien Sean	SEAN OBRIEN	apostrophe present in one rendering only
+NOMATCH	Priya Sharma	PRIYA KRISHNAN	married name differs from the ID — parent must correct it
+NOMATCH	Krishna	KRISHNAN	transliteration variant, deliberately not fuzzy-matched
+NOMATCH	John Smith	JANE DOE	a different person entirely
+NOMATCH	K	KARTHIK RAJENDRAN	single initial must not act as a wildcard
+NOMATCH	K R	KARTHIK RAJENDRAN	all-initials must not pass either
+MATCH	Priya Krishnan Menon	PRIYA KRISHNAN	subset rule is symmetric: a maiden name absent from the ID still matches
+NOMATCH	Rajendran Rajendran	KARTHIK RAJENDRAN	one document token must not satisfy two typed ones
+NOMATCH		KARTHIK RAJENDRAN	nothing typed
+NOMATCH	Karthik Rajendran		nothing on the document
+NOMATCH	Dr	PRIYA KRISHNAN	honorific alone leaves no tokens at all

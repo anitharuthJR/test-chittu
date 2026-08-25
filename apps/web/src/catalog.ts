@@ -102,4 +102,5 @@ export const METHOD_LABELS: Readonly<Record<string, string>> = {
   consent_manager_token: 'Registered Consent Manager token',
   age_assurance_uk: 'Proportional age assurance',
   digilocker: 'DigiLocker',
+  automated_id_check: 'Photo ID check',
 };

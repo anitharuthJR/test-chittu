@@ -19,7 +19,8 @@ import type { Block, Band, Country, Flag, Memory, Mode, PipelineLayer } from '@c
 /** Mirrors `ConsentMethod` in @chittu/consent. Pinned by a test, not by trust. */
 export type ConsentMethod =
   | 'dev_stub' | 'card_micro_charge' | 'email_plus' | 'signed_form_review'
-  | 'gov_id_review' | 'consent_manager_token' | 'digilocker' | 'age_assurance_uk';
+  | 'gov_id_review' | 'consent_manager_token' | 'digilocker' | 'age_assurance_uk'
+  | 'automated_id_check';
 
 export interface MethodOffer {
   readonly method: ConsentMethod;
@@ -51,6 +52,13 @@ export interface DraftResponse {
   readonly consentId: string;
   readonly challengeId: string;
   readonly instructions: string;
+  /**
+   * Present only on rails that finish somewhere else. The client hands the
+   * parent over when it is here and completes in place when it is not — it does
+   * not decide from the method name, so a new hand-off rail needs no client
+   * change.
+   */
+  readonly redirectUrl?: string;
   readonly law: string;
   readonly status: string;
 }
@@ -294,7 +302,13 @@ export interface TranscriptResponse {
  * always server-authored text and never an exception from inside our process.
  */
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string, readonly code?: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    /** Whether trying the same thing again could plausibly work. */
+    readonly retryable: boolean = false,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -341,8 +355,9 @@ async function call<T>(
   }
 
   if (!res.ok) {
-    const e = body as { error?: string; code?: string };
-    throw new ApiError(res.status, e.error ?? 'Something went wrong.', e.code);
+    const e = body as { error?: string; code?: string; retryable?: boolean };
+    throw new ApiError(
+      res.status, e.error ?? 'Something went wrong.', e.code, e.retryable === true);
   }
   return body as T;
 }
@@ -373,6 +388,13 @@ export function createApi(base = '', fetchImpl: typeof fetch = globalThis.fetch)
       go<FinalizeResponse>(
         `/v1/consent/${consentId}/finalize`,
         json(proof === undefined ? { challengeId } : { challengeId, proof })),
+
+    /**
+     * Finish an ID check the parent has just returned from. Takes no ids: the
+     * server reads which verification this is from its own signed cookie.
+     */
+    verifyId: (fullName: string) =>
+      go<FinalizeResponse>('/v1/consent/verify-id', json({ fullName })),
 
     status: () => go<StatusResponse>('/v1/consent/status'),
 

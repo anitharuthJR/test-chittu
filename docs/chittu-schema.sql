@@ -61,7 +61,8 @@ CREATE TYPE consent_method AS ENUM (
   'gov_id_review',          -- DPDP Rules 2025 r.10 — voluntarily provided ID
   'consent_manager_token',  -- DPDP r.10 — virtual token, registered CM
   'digilocker',             -- DEFERRED — not yet implemented
-  'age_assurance_uk'        -- AADC proportional assurance
+  'age_assurance_uk',       -- AADC proportional assurance
+  'automated_id_check'      -- vendor-hosted ID + liveness + face match
 );
 
 CREATE TYPE consent_status AS ENUM
@@ -166,11 +167,17 @@ CREATE TABLE consent_record (
   seal_hash       text NOT NULL,                       -- head of the chain at issue
   created_at      timestamptz NOT NULL DEFAULT now(),
 
+  -- Bounded retries for the automated_id_check name match, counted server-side.
+  -- A client-supplied attempt count is not a bound, and an unbounded retry is a
+  -- name-guessing oracle against a stolen session. See db/migrations/0008.
+  verify_attempts smallint NOT NULL DEFAULT 0,
+
   -- DigiLocker is deferred: refuse to record it until the adapter ships, so no
   -- ledger row can ever claim a verification that never happened.
   CONSTRAINT digilocker_deferred CHECK (method <> 'digilocker'),
   CONSTRAINT active_needs_issue  CHECK (status <> 'active' OR issued_at IS NOT NULL),
-  CONSTRAINT revoked_needs_time  CHECK (status <> 'revoked' OR revoked_at IS NOT NULL)
+  CONSTRAINT revoked_needs_time  CHECK (status <> 'revoked' OR revoked_at IS NOT NULL),
+  CONSTRAINT verify_attempts_sane CHECK (verify_attempts >= 0 AND verify_attempts <= 3)
 );
 CREATE INDEX consent_child_idx  ON consent_record(child_id, status);
 CREATE INDEX consent_parent_idx ON consent_record(parent_id, created_at DESC);

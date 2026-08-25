@@ -36,6 +36,27 @@ const STEPS = 7;
  */
 const TOTAL_STEPS = STEPS + 1;
 
+/**
+ * The step a parent lands on coming back from a vendor-hosted ID check.
+ *
+ * Deliberately outside the 1..TOTAL_STEPS run: it is not part of the sequence a
+ * parent walks, it is a place they arrive at. Folding it into the stepper would
+ * make the count wrong for everybody who never takes this rail.
+ */
+const RETURN_STEP = 100;
+
+/**
+ * Did the browser just come back from the ID check?
+ *
+ * A bare flag in the return URL and nothing else. The consent id, the challenge
+ * id and the verdict all live server-side — the flag says only "show the name
+ * form", so there is nothing here worth forging: a parent who types it by hand
+ * gets a form that fails on a cookie they do not have.
+ */
+export function isIdCheckReturn(search: string): boolean {
+  return new URLSearchParams(search).get('idcheck') === 'return';
+}
+
 interface Draft {
   parentName: string;
   parentEmail: string;
@@ -56,8 +77,18 @@ const EMPTY: Draft = {
 };
 
 export function Consent({ api, onDone }: { api: Api; onDone: () => void }): preact.JSX.Element {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(
+    () => (typeof location !== 'undefined' && isIdCheckReturn(location.search))
+      ? RETURN_STEP : 1);
   const [d, setD] = useState<Draft>(EMPTY);
+  /**
+   * The name as printed on the ID. Never persisted anywhere — it is compared
+   * against the document in one request and forgotten. Held apart from `Draft`
+   * so it cannot ride along into `api.draft()` and be stored.
+   */
+  const [idName, setIdName] = useState('');
+  /** False once a refusal is terminal, so the parent is not asked to try again. */
+  const [canRetry, setCanRetry] = useState(true);
   const [offers, setOffers] = useState<readonly MethodOffer[]>([]);
   const [method, setMethod] = useState<ConsentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +138,16 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
         pin: d.pin,
         pinConfirm: d.pinConfirm,
       });
+      // A rail that hands off finishes somewhere else. Leave — the server has
+      // already remembered which verification this is, so there is nothing for
+      // us to carry across the navigation and nothing to put in localStorage.
+      //
+      // Branching on the FIELD rather than on the method name is deliberate: a
+      // second hand-off rail needs no change here.
+      if (draft.redirectUrl) {
+        location.assign(draft.redirectUrl);
+        return;
+      }
       // The token never comes back to us — `finalize` sets an httpOnly cookie.
       // `onDone` re-asks the server what we now hold, which is the only way the
       // client can find out.
@@ -116,6 +157,35 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
       // A failed verification must not produce a consent, and must say so
       // plainly rather than leaving the parent on a spinner.
       setError(e instanceof ApiError ? e.message : 'Could not reach Chittu.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  /**
+   * Finish the check the parent has come back from.
+   *
+   * Sends one thing: the name printed on the document. Everything that decides
+   * anything — which verification this is, and whether it passed — is the
+   * server's, and the verdict is fetched from the vendor rather than claimed
+   * here.
+   */
+  async function submitIdName(): Promise<void> {
+    setWorking(true);
+    setError(null);
+    try {
+      await api.verifyId(idName.trim());
+      onDone();
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setError(e.message);
+        // The server says whether another go could work. Believe it rather than
+        // guessing from the message: a parent kept typing at a rail that has
+        // already ended is a parent we are wasting.
+        setCanRetry(e.retryable);
+      } else {
+        setError('Could not reach Chittu.');
+      }
     } finally {
       setWorking(false);
     }
@@ -131,14 +201,18 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
         A grown-up sets this up. Chittu cannot talk to your child until you finish.
       </p>
 
-      <ol class="stepper" aria-label={`Step ${step} of ${TOTAL_STEPS}`}>
+      {/* The return step is not IN the sequence, so it borrows the last
+          segment rather than announcing "Step 100 of 8" — the parent coming
+          back from the ID check is at the end of the walk, not off the map. */}
+      <ol class="stepper"
+        aria-label={`Step ${step === RETURN_STEP ? TOTAL_STEPS : step} of ${TOTAL_STEPS}`}>
         {/* Eight segments, because eight is what it announces. Seven beside a
             spoken "of 8" is the same bug wearing a different hat. The fill rule
             is unchanged — `i < step` fills the step you are ON as well as the
             ones behind it — so the bar is full on the gate rather than a
             segment short of it. */}
         {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-          <li key={i} class={i < step ? 'is-done' : ''} />
+          <li key={i} class={i < (step === RETURN_STEP ? TOTAL_STEPS : step) ? 'is-done' : ''} />
         ))}
       </ol>
 
@@ -263,7 +337,7 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
           </>
         )}
 
-        {step > STEPS && (
+        {step > STEPS && step !== RETURN_STEP && (
           <>
             <h2>Prove you're the grown-up</h2>
             <p class="sub">
@@ -291,14 +365,53 @@ export function Consent({ api, onDone }: { api: Api; onDone: () => void }): prea
           </>
         )}
 
+        {step === RETURN_STEP && (
+          <>
+            <h2>One last thing</h2>
+            <p class="sub">
+              Type your name exactly as it is printed on the ID you just showed. We compare
+              it once and forget it — it is never stored, and we never see the document.
+            </p>
+            <Field label="Name as printed on your ID" id="idname">
+              <input id="idname" type="text" autocomplete="off" maxLength={120}
+                value={idName} disabled={!canRetry}
+                onInput={(e) => setIdName((e.currentTarget as HTMLInputElement).value)} />
+            </Field>
+            {error !== null && <p class="field__error" role="alert">{error}</p>}
+            {!canRetry && (
+              <p class="sub">
+                This check cannot go any further. You can start again and choose another
+                way to verify.
+              </p>
+            )}
+          </>
+        )}
+
         <div class="card__actions">
-          {step > 1 && (
+          {step > 1 && step !== RETURN_STEP && (
             <button type="button" class="btn btn--secondary" disabled={working}
               onClick={() => { setError(null); setStep(step - 1); }}>
               Back
             </button>
           )}
-          {step <= STEPS ? (
+          {step === RETURN_STEP ? (
+            canRetry ? (
+              <button type="button" class="btn"
+                disabled={working || idName.trim() === ''}
+                onClick={() => { void submitIdName(); }}>
+                {working ? 'Checking…' : 'Finish'}
+              </button>
+            ) : (
+              <button type="button" class="btn"
+                onClick={() => {
+                  // Back to a clean form on a URL with no return flag, so a
+                  // reload does not drop the parent straight back here.
+                  location.assign(location.pathname);
+                }}>
+                Start again
+              </button>
+            )
+          ) : step <= STEPS ? (
             <button type="button" class="btn" disabled={!canAdvance}
               onClick={() => setStep(step + 1)}>
               Next
