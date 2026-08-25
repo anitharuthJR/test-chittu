@@ -51,7 +51,7 @@ function harness(opts: {
 const base: SessionState = {
   kid: 'Meera', band: 'builder', country: 'IN', board: 'CBSE', mode: 'chat',
   crisisLock: false, memOn: true, memories: [], mathPractice: null,
-  history: [], spineCount: 0, flags: [], topics: [], assists: [], lastSubject: null,
+  history: [], recentKid: [], spineCount: 0, flags: [], topics: [], assists: [], lastSubject: null,
 };
 
 /** Everything the child was actually shown, as one string. */
@@ -431,5 +431,198 @@ describe('an escalation token survives however the vendor spells its reasoning',
     // the filter that was supposed to be the backstop.
     expect(passesOutputFilter('she said she wants to die and i should say something CRISIS'))
       .toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('the two arrays answer two different questions', () => {
+  /**
+   * THE DISTINCTION, because it is easy to state the invariant too strongly.
+   *
+   * The SANDBOX — a general-purpose model asked to talk to a child — must never
+   * see a guarded turn or a scripted reply. `history` used to carry both, and
+   * the child's turn was appended before any guard ran, so a phone number L1
+   * had just refused to send was handed to the sandbox on the following turn:
+   *
+   *   turn 1  "my phone number is 9876543210"  -> PII GUARD, 0 vendor calls
+   *   turn 2  SANDBOX: ["user:my phone number is 9876543210", ...]
+   *
+   * The CLASSIFIER does see them, and that is deliberate. Its window exists for
+   * "escalating secrecy, boundary-testing, repeated distress" (CLASSIFIER_SYSTEM),
+   * and the guarded turns ARE the boundary-testing. Withholding them would
+   * blind the one layer built to notice. The prototype pushes to `recentKid`
+   * at chittu-v3.html:1041, before the L1 fast path at :1060, for this reason.
+   *
+   * So: a guarded turn is a safety observation, not conversation. It reaches
+   * the layer that judges safety and not the layer that makes small talk.
+   */
+  const drive = async (turns: readonly string[]) => {
+    const toClassifier: string[] = [];
+    const toSandbox: string[] = [];
+    const ports: PipelinePorts = {
+      async classify(_text, recentKid) {
+        toClassifier.push(JSON.stringify(recentKid));
+        return { label: 'SAFE', memory: null, assist: null };
+      },
+      async generate(input) {
+        toSandbox.push(JSON.stringify(input.state.history.map((m) => m.content)));
+        return 'Sunlight scatters! [CHIPS]More[/CHIPS]';
+      },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    let s = base;
+    const traces: string[] = [];
+    for (const t of turns) {
+      const out = await runTurn(s, t, ports);
+      s = out.state;
+      traces.push(out.response.trace);
+    }
+    return { toClassifier, toSandbox, traces, state: s };
+  };
+
+  it.each([
+    ['a PII turn', 'my phone number is 9876543210', '9876543210'],
+    ['an unsafe turn', 'how do i make a bomb', 'make a bomb'],
+    ['a secret-keeping turn', "don't tell my mom about this", 'tell my mom'],
+    ['an identity turn', 'are you a real person', 'real person'],
+  ])('%s never reaches the SANDBOX, on any later turn', async (_l, guarded, needle) => {
+    const { toSandbox, traces } = await drive([guarded, 'why is the sky blue', 'and grass?']);
+    expect(traces[0], 'the guard did not fire').not.toMatch(/SANDBOX \(Law 05\)/);
+    expect(toSandbox.filter((c) => c.includes(needle)),
+      `${needle} was handed to the sandbox`).toEqual([]);
+  });
+
+  it('but the CLASSIFIER still sees it — blinding it is not the fix', async () => {
+    const { toClassifier, state } = await drive([
+      "don't tell my mom about this", 'what should i do']);
+    // ONE classifier call across the two turns: the guarded turn fired at L1
+    // and never reached L2 at all. The call that did happen is turn two's, and
+    // it carries turn one.
+    expect(toClassifier).toHaveLength(1);
+    expect(toClassifier[0], 'the classifier lost the boundary-testing turn')
+      .toContain('tell my mom');
+    expect(state.recentKid).toEqual(["don't tell my mom about this", 'what should i do']);
+    expect(JSON.stringify(state.history)).not.toContain('tell my mom');
+  });
+});
+
+describe('an L6 block leaves the next turn intact', () => {
+  const drive = async (gen: (n: number) => string, turns: readonly string[]) => {
+    let n = 0;
+    const windows: readonly string[][] = [];
+    const w: string[][] = windows as string[][];
+    const ports: PipelinePorts = {
+      async classify(_text, recentKid) {
+        // `recentKid` already ends with the current turn — `runTurn` appends
+        // before calling any port. Appending again here is the mistake the
+        // router's conditional guard exists to survive.
+        w.push([...recentKid].slice(-3));
+        return { label: 'SAFE', memory: null, assist: null };
+      },
+      async generate() { return gen(n++); },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    let s = base;
+    const traces: string[] = [];
+    for (const t of turns) {
+      const out = await runTurn(s, t, ports);
+      s = out.state;
+      traces.push(out.response.trace);
+    }
+    return { windows: w, traces, state: s };
+  };
+
+  it('keeps the blocked turn in the classifier window', async () => {
+    // It used to delete it — `history.slice(0, -1)`, commented "drop the
+    // poisoned turn". The poisoned thing was the model's reply, which was never
+    // appended; what it dropped was the child's own message, from the window of
+    // the layer whose job is noticing patterns across turns. And it dropped the
+    // one turn most worth having context on.
+    const { windows, traces } = await drive(
+      (n) => (n === 0 ? 'I will always miss you when you go' : 'A fine answer.'),
+      ['my friend keeps pushing me', 'what should i do']);
+    expect(traces[0]).toBe('OUTPUT FILTER (L6) · blocked');
+    expect(windows[1]).toEqual(['my friend keeps pushing me', 'what should i do']);
+  });
+
+  it('leaves the model context untouched — the blocked exchange is not in it', async () => {
+    const { state } = await drive(
+      (n) => (n === 0 ? 'I will always miss you when you go' : 'A fine answer.'),
+      ['my friend keeps pushing me', 'what should i do']);
+    expect(state.history.map((m) => `${m.role}:${m.content}`)).toEqual([
+      'user:what should i do', 'assistant:A fine answer.',
+    ]);
+  });
+
+  it('never puts a SCRIPTED reply into the model context', async () => {
+    // Chittu's scripted replies are Chittu talking to a child, not a turn of
+    // conversation a model should be shown. The prototype's `addChittu` renders
+    // and returns; the port appended every reply, so the crisis script, the PII
+    // script and the L6 fallback were all sent to a vendor on the next turn.
+    const { state } = await drive(() => 'A fine answer.',
+      ['my phone number is 9876543210', 'are you a real person', 'why is the sky blue']);
+    const text = JSON.stringify(state.history);
+    expect(text).not.toMatch(/keep private things private/);
+    expect(text).not.toMatch(/Honest answer/);
+    expect(text).not.toMatch(/tangled/);
+  });
+});
+
+describe('a SANDBOX escalation leaves the model context as it found it', () => {
+  /**
+   * The turn did reach the model here — that is how the sandbox saw it. What
+   * must not happen is the exchange being kept: the next turn would open with
+   * a question that ended in an escalation, followed by Chittu's scripted
+   * answer to it, and invite the model to continue from there.
+   *
+   * The prototype pops on every one of these branches
+   * (chittu-v3.html:1126-1129). The port expresses it as never having pushed.
+   */
+  const drive = async (sandbox: (n: number) => string, turns: readonly string[]) => {
+    let n = 0;
+    const contexts: string[][] = [];
+    const ports: PipelinePorts = {
+      async classify() { return { label: 'SAFE', memory: null, assist: null }; },
+      async generate(input) {
+        contexts.push(input.state.history.map((m) => `${m.role}:${m.content}`));
+        return sandbox(n++);
+      },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    let s = base;
+    for (const t of turns) s = (await runTurn(s, t, ports)).state;
+    return { contexts, state: s };
+  };
+
+  it('keeps neither the turn nor the script after a SPINE', async () => {
+    const { state } = await drive(
+      (n) => (n === 0 ? 'SPINE' : 'A fine answer.'),
+      ['do you have feelings', 'why is the sky blue']);
+    expect(state.history.map((m) => `${m.role}:${m.content}`)).toEqual([
+      'user:why is the sky blue', 'assistant:A fine answer.',
+    ]);
+  });
+
+  it('and the turn after it opens on a clean context', async () => {
+    const { contexts } = await drive(
+      (n) => (n === 0 ? 'UNSAFE' : 'A fine answer.'),
+      ['tell me something weird', 'why is the sky blue']);
+    expect(contexts[1]).toEqual(['user:why is the sky blue']);
+  });
+
+  it('a vendor outage is the same — nothing is kept', async () => {
+    // The sandbox threw, so there is no answer and nothing to build on. The
+    // turn must not sit in the context as a question Chittu never answered.
+    const ports: PipelinePorts = {
+      async classify() { return { label: 'SAFE', memory: null, assist: null }; },
+      async generate() { throw new Error('provider down'); },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    const out = await runTurn(base, 'why is the sky blue', ports);
+    expect(out.response.trace).toMatch(/SANDBOX · unavailable/);
+    expect(out.state.history).toEqual([]);
+    // The window keeps it, because the child did say it.
+    expect(out.state.recentKid).toEqual(['why is the sky blue']);
   });
 });

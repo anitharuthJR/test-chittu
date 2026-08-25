@@ -20,13 +20,20 @@ import {
 interface RuntimeState {
   mathPractice: SessionState['mathPractice'];
   history: SessionState['history'];
+  /**
+   * The classifier's window — the child's own turns. Separate from `history`
+   * because they answer different questions, and because collapsing them meant
+   * removing a turn from the model's context also removed it from the window of
+   * the layer whose job is patterns across turns.
+   */
+  recentKid: SessionState['recentKid'];
   topics: string[];
   assists: string[];
   lastSubject: SessionState['lastSubject'];
 }
 
 const EMPTY_RUNTIME: RuntimeState = {
-  mathPractice: null, history: [], topics: [], assists: [], lastSubject: null,
+  mathPractice: null, history: [], recentKid: [], topics: [], assists: [], lastSubject: null,
 };
 
 /** Classifier window (§5: 3-message rolling window). Bounded so it cannot grow. */
@@ -43,7 +50,10 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
     const blob = r.rows[0]?.runtime_enc;
     if (!blob) return { ...EMPTY_RUNTIME };
     const dek = await child.dekFor(tx, childId);
-    return JSON.parse(decrypt(toBuffer(blob), dek)) as RuntimeState;
+    // Spread over the empty shape: a blob written before a field existed
+    // parses without it, and `undefined.slice` is how that would announce
+    // itself — on a live session, mid-turn.
+    return { ...EMPTY_RUNTIME, ...JSON.parse(decrypt(toBuffer(blob), dek)) } as RuntimeState;
   }
 
   async function writeRuntime(
@@ -53,6 +63,7 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
     const trimmed: RuntimeState = {
       ...state,
       history: state.history.slice(-HISTORY_WINDOW),
+      recentKid: state.recentKid.slice(-HISTORY_WINDOW),
     };
     await tx.query(`UPDATE session SET runtime_enc = $2 WHERE id = $1`,
       [sessionId, encrypt(JSON.stringify(trimmed), dek)]);
@@ -105,6 +116,7 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
           memories: await child.listMemories(tx, s.childId),
           mathPractice: rt.mathPractice,
           history: rt.history,
+          recentKid: rt.recentKid,
           spineCount: s.spineCount,
           flags: [],           // flags are read from the DB by the parent view
           topics: rt.topics,
@@ -145,6 +157,7 @@ export function createStore(pool: DbPool, keys: KeyProvider) {
       await writeRuntime(tx, sessionId, childId, {
         mathPractice: after.mathPractice,
         history: [...after.history],
+        recentKid: [...after.recentKid],
         topics: [...after.topics],
         assists: [...after.assists],
         lastSubject: after.lastSubject,

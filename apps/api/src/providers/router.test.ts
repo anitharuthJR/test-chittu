@@ -172,16 +172,13 @@ describe('the request we actually send', () => {
   });
 
   it('sends the classifier prompt and a numbered window of the child\'s turns', async () => {
-    await router().classify('and now this one', [
-      { role: 'user', content: 'first' },
-      { role: 'assistant', content: 'a reply that is NOT the child' },
-      { role: 'user', content: 'second' },
-    ]);
+    // The port takes the child's OWN turns. Chittu's replies are not in the
+    // array at all — they used to be, and the router filtered them out, which
+    // made the filter look like the thing keeping them out rather than an
+    // accident of one array serving two jobs.
+    await router().classify('and now this one', ['first', 'second']);
     const body = recorded[0]!.body;
     expect(body.system).toMatch(/safety\+memory classifier/);
-    // Chittu's own replies are not the child's turns and must not be judged as
-    // though they were.
-    expect(body.messages[0].content).not.toMatch(/NOT the child/);
     expect(body.messages[0].content).toBe(
       '[msg 1] first\n[msg 2] second\n[msg 3] and now this one');
   });
@@ -475,12 +472,7 @@ describe('the child is asked ONCE — the pipeline\'s history already holds the 
     // repeated distress. Feeding the current turn twice makes every turn look
     // like a repeat to the one layer whose job is noticing repeats, and costs a
     // real turn of context out of a three-turn window.
-    await router().classify('third', [
-      { role: 'user', content: 'first' },
-      { role: 'assistant', content: 'a reply' },
-      { role: 'user', content: 'second' },
-      { role: 'user', content: 'third' },
-    ]);
+    await router().classify('third', ['first', 'second', 'third']);
     expect(recorded[0]!.body.messages[0].content).toBe(
       '[msg 1] first\n[msg 2] second\n[msg 3] third');
   });
@@ -491,7 +483,7 @@ describe('the child is asked ONCE — the pipeline\'s history already holds the 
     // it was actually given rather than from what it assumes.
     await router().generate({
       text: 'only question',
-      state: state({ history: [] }),
+      state: state({ history: [], recentKid: [] }),
       subject: null,
     });
     expect((recorded[0]!.body.messages as { content: string }[]).map((m) => m.content))
@@ -524,11 +516,11 @@ describe('reasoning must not survive into the escalation comparison', () => {
       ? { status: 200, body: text('{"label":"SAFE","memory":null,"assist":null}') }
       : { status: 200, body: text(vendorReply) };
     const p = {
-      classify: (t: string, h: SessionState['history'], c: never) => r.classify(t, h, c),
+      classify: (t: string, k: readonly string[], c: never) => r.classify(t, k, c),
       generate: (i: Parameters<typeof r.generate>[0]) => r.generate(i),
       seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
     };
-    const out = await runTurn(state({ history: [] }), 'everything feels like a lot', p as never);
+    const out = await runTurn(state({ history: [], recentKid: [] }), 'everything feels like a lot', p as never);
     const shown = out.response.blocks.map((b) =>
       b.kind === 'chips' ? b.chips.join(' ')
         : b.kind === 'steps' ? b.items.join(' ')
@@ -643,9 +635,9 @@ describe('a child repeating themselves — the case the window exists for', () =
    *   turn 1, new:  [msg 1] i feel awful
    */
   const say = async (r: ReturnType<typeof router>, turns: readonly string[]) => {
-    let s = state({ history: [] });
+    let s = state({ history: [], recentKid: [] });
     const p = {
-      classify: (t: string, h: SessionState['history'], c: never) => r.classify(t, h, c),
+      classify: (t: string, k: readonly string[], c: never) => r.classify(t, k, c),
       generate: (i: Parameters<typeof r.generate>[0]) => r.generate(i),
       seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
     };
@@ -666,31 +658,82 @@ describe('a child repeating themselves — the case the window exists for', () =
       '[msg 1] i feel awful\n[msg 2] i feel awful\n[msg 3] i feel awful');
   });
 });
-
 describe('the convention this all rests on', () => {
   /**
-   * The router appends only when history does not already end with the turn.
-   * That is correct because `runTurn` always appends first — and if that ever
-   * stopped being true, the router would silently under-count a verbatim
-   * repeat rather than fail. So the convention is pinned here, at the pipeline,
-   * rather than assumed in the router.
+   * The router appends the turn only when what it was given does not already
+   * end with it. That is correct because `runTurn` always puts it there first —
+   * and if that stopped being true the router would silently under-count a
+   * verbatim repeat rather than fail. So the convention is pinned at the
+   * pipeline, not assumed in the router.
+   *
+   * The two ports get DIFFERENT arrays now, and that separation IS the fix:
+   * `classify` gets the child's own turns, `generate` gets the model's context
+   * with this turn appended as a candidate. One array serving both is what let
+   * an L6 block delete a turn from the classifier's window, and what sent a
+   * turn L1 had refused to a vendor on the following turn.
    */
-  it('runTurn hands every port a history ending with the current turn', async () => {
+  it('hands the classifier a window ending with the current turn', async () => {
     const seen: { text: string; last: string | undefined }[] = [];
     const ports = {
-      async classify(text: string, history: SessionState['history']) {
-        seen.push({ text, last: history.at(-1)?.content });
+      async classify(text: string, recentKid: readonly string[]) {
+        seen.push({ text, last: recentKid.at(-1) });
         return { label: 'SAFE' as const, memory: null, assist: null };
       },
+      async generate() { return 'a reply'; },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    const t1 = await runTurn(state({ history: [], recentKid: [] }), 'first', ports as never);
+    await runTurn(t1.state, 'second', ports as never);
+    expect(seen).toEqual([
+      { text: 'first', last: 'first' },
+      { text: 'second', last: 'second' },
+    ]);
+  });
+
+  it('hands the sandbox a context ending with the current turn', async () => {
+    const seen: { text: string; last: string | undefined; role: string | undefined }[] = [];
+    const ports = {
+      async classify() { return { label: 'SAFE' as const, memory: null, assist: null }; },
       async generate(input: { text: string; state: SessionState }) {
-        seen.push({ text: input.text, last: input.state.history.at(-1)?.content });
+        const last = input.state.history.at(-1);
+        seen.push({ text: input.text, last: last?.content, role: last?.role });
         return 'a reply';
       },
       seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
     };
-    const t1 = await runTurn(state({ history: [] }), 'first', ports as never);
+    const t1 = await runTurn(state({ history: [], recentKid: [] }), 'first', ports as never);
     await runTurn(t1.state, 'second', ports as never);
-    expect(seen).toHaveLength(4);
-    for (const s of seen) expect(s.last, `port saw history ending ${s.last}`).toBe(s.text);
+    expect(seen).toHaveLength(2);
+    for (const x of seen) {
+      expect(x.last, `the sandbox context ended with ${x.last}`).toBe(x.text);
+      expect(x.role).toBe('user');
+    }
+  });
+
+  it("starts the model's context with a user turn, and keeps it alternating", async () => {
+    // An L6 block used to leave `history` beginning with the scripted fallback
+    // and no user turn in front of it, for the rest of the session. Anthropic
+    // requires the first message to be `user`, so every later turn in that
+    // session would have failed — permanently, since the leading assistant
+    // message never left.
+    const roles: string[][] = [];
+    const ports = {
+      async classify() { return { label: 'SAFE' as const, memory: null, assist: null }; },
+      async generate(input: { state: SessionState }) {
+        roles.push(input.state.history.map((m) => m.role));
+        return roles.length === 1 ? 'I will always miss you when you go' : 'a fine answer';
+      },
+      seal: createChain(), now: () => '2026-08-25T00:00:00.000Z', newId: () => 'id-1',
+    };
+    let s = state({ history: [], recentKid: [] });
+    for (const t of ['first', 'second', 'third']) {
+      s = (await runTurn(s, t, ports as never)).state;
+    }
+    expect(roles).toHaveLength(3);
+    for (const seq of roles) {
+      expect(seq[0], `the context began with ${seq[0]}`).toBe('user');
+      expect(seq.filter((r, i) => i > 0 && r === seq[i - 1]),
+        `two adjacent messages shared a role: ${seq.join(',')}`).toEqual([]);
+    }
   });
 });

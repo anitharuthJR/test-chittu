@@ -195,22 +195,26 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
   return {
     route,
 
-    async classify(text, history, ctx, onUsage) {
+    async classify(text, recentKid, ctx, onUsage) {
       const { adapter, decision } = adapterFor('classifier', ctx);
 
       // The window is the child's OWN recent turns, numbered, exactly as the
       // prompt describes. Patterns across messages are the point: escalating
       // secrecy and repeated distress are invisible in a single turn.
       //
-      // `text` is appended ONLY if the history does not already end with it.
-      // The pipeline appends the child's turn to `history` before any port is
+      // `text` is appended ONLY if the window does not already end with it.
+      // The pipeline appends the child's turn to `recentKid` before any port is
       // called (packages/pipeline/src/index.ts, `withInput`), so appending
       // unconditionally put the current turn in the window TWICE — showing the
       // one layer whose job is noticing repeats an artificial repeat on every
       // single turn, and pushing a real turn of context out of a three-turn
-      // window. The prototype pushes once (chittu-v3.html:1033) and this now
+      // window. The prototype pushes once (chittu-v3.html:1033) and this
       // matches it.
-      const turns = history.filter((m) => m.role === 'user').map((m) => m.content);
+      //
+      // No `.filter(role === 'user')` any more: this array IS the child's own
+      // turns. The filter used to hide that `history` was serving both the
+      // model's context and this window at once.
+      const turns = [...recentKid];
       if (turns.at(-1) !== text) turns.push(text);
       const recent = turns
         .slice(-window)

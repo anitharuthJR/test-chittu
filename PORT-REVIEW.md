@@ -790,7 +790,7 @@ change under the port-semantics rule ("changing them is a Guardian Council
 decision, not a port decision"), so it is not made here. What is corrected here
 is the claim: fixing `<think>` closes one spelling, not the class.
 
-**The L6 branch deletes the CHILD's turn, not the model's.**
+**FIXED 2026-08-25 — see below.** ~~The L6 branch deletes the CHILD's turn.~~
 `packages/pipeline/src/index.ts` does `history: afterCls.history.slice(0, -1)`
 with the comment *"drop the poisoned turn"* — but the poisoned assistant reply
 was never appended, so the last entry is the child's own message. After an L6
@@ -903,6 +903,86 @@ model learns to EMIT — as `text`. An out-of-vocabulary label is how a
 scripted-response guarantee gets violated quietly, a year later, in a dataset
 nobody re-reads. Now `CHECK (label IS NULL OR label IN (…))`; nullable stays
 legal because a SAFE example need not carry one.
+
+### FIXED (2026-08-25) — one array was the model's context AND the classifier's window
+
+Recorded above as "the L6 branch deletes the CHILD's turn". Following it to its
+root found something larger: `SessionState.history` was doing two unrelated
+jobs, and the port had collapsed a separation the prototype keeps deliberately.
+
+**Three harms, all confirmed by probe.**
+
+*A guarded turn was sent to the vendor on the NEXT turn.* The child's turn was
+appended to `history` before any guard ran, so:
+
+```
+turn 1  "my phone number is 9876543210"  ->  PII GUARD · scripted, 0 vendor calls
+turn 2  CLASSIFY: [..., "my phone number is 9876543210", ...]
+turn 2  SANDBOX:  ["user:my phone number is 9876543210", ...]
+```
+
+"A crisis turn makes zero vendor calls" was true of that turn and false of the
+one after it. Crisis itself is covered by the lock; PII, UNSAFE, SECRET and
+IDENTITY are not.
+
+*An L6 block deleted the child's turn from the classifier's window.*
+`history.slice(0, -1)`, commented "drop the poisoned turn" — but the poisoned
+thing was the model's reply, which was never appended. What it dropped was the
+child's own message, from the window of the layer whose entire job is patterns
+across turns, and it dropped the one turn most worth having context on.
+
+*And it left the context permanently malformed.* After a block, `history` began
+with the scripted fallback and no user turn in front of it:
+
+```
+turn 2 sandbox context: ["assistant:My words got a bit tangled…", "user:what should i do"]
+turn 3 sandbox context: ["assistant:My words got a bit tangled…", …]     <- never recovers
+```
+
+Anthropic requires the first message to be `user`, so every later turn in that
+session would have failed — non-retryable, to `SANDBOX · unavailable`, which is
+the same friendly fallback. A child whose first turn tripped L6 would have had a
+session that never worked again and never said why.
+
+**The fix restores the prototype's two structures.** `history` is the model's
+context: real exchanges only, entered at the sandbox on a candidate state and
+committed only when the sandbox produced a usable answer. `recentKid` is the
+classifier's window: every turn the child sent, never removed. `reply()` gained
+`intoModelContext`, defaulting to FALSE so a guard path added later leaks nothing
+by forgetting; exactly one call site passes true.
+
+**What was NOT done, and why.** The classifier still sees guarded turns. Its
+window exists for "escalating secrecy, boundary-testing, repeated distress"
+(`CLASSIFIER_SYSTEM`), and the guarded turns are the boundary-testing —
+withholding them would blind the one layer built to notice. The prototype pushes
+to `recentKid` at `chittu-v3.html:1041`, *before* the L1 fast path at `:1060`,
+for this reason. The invariant is narrower than "a guarded turn never leaves the
+process": a guarded turn reaches the layer that judges safety, and never the
+layer that makes small talk.
+
+**The port change.** `classify(text, recentKid: readonly string[], ctx)` — it was
+`history` (role-tagged, both sides) and the router filtered it down to the user
+messages. That filter looked load-bearing while hiding the fact that one array
+was serving both jobs.
+
+**Storage.** `recentKid` joins `history` in `session.runtime_enc`, trimmed to the
+same window. `readRuntime` now spreads over the empty shape, so a blob written
+before a field existed parses without it instead of announcing itself as
+`undefined.slice` on a live session mid-turn.
+
+Mutations, each verified red: the turn joins the context before the guards → 7;
+scripted replies enter the context → 4; the window comes from the context again
+→ 5; the blocked exchange is committed → 1; a sandbox escalation is committed → 2.
+
+### NOTED — `session.runtime_enc` is still where a teen's words live
+
+Unchanged by the above, and already flagged in the schema: for a `thinker`,
+`message.body_enc` refuses the body and `runtime_enc` holds it, so the blob is
+the one place a teen's words are written down. `recentKid` now joins `history`
+there, which is the same class of data in the same place for the same stated
+reason — the classifier's window, for the band whose turns most need context.
+The schema comment asks Chamber II to decide whether that trade is right; it
+still does, and this change did not make it for them.
 
 ### FIXED (2026-08-25) — the `</think>` slice fired on one spelling in eight
 

@@ -30,7 +30,8 @@ export interface ProviderRouter {
    */
   classify(
     text: string,
-    history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[],
+    /** The child's OWN turns, newest last. Never Chittu's replies. */
+    recentKid: readonly string[],
     ctx?: RouteContext,
     onUsage?: UsageSink,
   ): Promise<ClassifierOutcome>;

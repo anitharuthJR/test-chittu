@@ -248,7 +248,8 @@ CREATE TABLE session (
   -- The rolling window is the uncomfortable part and is flagged rather than
   -- hidden: for a `thinker` it is the ONE place a teen's words are written down,
   -- because `message.body_enc` refuses them. Without it the classifier loses its
-  -- window for exactly the band whose turns most need context. It is encrypted
+  -- window for exactly the band whose turns most need context — which since
+  -- 2026-08-25 is a named field, `recentKid`, separate from the model's context. It is encrypted
   -- under the child's DEK, lives only as long as the session, and dies with the
   -- crypto-shred — but it is still a teen's words at rest, and Chamber II should
   -- decide whether that trade is the right one.
