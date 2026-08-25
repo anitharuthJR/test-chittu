@@ -113,6 +113,11 @@ module "api" {
   # It refuses. That is the honest default and it is documented in the README.
   provider_key_secret_arn = var.provider_key_secret_arn
 
+  # No null here, unlike the provider key. A deployment without a stable
+  # blind-index key does not degrade — it silently loses the ability to find a
+  # parent by email from any task but the one that wrote the row.
+  index_key_secret_arn = var.index_key_secret_arn
+
   log_group_name         = module.observability.log_group_names["api"]
   log_group_arn          = module.observability.log_group_arns["api"]
   migrate_log_group_name = module.observability.log_group_names["migrate"]

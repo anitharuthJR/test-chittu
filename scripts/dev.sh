@@ -9,10 +9,11 @@
 # uses PGlite (real Postgres, in-process, gone when the process exits), and
 # without ANTHROPIC_API_KEY it uses the offline stub router.
 #
-# That second fallback is the one worth understanding, so this script says it
-# in words rather than leaving it to a log line: with no key there is no L2
-# classifier at all. Every turn classifies SAFE. A local session that looks
-# safe is not evidence that it is — it is evidence that nothing was asked.
+# That second fallback is the one worth understanding: with no key there is no
+# L2 classifier at all. Every turn classifies SAFE. A local session that looks
+# safe is not evidence that it is — it is evidence that nothing was asked. The
+# API states which router it built; this script deliberately does not guess,
+# because .env.local can supply a key that never appears in this shell.
 #
 set -euo pipefail
 
@@ -69,14 +70,13 @@ if [ ! -d node_modules ]; then
 fi
 
 echo "─────────────────────────────────────────────────────────────"
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  echo " model router : Anthropic (key present) — real L2 classifier"
-else
-  echo " model router : STUB — no ANTHROPIC_API_KEY"
-  echo "                Every turn classifies SAFE. L1, the deterministic"
-  echo "                engines and L6 still run; L2 does not. Do not read a"
-  echo "                clean session as evidence the guards work."
-fi
+# The router is NOT reported here. It used to be, by testing $ANTHROPIC_API_KEY
+# in this shell — which stopped being the whole story once .env.local existed:
+# the key can reach the API without ever being in this shell, and a banner that
+# said STUB while the real classifier ran would be a false statement about which
+# guards are live. main.ts knows, so main.ts says. Its stub warning is explicit
+# that every turn classifies SAFE.
+echo " model router : reported by the API on the next line — read it"
 if [ -n "${DATABASE_URL:-}" ]; then
   echo " database     : $DATABASE_URL"
 else

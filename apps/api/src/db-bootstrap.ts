@@ -8,12 +8,17 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createPgPool, wrapPglite, localKeyProvider, devMasterKeyFromEnv,
-  type DbPool, type KeyProvider } from '@chittu/db';
+import { createPgPool, wrapPglite, type DbPool } from '@chittu/db';
 
+/**
+ * NO KEY PROVIDER HERE — see `keys/index.ts` for why.
+ *
+ * Briefly: `providers/cli.ts` and `helplines/cli.ts` call this and use only the
+ * pool. Building keys here would make the helpline sweep — the GAP-06 P0 path —
+ * refuse to start in production over a key it never touches.
+ */
 export interface Bootstrapped {
   readonly pool: DbPool;
-  readonly keys: KeyProvider;
   readonly driver: 'postgres' | 'pglite';
 }
 
@@ -45,10 +50,9 @@ export async function bootstrapDb(
   env: NodeJS.ProcessEnv = process.env,
   loadPglite: PgliteLoader = () => import('@electric-sql/pglite'),
 ): Promise<Bootstrapped> {
-  const keys = localKeyProvider(devMasterKeyFromEnv(env), env['NODE_ENV'] ?? 'dev');
   const url = env['DATABASE_URL'];
   if (url) {
-    return { pool: await createPgPool({ connectionString: url }), keys, driver: 'postgres' };
+    return { pool: await createPgPool({ connectionString: url }), driver: 'postgres' };
   }
   if (env['NODE_ENV'] === 'production') {
     throw new Error('DATABASE_URL is required in production');
@@ -74,5 +78,5 @@ export async function bootstrapDb(
   const pg = await PGlite.create({ extensions: { pgcrypto } });
   await applyMigrations((sql) => pg.exec(sql), true);
   await pg.exec(`INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);
-  return { pool: wrapPglite(pg as never), keys, driver: 'pglite' };
+  return { pool: wrapPglite(pg as never), driver: 'pglite' };
 }

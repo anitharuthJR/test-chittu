@@ -28,7 +28,12 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createPgPool } from '@chittu/db';
+import { createPgPool, deploymentEnv } from '@chittu/db';
+import { loadEnvLocal } from './env-local.js';
+
+// Before DATABASE_URL is read, so `pnpm db:migrate` picks up the same local
+// configuration the API does. No-op in production and when the file is absent.
+loadEnvLocal();
 
 const url = process.env['DATABASE_URL'];
 if (!url) {
@@ -77,7 +82,7 @@ try {
   // The PGlite path seeds this too. Without it every insert referencing a
   // deployment fails, which looks like a bug in the first feature anyone tries
   // rather than an empty lookup table. ON CONFLICT so re-running is safe.
-  const env = process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
+  const env = deploymentEnv();
   await pool.query(
     `INSERT INTO deployment (env, region) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
     [env, process.env['AWS_REGION'] ?? 'ap-south-1'],

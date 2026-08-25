@@ -13,3 +13,12 @@ certificate_arn = "arn:aws:acm:ap-south-1:<account>:certificate/<id>"
 # Null, and the service will refuse to start — see README. Set it to a real ARN
 # to run dev against a live provider.
 provider_key_secret_arn = null
+
+# The blind-index key, created BY HAND (see infra/README.md):
+#
+#   openssl rand -base64 32 | tr -d '\n' | \
+#     aws secretsmanager create-secret --name chittu/dev/index-key \
+#       --kms-key-id <child-data CMK> --secret-string file:///dev/stdin
+#
+# Required. The service refuses to start without it rather than inventing one.
+index_key_secret_arn = "arn:aws:secretsmanager:ap-south-1:<account>:secret:chittu/dev/index-key-<suffix>"

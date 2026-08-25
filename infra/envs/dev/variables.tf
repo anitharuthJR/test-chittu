@@ -28,3 +28,8 @@ variable "provider_key_secret_arn" {
   type        = string
   default     = null
 }
+
+variable "index_key_secret_arn" {
+  description = "Secrets Manager ARN for the base64 blind-index key. Created by hand — see infra/README.md."
+  type        = string
+}

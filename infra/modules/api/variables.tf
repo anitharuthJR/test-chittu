@@ -82,6 +82,19 @@ variable "rate_limit_per_5min" {
   default     = 3000
 }
 
+variable "index_key_secret_arn" {
+  description = <<-EOT
+    Secrets Manager ARN holding the 32-byte blind-index key, base64. REQUIRED —
+    there is no default and no fallback, because the alternatives are both
+    wrong: generating it in Terraform would put a key that reverses every
+    parent.email_hash into the state file, and letting the service invent one
+    per task would make a parent unfindable by email from any other task. Create
+    it by hand once per environment (`openssl rand -base64 32`) and never rotate
+    it without re-indexing, which nothing here does yet.
+  EOT
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

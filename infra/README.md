@@ -64,6 +64,21 @@ conversation. One key with two grants is one IAM error away from a corpus of rea
 turns. The training roles are not principals on the child-data key at all, so the failure
 mode is `AccessDenied` rather than a dataset.
 
+**The TASK role gets `kms:GenerateDataKey` and `kms:Decrypt`, and that is the one exception
+to "the task role is nearly empty".** It earns it. Without the grant the service falls back
+to a process-local master key — which is a *different* key in every task and is discarded on
+restart, so a child's name is written once and readable by nobody, including the task that
+wrote it after a redeploy. `kms:Encrypt` is deliberately absent: `GenerateDataKey` returns
+both halves, so nothing encrypts under the CMK directly.
+
+**The blind-index key is a hand-created secret, not a Terraform resource.** `parent.email_hash`
+is an HMAC, and its key has to be byte-identical in every task forever or a parent cannot be
+found by email from any task but the one that wrote the row. KMS has no "same bytes twice"
+operation, so it cannot come from KMS — and generating it here with `random_bytes` would put a
+value that reverses every family's email hash into the state file. So it is created once, by
+hand, and referenced by ARN. There is no default and no fallback: `index_key_secret_arn` is a
+required variable and the service refuses to start without it.
+
 **`sampled_requests_enabled = false` on every WAF rule.** This is not a cost choice. WAF
 request sampling stores the request, body included, where it can be read from the console —
 a sampled `POST /v1/session/:id/turn` is a child's sentence sitting in a second system that
@@ -112,6 +127,17 @@ has never had any.
 1. Create the S3 state bucket and DynamoDB lock table **by hand, once**, in an account that
    holds nothing else. Bootstrapping state with the thing that needs state is a chicken-and-egg
    nobody has solved cleanly; one documented exception is better than a clever one.
+1. Create the **blind-index key secret**, by hand, once per environment — the second
+   documented exception, for the reason given above:
+
+   ```bash
+   openssl rand -base64 32 | tr -d '\n' | aws secretsmanager create-secret \
+     --name chittu/dev/index-key --secret-string file:///dev/stdin
+   ```
+
+   Keep the ARN; it is `index_key_secret_arn`. **Losing it is not recoverable** — every
+   `parent.email_hash` and `memory.fact_fingerprint` already written becomes unmatchable.
+   Rotating it needs a re-index that nothing here implements yet.
 2. Write `envs/dev/backend.tf` pointing at them. It is deliberately absent so that
    `init -backend=false` works with no account.
 3. `terraform plan` and read every line.
@@ -122,3 +148,7 @@ Note that the service will **refuse to start** in dev without `provider_key_secr
 image runs `NODE_ENV=production`, and `main.ts` will not serve children through the stub
 router, which classifies every turn SAFE. That refusal is deliberate. Supply a key or expect
 the task to exit.
+
+It refuses on a missing `CHITTU_INDEX_KEY` for the same reason, and both refusals are checked
+above the database connection — config first, so the specific error is the one you see rather
+than a connection timeout that hides it.

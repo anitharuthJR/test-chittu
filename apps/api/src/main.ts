@@ -5,8 +5,22 @@ import { createRouter } from './providers/router.js';
 import { readClearance, enabledMarkets } from './providers/clearance.js';
 import { readCells, resolveCells, describeCells } from './providers/cells.js';
 import { bootstrapDb } from './db-bootstrap.js';
+import { resolveKeys } from './keys/index.js';
 import { startSweepTimer } from './helplines/sweep.js';
 import { buildLoggerOptions, resolveLogDir } from './logging.js';
+import { loadEnvLocal } from './env-local.js';
+
+/**
+ * FIRST, before anything reads process.env. A no-op in production and whenever
+ * the file is absent; it never overrides a variable the shell already set.
+ *
+ * Names are echoed and values are not — this line is the only evidence that a
+ * file, rather than the shell, is why the router has a key.
+ */
+const fromFile = loadEnvLocal();
+if (fromFile.length > 0) {
+  console.warn(`[chittu] .env.local supplied: ${fromFile.join(', ')}`);
+}
 
 const port = Number(process.env['PORT'] ?? 8080);
 const isProd = process.env['NODE_ENV'] === 'production';
@@ -27,7 +41,19 @@ if (isProd && apiKey === '') {
   );
 }
 
-const { pool, keys, driver } = await bootstrapDb();
+/**
+ * The key provider, resolved as CONFIG — above the database, like the check
+ * above it.
+ *
+ * Outside dev this refuses unless a KMS CMK is configured. That refusal is the
+ * point: the alternative, which is what shipped before, is a local provider
+ * holding an EPHEMERAL master key — different in every task, discarded on
+ * restart — under which a child's name is written once and readable by nobody,
+ * including the task that wrote it after it restarts.
+ */
+const keys = resolveKeys();
+
+const { pool, driver } = await bootstrapDb();
 if (driver === 'pglite') {
   console.warn(
     '[chittu] no DATABASE_URL — using an in-process PGlite database. '
@@ -92,6 +118,11 @@ async function chooseRouter() {
   }
 
   const adapters = { anthropic: anthropicAdapter({ apiKey }) };
+
+  // The positive counterpart to the stub warning above. dev.sh used to print
+  // this by inspecting its own shell, which .env.local made unreliable; the
+  // process that actually built the router is the only honest place for it.
+  console.warn('[chittu] model router: Anthropic — the real L2 classifier runs on every turn.');
 
   console.warn(overrides.length === 0
     ? '[chittu] routing: all cells at compiled defaults'

@@ -112,15 +112,37 @@ export function fingerprintEquals(a: Buffer, b: Buffer): boolean {
 // ---------------------------------------------------------------------------
 
 /**
+ * NODE_ENV, mapped onto the vocabulary the schema actually uses.
+ *
+ * `deployment.env` is CHECK (env IN ('dev','staging','prod')), so 'production'
+ * — the value the Dockerfile sets — is not a word this system knows. migrate.ts
+ * has always done this mapping; it lives here now so there is ONE definition,
+ * next to the guard that consumes it. Nothing produces 'staging' yet, and
+ * inventing a path to it would be inventing a decision (see infra/README.md).
+ */
+export function deploymentEnv(env: NodeJS.ProcessEnv = process.env): 'dev' | 'prod' {
+  return env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
+}
+
+/**
  * Development and test only. The master key lives in the process instead of a
  * KMS, so an attacker with the database ALSO needs the process — which is a much
- * weaker separation than KMS gives, and the reason this refuses to run in
- * production.
+ * weaker separation than KMS gives, and the reason this refuses to run anywhere
+ * but dev.
+ *
+ * THIS IS AN ALLOWLIST, AND THAT IS THE WHOLE POINT. It used to be a denylist
+ * (`env === 'prod'`) while the production image sets NODE_ENV=`production`, so
+ * the guard never fired and every task would have booted with an ephemeral
+ * per-task master key — unreadable across tasks, gone on restart, taking the
+ * email blind index with it. An unrecognised value now REFUSES rather than
+ * defaulting to permitted, which is the same rule `parseClassifier` follows:
+ * never invent a safe answer for input you do not fully recognise.
  */
 export function localKeyProvider(masterKey: Buffer, env: string = 'dev'): KeyProvider {
-  if (env === 'prod') {
+  if (env !== 'dev') {
     throw new CryptoError(
-      'localKeyProvider is not permitted in production — wire a KMS-backed provider',
+      `localKeyProvider is permitted only when the deployment env is 'dev', and `
+      + `this one is ${JSON.stringify(env)} — wire a KMS-backed provider`,
     );
   }
   if (masterKey.length !== KEY_LEN) throw new CryptoError('master key must be 32 bytes');

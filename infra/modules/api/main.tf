@@ -320,8 +320,10 @@ resource "aws_iam_role_policy_attachment" "execution" {
 
 data "aws_iam_policy_document" "execution_secrets" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = compact([var.db_secret_arn, var.provider_key_secret_arn])
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = compact([
+      var.db_secret_arn, var.provider_key_secret_arn, var.index_key_secret_arn,
+    ])
   }
   statement {
     actions   = ["kms:Decrypt"]
@@ -351,6 +353,25 @@ data "aws_iam_policy_document" "task" {
     sid       = "WriteOwnLogs"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${var.log_group_arn}:*"]
+  }
+
+  /**
+   * Envelope encryption, and the two operations it needs — no more.
+   *
+   * GenerateDataKey mints a per-child DEK; Decrypt unwraps it to read that
+   * child's rows. `kms:Encrypt` is NOT here: GenerateDataKey already returns
+   * both halves, so nothing in the application ever encrypts under the CMK
+   * directly. Scoped to the child-data CMK alone — the training key is a
+   * different key precisely so this role cannot reach it (Law 06).
+   *
+   * This is the exception the comment above anticipates. It justifies itself:
+   * without it the service falls back to a process-local master key, which is
+   * a DIFFERENT key in every task and is discarded on restart.
+   */
+  statement {
+    sid       = "EnvelopeEncryptChildData"
+    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+    resources = [var.child_data_key_arn]
   }
 }
 
@@ -382,10 +403,19 @@ locals {
     # can be replaced at any moment is not a record anyone can rely on.
     { name = "LOG_DIR", value = "" },
     { name = "AWS_REGION", value = data.aws_region.current.region },
+    # Presence of this is what selects the KMS key provider. Absent, the service
+    # refuses to start rather than falling back to a process-local master key.
+    { name = "CHITTU_KMS_KEY_ARN", value = var.child_data_key_arn },
   ]
 
   base_secrets = concat(
-    [{ name = "DATABASE_URL", valueFrom = "${var.db_secret_arn}:url::" }],
+    [
+      { name = "DATABASE_URL", valueFrom = "${var.db_secret_arn}:url::" },
+      # The blind-index key. A SECRET, not an environment entry: `environment`
+      # is readable from the task definition by anyone who can DescribeTaskDefinition,
+      # and this value reverses `parent.email_hash` for every family.
+      { name = "CHITTU_INDEX_KEY", valueFrom = var.index_key_secret_arn },
+    ],
     var.provider_key_secret_arn == null ? [] : [
       { name = "ANTHROPIC_API_KEY", valueFrom = var.provider_key_secret_arn }
     ],

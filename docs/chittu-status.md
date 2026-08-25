@@ -125,8 +125,27 @@ argument for Terraform is that "an auditor can read Terraform" — that only hol
 they read is a decision someone made. See `infra/README.md`.
 
 **The blocking gap for a real deployment is not infrastructure.** It is an AWS account, an
-ACM certificate, a provider key in Secrets Manager, and a human reading the first `plan`.
-The code is ready for a `plan` it has never had.
+ACM certificate, an ECR repository, a provider key and a blind-index key in Secrets Manager,
+and a human reading the first `plan`. The code is ready for a `plan` it has never had.
+
+**Still absent from `infra/`, and needed before the PWA can be served:** there is no
+CloudFront/S3 tier for `apps/web`. The ALB routes to the API only, so A7's CDN box has no
+Terraform behind it. ElastiCache is in A7 and not in `infra/` either.
+
+### The bug that a deployment question found (2026-08-25)
+
+`localKeyProvider`'s production guard compared against `'prod'`; the image sets
+`NODE_ENV=production`; `db-bootstrap` passed that string through untouched. The guard never
+fired, and nothing tested the real path — the one test that existed passed the literal
+`'prod'`, a value no call site produces. Every ECS task would have booted with an ephemeral
+per-task master key: parent email, parent name, child first name, message bodies and memory
+facts each written under a key no other task could read, and the email blind index (derived
+from the same key) making a parent unfindable from any task but the writer.
+
+Fixed by making the guard an **allowlist**, moving key resolution out of `bootstrapDb` (so the
+helpline sweep CLI is not taken down by it), and wiring a real KMS provider — the two CMKs in
+`modules/data` existed and nothing consumed them. This is the seventh entry in §8b's pattern:
+**an instrument that tested a value the system never produces**.
 
 ### The bug that closing this found
 
