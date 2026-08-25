@@ -229,6 +229,28 @@ export interface ModelRequest {
   readonly maxTokens?: number;
 }
 
+/**
+ * What one model call consumed. Reported by the router so the caller can meter.
+ *
+ * DELIBERATELY CARRIES NO IDENTITY — no session, no child, no text. The router
+ * does not know those and must not learn them: the same reasoning as
+ * RouteContext, which carries band and country and nothing else. The caller
+ * already holds the session and binds it; `metering.session_pseudonym` is an
+ * HMAC even then, so the ops console can aggregate per session without being
+ * able to reach a child.
+ */
+export interface ModelUsage {
+  readonly category: RouterCategory;
+  readonly provider: string;
+  readonly model: string;
+  readonly promptVersion: string;
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly latencyMs: number;
+}
+
+export type UsageSink = (usage: ModelUsage) => void;
+
 export interface ModelReply {
   readonly text: string;
   readonly tokensIn?: number;

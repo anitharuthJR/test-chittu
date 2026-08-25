@@ -22,6 +22,7 @@
 
 import type {
   ClassifierOutcome, ClassifierResult, ProviderAdapter, RouteDecision, RouterCategory,
+  UsageSink,
 } from '@chittu/contracts';
 import { cellFor, type ResolvedCells, type RouteContext } from './cells.js';
 import { toJurisdiction } from './clearance.js';
@@ -153,10 +154,35 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
     return { adapter: opts.adapters[decision.provider]!, decision };
   }
 
+  /**
+   * One place the adapter is actually called, so latency is measured once and
+   * usage is reported once. Reporting here rather than in each adapter means a
+   * new vendor cannot forget to meter.
+   */
+  async function callAdapter(
+    adapter: ProviderAdapter, req: Parameters<ProviderAdapter['complete']>[0],
+    decision: RouteDecision, category: RouterCategory, onUsage?: UsageSink,
+  ) {
+    const started = Date.now();
+    const reply = await adapter.complete(req, decision);
+    // Only after a SUCCESSFUL call. A refused route and a vendor error cost
+    // nothing and must not appear as spend.
+    onUsage?.({
+      category,
+      provider: decision.provider,
+      model: decision.model,
+      promptVersion: decision.promptVersion,
+      tokensIn: reply.tokensIn ?? 0,
+      tokensOut: reply.tokensOut ?? 0,
+      latencyMs: Date.now() - started,
+    });
+    return reply;
+  }
+
   return {
     route,
 
-    async classify(text, history, ctx) {
+    async classify(text, history, ctx, onUsage) {
       const { adapter, decision } = adapterFor('classifier', ctx);
 
       // The window is the child's OWN recent turns, numbered, exactly as the
@@ -167,11 +193,11 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
         .map((m, i) => `[msg ${i + 1}] ${m.content}`)
         .join('\n');
 
-      const reply = await adapter.complete({
+      const reply = await callAdapter(adapter, {
         system: CLASSIFIER_SYSTEM,
         messages: [{ role: 'user', content: recent }],
         maxTokens: 1000,
-      }, decision);
+      }, decision, 'classifier', onUsage);
 
       // Throws on anything unrecognised. Deliberately NOT caught here: the
       // pipeline turns it into FAST-PATH-ONLY, which is the honest outcome.
@@ -187,7 +213,7 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
       } satisfies ClassifierResult as ClassifierOutcome;
     },
 
-    async generate(input) {
+    async generate(input, onUsage) {
       const { state, subject } = input;
       // Homework and curriculum have their own cells in §12.2; both point at
       // the same engine in Phase 1, so the category is chosen for the metering
@@ -211,14 +237,14 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
         mathMethod: MATH_METHOD[state.board] ?? null,
       });
 
-      const reply = await adapter.complete({
+      const reply = await callAdapter(adapter, {
         system,
         messages: [
           ...state.history.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user' as const, content: input.text },
         ],
         maxTokens: 1000,
-      }, decision);
+      }, decision, category, onUsage);
 
       return reply.text;
     },

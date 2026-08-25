@@ -10,7 +10,7 @@
  */
 
 import type {
-  ClassifierOutcome, RouteContext, RouteDecision, RouterCategory,
+  ClassifierOutcome, RouteContext, RouteDecision, RouterCategory, UsageSink,
 } from '@chittu/contracts';
 import type { SandboxInput } from '@chittu/pipeline';
 
@@ -23,12 +23,18 @@ export interface ProviderRouter {
    * checked against a country.
    */
   route(category: RouterCategory, ctx?: RouteContext): RouteDecision;
+  /**
+   * `onUsage` is how metering gets its numbers without the router learning who
+   * the turn belongs to. The caller passes a sink that already knows the
+   * session; the router reports only what the call consumed.
+   */
   classify(
     text: string,
     history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[],
     ctx?: RouteContext,
+    onUsage?: UsageSink,
   ): Promise<ClassifierOutcome>;
-  generate(input: SandboxInput): Promise<string>;
+  generate(input: SandboxInput, onUsage?: UsageSink): Promise<string>;
 }
 
 /**

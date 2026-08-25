@@ -17,6 +17,7 @@ import type { AddressInfo } from 'node:net';
 import { anthropicAdapter, ProviderError } from './anthropic.js';
 import { createRouter, RouteRefused, DEFAULT_CELLS } from './router.js';
 import { resolveCells } from './cells.js';
+import type { ModelUsage } from '@chittu/contracts';
 import type { SessionState } from '@chittu/pipeline';
 import { createTestDb } from '@chittu/db';
 import { readClearance, toJurisdiction } from './clearance.js';
@@ -383,5 +384,47 @@ describe('provider clearance', () => {
     // called). A silent mismatch means a clearance row that never matches.
     expect(toJurisdiction('GB')).toBe('UK');
     expect(toJurisdiction('IN')).toBe('IN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Usage reporting. Added for phase 1 of docs/chittu-model-plan.md.
+// ---------------------------------------------------------------------------
+describe('the router reports what a call cost, and nothing about who made it', () => {
+  it('reports provider, model, prompt version, tokens and latency', async () => {
+    const seen: ModelUsage[] = [];
+    const r = router();
+    await r.classify('hello', [], { band: 'builder', country: 'IN' }, (u) => seen.push(u));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      category: 'classifier',
+      provider: 'anthropic',
+      model: DEFAULT_CELLS.classifier.model,
+      promptVersion: DEFAULT_CELLS.classifier.promptVersion,
+    });
+    expect(seen[0]!.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('carries NO session, child or text — the router never learns them', async () => {
+    const seen: ModelUsage[] = [];
+    const r = router();
+    await r.generate({ text: 'a very distinctive sentence about my dog Rusty',
+      state: state(), subject: null }, (u) => seen.push(u));
+    const serialised = JSON.stringify(seen);
+    expect(serialised).not.toMatch(/Rusty|distinctive|session|child/i);
+    expect(Object.keys(seen[0]!).sort()).toEqual(
+      ['category', 'latencyMs', 'model', 'promptVersion', 'provider', 'tokensIn', 'tokensOut']);
+  });
+
+  it('reports nothing when no call is made — a refused route costs nothing', async () => {
+    const seen: ModelUsage[] = [];
+    const r = router({ cleared: new Set<string>() });
+    await r.classify('hello', [], undefined, (u) => seen.push(u)).catch(() => {});
+    expect(seen).toHaveLength(0);
+  });
+
+  it('is optional — every existing caller still works without it', async () => {
+    const r = router();
+    await expect(r.classify('hello', [])).resolves.toBeDefined();
   });
 });

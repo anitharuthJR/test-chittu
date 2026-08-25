@@ -17,7 +17,7 @@ import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { runTurn } from '@chittu/pipeline';
-import type { Band, Country, Mode } from '@chittu/contracts';
+import type { Band, Country, Mode, ModelUsage } from '@chittu/contracts';
 import { BANDS, COUNTRIES } from '@chittu/contracts';
 import {
   assertActiveConsent, draftConsent, markVerifying, activate, revoke,
@@ -26,6 +26,8 @@ import {
   type ConsentMethod,
 } from '@chittu/consent';
 import type { DbPool, KeyProvider } from '@chittu/db';
+import { meteringRepo, sessionPseudonym } from '@chittu/db';
+import { costFor, rateFor } from './providers/rates.js';
 import { type ProviderRouter, stubRouter } from './providers.js';
 import { parseOperators } from './ops/auth.js';
 import { opsRoutes } from './ops/routes.js';
@@ -620,6 +622,16 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       if (!row) return reply.code(404).send({ error: 'no such session' });
       if (row.ended_at) return reply.code(409).send({ error: 'session ended' });
 
+      /**
+       * Usage is COLLECTED during the turn and written after it commits.
+       *
+       * Inside the transaction, a metering failure would roll back the turn —
+       * a child would lose their answer because a billing row could not be
+       * written. Metering is telemetry; the seal chain is the record. Losing a
+       * metering row is acceptable, and losing an answer is not.
+       */
+      const usage: ModelUsage[] = [];
+
       const result = await store.withChild(row.child_id, async (tx) => {
         const loaded = await store.loadSession(tx, req.params.id);
         if (!loaded) return null;
@@ -638,8 +650,9 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
           // disabled per-band and per-country classifier routing AND per-child
           // clearance, while every router test kept passing because they call
           // router.classify directly. wiring.test.ts covers the seam.
-          classify: (text, history, ctx) => router.classify(text, history, ctx),
-          generate: (input) => router.generate(input),
+          classify: (text, history, ctx) =>
+            router.classify(text, history, ctx, (u) => usage.push(u)),
+          generate: (input) => router.generate(input, (u) => usage.push(u)),
           seal: store.sealFor(tx, req.params.id),
           now: () => new Date().toISOString(),
           newId: () => randomUUID(),
@@ -678,6 +691,27 @@ export async function buildServer(opts: BuildOptions): Promise<FastifyInstance> 
       });
 
       if (!result) return reply.code(404).send({ error: 'no such session' });
+
+      /**
+       * After the commit, and never able to fail the turn.
+       *
+       * A maths turn and a crisis turn call no vendor, so `usage` is empty and
+       * nothing is written — which `metering.test.ts` asserts, because a row
+       * appearing there would mean either that arithmetic reached a provider or
+       * that metering is inventing spend.
+       */
+      if (usage.length > 0) {
+        try {
+          const pseudonym = sessionPseudonym(req.params.id, await opts.keys.indexKey());
+          for (const u of usage) {
+            const cost = costFor(u.tokensIn, u.tokensOut, rateFor(u.provider, u.model));
+            await meteringRepo.record(opts.pool, pseudonym, u, cost);
+          }
+        } catch (e) {
+          app.log.warn({ err: e }, 'metering write failed; the turn is unaffected');
+        }
+      }
+
       // The child never receives raw model text — only parsed blocks, the trace,
       // and the layers that ran.
       return reply.send(result);
