@@ -12,3 +12,4 @@ export * from './child-repo.js';
 export * from './testing.js';
 
 export * from './helpline-repo.js';
+export * from './engagement-repo.js';
