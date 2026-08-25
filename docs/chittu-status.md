@@ -76,7 +76,7 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 |---|---|---|
 | **Safety kernel** | Ported from the prototype, semantics preserved | `packages/safety-kernel` |
 | **Pipeline** | `runTurn()` — pure function of injected ports, so tests can COUNT model calls and prove layer order | `packages/pipeline` |
-| **Consent engine** | Ledger, seven adapters, scrypt PIN, lockout. `automated_id_check` (Didit) is the first rail that verifies a stranger; G1 still **not** cleared — see below | `packages/consent` |
+| **Consent engine** | Ledger, seven adapters, scrypt PIN, lockout. `automated_id_check` (Didit) is the first rail that verifies a stranger, and is **live on the demo box** since 2026-08-25; G1 still **not** cleared — see below | `packages/consent` |
 | **Database** | 29 tables, RLS, envelope encryption, crypto-shred, append-only audit chain | `db/`, `packages/db` |
 | **API** | Fastify 5, schema-validated, rate-limited. `POST /turn` runs the whole pipeline, buffered | `apps/api` |
 | **Client** | Preact + Vite PWA. Consent flow, chat, memory book, parent PIN + all seven W4 dashboard panels, plus D5's maths harness and certification checklist | `apps/web` |
@@ -142,7 +142,11 @@ One demo box is deployed. The production path is not, and never has been.
 430313601196 (`ap-south-1`), one `t4g.small` on a fixed EIP serving `chittu.tulifo.ai`
 behind Caddy, automatic HTTPS and basic auth. It exists so a person can be shown the
 product. It runs `NODE_ENV=development` — `dev_stub` consent and the local key provider —
-so it moves **nothing** on G1–G5 and rehearses none of the production path. Its Terraform
+so it rehearses none of the production KEY path. It no longer moves nothing on G1: since
+2026-08-25 it runs the real `automated_id_check` rail against Didit with
+`DIDIT_ENVIRONMENT=live`, so a parent who gets past the basic-auth wall performs a real,
+billed identity verification. That is the one part of the production path it does
+rehearse, and it is worth knowing before pointing anyone at the box. Its Terraform
 state is a local, gitignored file in the main checkout; there is no backend. Runbook and
 live state: `docs/runbooks/demo-deploy.md`.
 
@@ -223,7 +227,7 @@ and the reason `scripts/smoke-dist.mjs` exists: it drives the thing that ships.
 | Gate | Requirement | State |
 |---|---|---|
 | **G0** Jurisdiction green-light | Law mapped before roadmap entry | 🟡 Six countries sketched in `REGISTRY`; no real legal review |
-| **G1** Consent infrastructure live | VPC end-to-end before any child account | 🟡 **Built, not signed off.** `automated_id_check` runs end to end against a vendor; blocked on a DPO/DPIA decision and live credentials, not on code |
+| **G1** Consent infrastructure live | VPC end-to-end before any child account | 🟡 **Live, not signed off.** `automated_id_check` is deployed and serving on the demo box against a live Didit workflow. Blocked on a DPO/DPIA decision and a read of Didit's DPA — not on code. The *approved* branch has never run against a real capture |
 | **G2** Model safety pass | Full red-team corpus, zero criticals | 🔴 Corpus does not exist. Local-model baseline fails honestly: CRISIS 3/5 (§7) |
 | **G3** Crisis protocol verified | Clinical scenarios + real helplines per market | 🟡 Flow built and tested; no clinical review, no verified registry |
 | **G4** Privacy sign-off | DPIA current, data flows match production, breach drill run | 🔴 Nothing exists — and cannot until a backend does |
@@ -582,15 +586,31 @@ ported suite all exist. What is left is not more building.
 1. ~~Fix `eval_guard.py` and re-baseline~~ — **done 2026-08-24** (§8.1).
 2. ~~**Stand up the backend**~~ — **done** (§2b). Guards are server-side, the browser holds no credential, and the artifact is a distroless container verified end to end (§2c).
 3. ~~**Decide the Tamil corpus question**~~ — **decided and then closed 2026-08-25** (§7b). Stop tuning the model for Tamil: no iteration count on the current corpus produces a model worth shipping in any language, and the corpus defect is measured and sized (`llm-kit/evals/TAMIL-CRISIS-SKEW.md`). **Do not run a round 8 on this data.**
-4. **G1 consent** — no longer a code problem. `automated_id_check` verifies an
-   adult against a government ID with liveness and a face match, checks the
-   holder is 18+, and matches the name the parent typed; it is self-gating on
-   `DIDIT_API_KEY` + `DIDIT_WORKFLOW_ID` and is simply not offered without them.
-   What is left is **not** engineering: a DPO/DPIA decision on a processor
-   handling parents' biometrics, and someone reading Didit's DPA to confirm
-   their retention satisfies COPPA §312.5(b)'s "delete the ID promptly" condition
-   — we never hold it, so their policy is the control. The other rails remain
-   blocked on a Consent Manager agreement and an ops runbook.
+4. **G1 consent** — built, deployed, and now waiting on people rather than code.
+   `automated_id_check` verifies an adult against a government ID with liveness
+   and a face match, checks the holder is 18+, and matches the name the parent
+   typed. It is self-gating on `DIDIT_API_KEY` + `DIDIT_WORKFLOW_ID` and is
+   simply not offered without them.
+
+   **Proven in production (2026-08-25).** The demo box offers the method through
+   `chittu.tulifo.ai`, its key authenticates to Didit, and a draft creates a real
+   hosted session. **Proven against the live vendor:** the refusal path — a
+   skipped capture returns `pending_capture`, mints no consent, writes no
+   evidence row, issues no token, and **burns none of the parent's three
+   attempts**, because a vendor-pending state is not their mistake.
+
+   **NOT proven.** The *approved* branch — `isAdult` reading a real `age`, and
+   `matchesIdName` against a name as actually printed on a document — has only
+   ever run against the stub and the name corpus. The first real parent is its
+   first live run. That is the highest-value thing left to exercise.
+
+   What is left otherwise is **not** engineering: a DPO/DPIA decision on a
+   processor handling parents' biometrics, and someone reading Didit's DPA to
+   confirm their retention satisfies COPPA §312.5(b)'s "delete the ID promptly"
+   condition — we never hold it, so their policy is the control. Also unverified:
+   whether Didit's console enforces an allowed-callback list that
+   `https://chittu.tulifo.ai` must be added to. The other rails remain blocked on
+   a Consent Manager agreement and an ops runbook.
 5. **G4 privacy** — no DPIA, no pen test, no breach drill. Nothing exists, and now there is a deployable artefact to assess, so the excuse is gone.
 6. **Build the red-team corpus** (G2) and wire it into `pnpm verify` as a release gate: zero criticals to ship. The gate is LOCAL now — GitHub Actions was removed 2026-08-25 and `scripts/verify.sh` runs what it ran.
 7. **Port the 246-assertion suite** to API-level contract tests.

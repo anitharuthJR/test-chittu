@@ -141,11 +141,23 @@ cd /opt/chittu
 # .env per deploy/demo/.env.example:
 #   CHITTU_DEV_MASTER_KEY=$(openssl rand -base64 32)   ← generate ONCE, keep it
 #   ANTHROPIC_API_KEY=...                              ← optional, low-limit key
+#   CHITTU_OPS_TOKENS=name=token                       ← bare token refuses to BOOT
+#
+# The G1 ID rail (optional; absent => not offered, and the banner says so):
+#   DIDIT_API_KEY=...
+#   DIDIT_WORKFLOW_ID=c53d125d-d09e-47d0-a16a-5c0ade2b9c7e
+#   DIDIT_ENVIRONMENT=live
+#   DIDIT_CALLBACK_URL=https://chittu.tulifo.ai/?idcheck=return   ← NOT localhost
 chmod 600 .env
 docker compose up -d
 docker compose ps                  # api "healthy" — its healthcheck hits /health, which checks the DB
 curl -s localhost:8080/health
 ```
+
+**`DIDIT_CALLBACK_URL` must be the public origin.** Copied verbatim from a developer's
+`.env.local` it reads `http://localhost:5173/?idcheck=return`, which sends every parent
+back to their OWN machine after the ID check. The failure is silent in the worst way: the
+vendor completes, bills, and reports success, and only the return hop is broken.
 
 **Keep the key.** Losing `.env` makes every stored demo row unreadable — that is the
 crypto-shred property working as designed. For a demo the fallback is also fine: wipe the
@@ -205,6 +217,14 @@ still could not serve the PWA, since no CloudFront/S3 web tier is written.
   never remove the block, and note it covers `/v1` — the API — not just the page.
 - **No real children.** "No child has ever used it" is a load-bearing sentence in this
   project, and a demo URL must not be where it stops being true. The audience is adults.
+- **The ID rail is LIVE, and it bills.** Since 2026-08-25 the box runs
+  `automated_id_check` with `DIDIT_ENVIRONMENT=live`, so anyone past the basic-auth wall
+  who picks "Photo ID check" performs a real identity verification against a real
+  government document and consumes one of the 500 free verifications per month. It is not
+  a simulation. Two consequences worth stating: a demo audience should be told before they
+  photograph their own ID, and G1 is still recorded as awaiting a DPO/DPIA decision about
+  a processor handling parents' biometrics. Set `DIDIT_ENVIRONMENT=sandbox` with a
+  sandbox key to demo the flow without any of that.
 - **Rate limiting is shared behind the proxy.** The API keys its per-IP limit
   (`apps/api/src/server.ts`, default 120/window) off the socket address and does not trust
   proxy headers, so behind Caddy every visitor is `127.0.0.1` and the whole audience
