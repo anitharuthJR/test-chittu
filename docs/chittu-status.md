@@ -604,13 +604,17 @@ ported suite all exist. What is left is not more building.
    ever run against the stub and the name corpus. The first real parent is its
    first live run. That is the highest-value thing left to exercise.
 
-   What is left otherwise is **not** engineering: a DPO/DPIA decision on a
-   processor handling parents' biometrics, and someone reading Didit's DPA to
-   confirm their retention satisfies COPPA §312.5(b)'s "delete the ID promptly"
-   condition — we never hold it, so their policy is the control. Also unverified:
-   whether Didit's console enforces an allowed-callback list that
-   `https://chittu.tulifo.ai` must be added to. The other rails remain blocked on
-   a Consent Manager agreement and an ops runbook.
+   **Two of the open items closed on 2026-08-26, and neither was what it looked
+   like.** The COPPA §312.5(b) "delete the ID promptly" question was not a DPA
+   question at all: Didit exposes retention as an application SETTING, and it was
+   at `unlimited` — every parent's document images and biometrics kept forever.
+   It is now **6 months**. And there is no allowed-callback list to register a
+   host on; `callback` is a per-session parameter, proven by the same workflow
+   accepting both `localhost:5173` and `chittu.tulifo.ai` without registration.
+
+   What is left is **not** engineering: a DPO/DPIA decision on a processor
+   handling parents' biometrics. The other rails remain blocked on a Consent
+   Manager agreement and an ops runbook.
 5. **G4 privacy** — no DPIA, no pen test, no breach drill. Nothing exists, and now there is a deployable artefact to assess, so the excuse is gone.
 6. **Build the red-team corpus** (G2) and wire it into `pnpm verify` as a release gate: zero criticals to ship. The gate is LOCAL now — GitHub Actions was removed 2026-08-25 and `scripts/verify.sh` runs what it ran.
 7. **Port the 246-assertion suite** to API-level contract tests.
