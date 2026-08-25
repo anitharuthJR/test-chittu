@@ -5,10 +5,10 @@
   "type": "module",
   "main": "./src/server.ts",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "tsx src/main.ts",
+    "dev": "tsx watch --conditions=development src/main.ts",
+    "start": "tsx --conditions=development src/main.ts",
     "typecheck": "tsc --noEmit",
-    "migrate": "tsx src/migrate.ts",
+    "migrate": "tsx --conditions=development src/migrate.ts",
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {

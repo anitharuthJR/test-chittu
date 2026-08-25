@@ -62,11 +62,43 @@ trap cleanup INT TERM EXIT
 
 port_busy() { lsof -iTCP:"$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
 
-for p in "$API_PORT" "$WEB_PORT"; do
-  if port_busy "$p"; then
-    echo "port $p is already in use — stop what is on it, or set PORT / WEB_PORT." >&2
+# Reclaim a port instead of refusing to start on it. This used to exit 1 and
+# tell you to clean up by hand — which was correct caution for a port some
+# OTHER worktree is legitimately using, but this repo's normal mode is 2-3
+# parallel worktrees each on their OWN PORT/WEB_PORT, and the process actually
+# holding one of these two is overwhelmingly this same worktree's previous
+# `pnpm start` that Ctrl-C didn't reach (a crashed shell, a killed terminal).
+# Printed PID + command before killing either way, so a genuine collision with
+# someone else's server is visible rather than silently reclaimed.
+free_port() {
+  local port="$1" pids pid
+  pids="$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+  [ -z "$pids" ] && return 0
+  echo "port $port is in use — reclaiming it:" >&2
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
+    ps -o pid=,command= -p "$pid" 2>/dev/null | sed 's/^/  /' >&2
+    kill_tree "$pid"
+  done <<< "$pids"
+  for _ in $(seq 1 10); do
+    port_busy "$port" || return 0
+    sleep 0.3
+  done
+  # Still listening after TERM — insist, the same way cleanup() does on exit.
+  pids="$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
+    kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+  done <<< "$pids"
+  sleep 0.3
+  if port_busy "$port"; then
+    echo "port $port is still in use after kill -9 — probably not ours to take (permissions, or a non-process listener)." >&2
     exit 1
   fi
+}
+
+for p in "$API_PORT" "$WEB_PORT"; do
+  free_port "$p"
 done
 
 if [ ! -d node_modules ]; then

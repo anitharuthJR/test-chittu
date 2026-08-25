@@ -11,11 +11,18 @@
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
     // Resolve @chittu/* through the `development` export condition — i.e. to
-    // src/*.ts, which is what vitest and tsx already do. WITHOUT this, `tsc
-    // --noEmit` follows `types: ./dist/index.d.ts` and fails on a fresh clone
-    // with "Cannot find module '@chittu/contracts'", because dist/ is generated
-    // and gitignored. `pnpm verify` hid that by running its build lane after
-    // typecheck, so the second run of the day always passed.
+    // src/*.ts. WITHOUT this, `tsc --noEmit` follows `types: ./dist/index.d.ts`
+    // and fails on a fresh clone with "Cannot find module '@chittu/contracts'",
+    // because dist/ is generated and gitignored. `pnpm verify` hid that by
+    // running its build lane after typecheck, so the second run of the day
+    // always passed.
+    //
+    // EVERY SOURCE LANE HAS TO ASK FOR IT SEPARATELY, and each asks differently:
+    // this line for tsc, `resolve.conditions` for vitest and vite, and
+    // `--conditions=development` on every tsx invocation. This comment used to
+    // claim tsx did it already. It does not — node's defaults are node/import/
+    // default — so `pnpm start` resolved @chittu/db to dist/index.js and died on
+    // any checkout that had not been built. See apps/api/src/dev-lane.test.ts.
     //
     // Every tsconfig.build.json turns this OFF again, deliberately: the build
     // MUST resolve through dist/*.d.ts, because compiling against the generated
