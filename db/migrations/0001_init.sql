@@ -554,10 +554,25 @@ CREATE TABLE transcript_grant (
 
 -- =============================================================================
 -- 11. ROW-LEVEL SECURITY
--- The API connects as `chittu_app`, which can never see across families: every
--- child-scoped query is filtered by the consent token's child_id, set per
--- request with SET LOCAL. A SQL-injection that escapes a WHERE clause still
--- cannot read another child's data.
+--
+-- THE DESIGN: the API connects as `chittu_app`, which can never see across
+-- families — every child-scoped query is filtered by the consent token's
+-- child_id, set per request with SET LOCAL, so a SQL injection that escapes a
+-- WHERE clause still cannot read another child's data.
+--
+-- WHAT IS ACTUALLY IN FORCE, as of 2026-08-25: none of it. `chittu_app` is
+-- NOLOGIN and nothing connects as it; every environment connects as the table
+-- OWNER (PGlite as `postgres`, compose and test:pg as `chittu`), which holds
+-- every privilege implicitly and bypasses row-level security. `FORCE ROW LEVEL
+-- SECURITY` is set on no table, so even an owner that did SET ROLE would be
+-- exempt. Verified by probe: the runtime pool INSERTs into `training_signal`
+-- successfully today.
+--
+-- The policies below are correct and are tested — `packages/db/src/index.test.ts`
+-- runs them under `SET LOCAL ROLE chittu_app`. They are a specification that
+-- one line of deployment configuration would activate, not a control that is
+-- protecting anybody right now. What DOES protect a child-scoped query today is
+-- `assert_child_scope()` below, which raises rather than filtering.
 -- =============================================================================
 
 -- Roles are CLUSTER-level, not schema-level, so they survive a DROP SCHEMA and
@@ -877,6 +892,12 @@ CREATE TABLE training_example (
   state                review_state NOT NULL DEFAULT 'PENDING_HUMAN_REVIEW',
   created_at           timestamptz NOT NULL DEFAULT now(),
 
+  -- The same five tokens this file CHECKs twice on training_signal. `label` is
+  -- what a trained model learns to emit, so an out-of-vocabulary value is how a
+  -- scripted-response guarantee gets violated quietly, a year later, in a
+  -- dataset nobody re-reads. Nullable: a SAFE example need not carry one.
+  CONSTRAINT training_example_label_vocab
+    CHECK (label IS NULL OR label IN ('CRISIS','SPINE','UNSAFE','PII','SAFE')),
   CONSTRAINT four_eyes_authoring
     CHECK (reviewed_by IS NULL OR reviewed_by <> authored_by),
   CONSTRAINT approved_needs_reviewer
@@ -924,6 +945,12 @@ GRANT SELECT ON training_signal, training_example, training_run TO chittu_ops;
 -- Ops can read the counter, which above the floor means reading `shape`. Below
 -- it there is nothing to read: the column is NULL.
 GRANT SELECT ON signal_counter TO chittu_ops;
+-- Promotion (phase 4) writes the corpus. The counter UPDATE is column-scoped:
+-- an operator may record that a shape was promoted, and may not edit the shape,
+-- its counts or its facets.
+GRANT INSERT ON training_signal TO chittu_ops;
+GRANT INSERT, UPDATE ON training_example TO chittu_ops;
+GRANT UPDATE (promoted_to) ON signal_counter TO chittu_ops;
 
 COMMIT;
 
@@ -1045,11 +1072,23 @@ GRANT USAGE, SELECT ON SEQUENCE metering_id_seq TO chittu_app;
 -- out of the training corpus. A shape reaching the floor is where the runtime's
 -- job ends and a human's begins.
 GRANT SELECT, INSERT, UPDATE ON signal_counter TO chittu_app;
-GRANT SELECT, INSERT ON signal_contributor TO chittu_app;
+GRANT SELECT, INSERT, DELETE ON signal_contributor TO chittu_app;
 
--- NOTE the absences, which are the control: chittu_app is granted nothing on
--- training_signal, training_example, training_run, dataset_export, admin_user
--- or transcript_grant. The runtime cannot reach the training corpus or the
--- named-humans tables at all.
+-- NOTE the absences, which are the INTENDED control: chittu_app is granted
+-- nothing on training_signal, training_example, training_run, dataset_export,
+-- admin_user or transcript_grant, so the runtime cannot reach the training
+-- corpus or the named-humans tables. `packages/db/src/index.test.ts` proves it
+-- under `SET LOCAL ROLE chittu_app`.
+--
+-- IT IS IN FORCE IN NO ENVIRONMENT, and phase 4 of docs/chittu-model-plan.md is
+-- where that stopped being harmless. Every environment connects as the table
+-- owner, which holds every privilege implicitly; both roles are NOLOGIN. The
+-- ops console shares the runtime's pool (apps/api/src/server.ts), so from phase
+-- 4 one process both counts shapes and writes the corpus — and could have done
+-- so before, because nothing prevented it.
+--
+-- Phase 4 did not fix this: a non-owner runtime role needs a second credential
+-- and infrastructure that has never been applied. It made it visible instead.
+-- See PORT-REVIEW.md, "OPEN — the role separation is declarative".
 
 COMMIT;

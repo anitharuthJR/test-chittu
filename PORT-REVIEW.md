@@ -846,6 +846,105 @@ Vertex AI under Google Cloud terms — has a different host, a different path an
 service-account auth, so most of what was written would be wrong anyway. The
 decision is recorded in the model plan §5 as a question for a human.
 
+### OPEN (found 2026-08-25) — the role separation is DECLARATIVE, not enforced
+
+`docs/chittu-schema.sql` ends with a comment calling the absent grants "the
+control": *"chittu_app is granted nothing on training_signal … The runtime
+cannot reach the training corpus."* Phase 2 of the model plan stopped at
+`signal_counter` out of respect for it, and phase 4 had to cross it — which is
+when somebody finally checked whether it was true.
+
+It is not, in any environment. Probed directly:
+
+```
+runtime connects as : postgres          <- the table OWNER
+roles               : chittu_app NOLOGIN, chittu_ops NOLOGIN
+runtime INSERT into training_signal -> ACCEPTED
+child FORCE ROW LEVEL SECURITY      -> false
+```
+
+Both roles are `NOLOGIN`, so nothing can connect as either. PGlite connects as
+`postgres`; compose and `test:pg` connect as `chittu`; the RDS module would use
+the master user. An owner holds every privilege implicitly and bypasses
+row-level security, and `FORCE ROW LEVEL SECURITY` is set on no table — so even
+an owner that did `SET ROLE` would be exempt.
+
+**The same defeat takes RLS with it.** The five policies scoped `TO chittu_app`
+are inert for the same reason. What actually protects a child-scoped query today
+is `assert_child_scope()`, which RAISES rather than filtering — a different
+mechanism, and a good one, but not the one the comment describes.
+`packages/db/src/index.test.ts` is the only place the model is exercised, under
+`SET LOCAL ROLE chittu_app`, and it passes: the specification is correct and
+nothing runs it.
+
+**Phase 4 did not fix this, and did not pretend to.** A non-owner runtime role
+needs a second credential and deployment configuration that has never been
+applied (`infra/` has never seen a `plan`). Doing it piecemeal — ops as a
+restricted role while the runtime still owns the tables — constrains the surface
+that is already the most supervised and leaves the one that is not. What phase 4
+did instead: made the writes visible (operator-authenticated, four-eyes,
+`authored_by` from the session), added the grants the specification was missing,
+and rewrote the comment so nobody reads a control into it. See the schema's §11
+header and the note above the final GRANT block.
+
+**And the grants were incoherent with the code.** `chittu_ops` had SELECT only
+on `training_signal`, `training_example` and `signal_counter`, while
+`signalRepo.promote()` INSERTs and UPDATEs; `chittu_app` had no DELETE on
+`signal_contributor`, which `observe()` performs at the k-anonymity floor —
+inside a try/catch that logs and continues, so under the intended role the one
+table designed to stay bounded would have grown forever, silently. Migration
+0006 fixes all four.
+
+### FIXED (2026-08-25) — `training_example.label` was unconstrained free text
+
+The same file CHECKs the five-token vocabulary twice on `training_signal`
+(`observed_token`, `expected_token`) and left `label` — the value a trained
+model learns to EMIT — as `text`. An out-of-vocabulary label is how a
+scripted-response guarantee gets violated quietly, a year later, in a dataset
+nobody re-reads. Now `CHECK (label IS NULL OR label IN (…))`; nullable stays
+legal because a SAFE example need not carry one.
+
+### FIXED (2026-08-25) — the real-Postgres lane had an extension race
+
+`createTestDb()` runs `CREATE EXTENSION IF NOT EXISTS … SCHEMA public`, and
+`IF NOT EXISTS` is **not atomic**. Two fixtures starting at the same moment on a
+database nobody has used yet both see "not present", both create, and one loses:
+
+```
+error: duplicate key value violates unique constraint "pg_extension_name_index"
+  at Module.createTestDb packages/db/src/testing.ts:73
+```
+
+Reported as an entire test FILE failing at collection with all of its tests
+skipped, intermittently. It appeared when phase 4 added a fourth concurrent
+caller and has presumably been there since the second.
+
+**The part worth remembering is why three green runs proved nothing.** It only
+reproduces on a database nobody has touched — exactly what `pnpm db:up` makes,
+and exactly what a rerun does not. Three consecutive passes against a warm
+database said nothing at all, and the fix was only confirmed by tearing the
+container down between runs. Now serialized under a transaction-scoped advisory
+lock; verified across three cold starts.
+
+### NOTED — one prototype Playwright test is flaky under parallel load
+
+`tests/pipeline.spec.js › tapping a chip sends it as the next message` failed
+once during phase 4's verification with the typing indicator (`●●●`) still on
+screen — the assertion outran the reply. Passes 3/3 in isolation, and phase 4
+changed no prototype file. Recorded rather than fixed: it is a
+`expect.poll`-on-the-wrong-condition problem in a suite this change does not
+touch, and guessing at it blind is how a flake becomes two.
+
+### NOTED — the ops console's identity is a shared bearer token
+
+`authored_by` and `reviewed_by` on `training_example` are the four-eyes record,
+and what stands behind them is `CHITTU_OPS_TOKENS` — a name-to-token map in the
+environment, with no revocation, no rotation and nothing binding a token to a
+person. Two people sharing one token are one operator to this system, and one
+person holding both tokens is two. The constraint is real; the identity behind
+it is as good as the token discipline. Recorded rather than solved: solving it
+means real accounts, which is a bigger change than phase 4.
+
 ### NOTED — the classifier cell is a substitution, not the design
 
 §12.2's finding is that there is no kid-safety classifier to buy, and the

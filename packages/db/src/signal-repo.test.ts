@@ -13,7 +13,7 @@ import { createTestDb, type TestDb } from './testing.js';
 import {
   K_FLOOR, contributorToken, shapeHash, signalRepo,
 } from './signal-repo.js';
-import { fingerprint } from './crypto.js';
+import { contentFingerprint, fingerprint } from './crypto.js';
 
 let db: TestDb;
 const KEY = randomBytes(32);
@@ -27,8 +27,16 @@ const obs = (over: Partial<Parameters<typeof signalRepo.observe>[1]> = {}) => ({
   failureClass: null, band: 'builder', country: 'IN', ...over,
 });
 
-/** Fresh shape per test, so counts never bleed between them. */
-const uniqueShape = (n: number) => `${SHAPE} ${'<OOV> '.repeat(n).trim()}`;
+/**
+ * Fresh shape per test AND per run.
+ *
+ * The run tag matters on the real-Postgres lane, where the database survives
+ * between invocations: without it a second `pnpm test` finds the first run's
+ * counters already at the floor and every count assertion is off. It is a
+ * lowercase word, which is what `shape_is_abstracted` accepts.
+ */
+const RUN = `run-${randomUUID().slice(0, 8)}`;
+const uniqueShape = (n: number) => `${SHAPE} ${RUN} ${'<OOV> '.repeat(n).trim()}`;
 
 // ---------------------------------------------------------------------------
 
@@ -217,5 +225,225 @@ describe('facets are kept only while every sighting agrees', () => {
     const r = await db.pool.query<{ band: string | null }>(
       `SELECT band FROM signal_counter WHERE shape_hash = $1`, [shapeHash(shape, KEY)]);
     expect(r.rows[0]!.band).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('contentFingerprint — the corpus leakage guard', () => {
+  it('is unkeyed and reproducible, unlike the blind index', () => {
+    // It has to be re-derivable for the life of the corpus: check_leakage.py
+    // computes it offline, and a dataset export must answer "was this eval
+    // prompt also in train?" years later, after the index key has rotated.
+    expect(contentFingerprint('what is 7 plus 5'))
+      .toEqual(contentFingerprint('what is 7 plus 5'));
+  });
+
+  it('collapses whitespace — a re-typed example is the same example', () => {
+    expect(contentFingerprint('i feel  sad   today'))
+      .toEqual(contentFingerprint('i feel sad today'));
+  });
+
+  it('KEEPS case, unlike fingerprint() — two casings are two examples', () => {
+    // fingerprint() lowercases, which is right for an email and wrong here:
+    // collapsing them would silently refuse the second as a duplicate.
+    expect(contentFingerprint('Rusty died')).not.toEqual(contentFingerprint('rusty died'));
+    expect(fingerprint('Rusty died', KEY)).toEqual(fingerprint('rusty died', KEY));
+  });
+
+  it('is domain-separated from the blind index', () => {
+    const plain = 'i am really tired today';
+    expect(contentFingerprint(plain).equals(fingerprint(plain, KEY))).toBe(false);
+  });
+});
+
+describe('the triage queue', () => {
+  const fill = async (shape: string, n: number) => {
+    for (let i = 0; i < n; i += 1) {
+      await signalRepo.observe(db.pool, obs({ shape }), randomUUID(), KEY);
+    }
+  };
+
+  it('shows only shapes that reached the floor', async () => {
+    await fill(uniqueShape(20), K_FLOOR);      // ready
+    await fill(uniqueShape(21), K_FLOOR - 1);  // not
+    const ready = await signalRepo.listReady(db.pool);
+    expect(ready.map((r) => r.shape)).toContain(uniqueShape(20));
+    expect(ready.map((r) => r.shape)).not.toContain(uniqueShape(21));
+  });
+
+  it('lists NOTHING about a sub-floor shape — not even its facets', async () => {
+    // At k=1 the row already carries band, country, observed_token and
+    // first_seen_at, all written on the first sighting. That is one child's
+    // turn described in facets and timestamped to the second. So the read path
+    // filters, and it filters on shape IS NOT NULL rather than on a count that
+    // somebody could get wrong.
+    await fill(uniqueShape(22), 1);
+    const ready = await signalRepo.listReady(db.pool);
+    const handles = ready.map((r) => r.handle);
+    expect(handles).not.toContain(shapeHash(uniqueShape(22), KEY).toString('hex'));
+  });
+
+  it('ranks by SIGHTINGS, because k_sessions freezes at the floor', async () => {
+    // The trap this test exists for: k_sessions stops counting once the shape
+    // is stored, so every readable row reads exactly 25 and a queue ordered by
+    // it is ordered by a constant.
+    const quiet = uniqueShape(23);
+    const loud = uniqueShape(24);
+    await fill(quiet, K_FLOOR + 1);
+    await fill(loud, K_FLOOR + 40);
+    const ready = await signalRepo.listReady(db.pool);
+    const idx = (s: string) => ready.findIndex((r) => r.shape === s);
+    expect(idx(loud)).toBeLessThan(idx(quiet));
+    // And the assertion that stops this passing on the wrong column:
+    const both = ready.filter((r) => r.shape === loud || r.shape === quiet);
+    expect(both.map((r) => r.k_sessions)).toEqual([K_FLOOR, K_FLOOR]);
+    expect(both.map((r) => r.sightings)).not.toEqual([K_FLOOR, K_FLOOR]);
+  });
+
+  it('counts sub-floor shapes as ONE number and never lists them', async () => {
+    const before = await signalRepo.subFloorCount(db.pool);
+    await fill(uniqueShape(25), 3);
+    expect(await signalRepo.subFloorCount(db.pool)).toBe(before + 1);
+  });
+
+  it('drops a shape off the queue once it is promoted', async () => {
+    const shape = uniqueShape(26);
+    await fill(shape, K_FLOOR);
+    await signalRepo.promote(db.pool, shapeHash(shape, KEY), {
+      failureClass: 'UNDER_REFUSAL', expectedToken: 'CRISIS',
+    });
+    expect((await signalRepo.listReady(db.pool)).map((r) => r.shape)).not.toContain(shape);
+  });
+});
+
+describe('promotion takes the OBSERVATION from the row', () => {
+  it('uses the layer the pipeline saw, not the one the operator typed', async () => {
+    const shape = uniqueShape(27);
+    for (let i = 0; i < K_FLOOR; i += 1) {
+      await signalRepo.observe(
+        db.pool, obs({ shape, layer: 'L6_FILTER' }), randomUUID(), KEY);
+    }
+    const id = await signalRepo.promote(db.pool, shapeHash(shape, KEY), {
+      failureClass: 'L6_CATCH', expectedToken: null, observedLayer: 'L2_CLASSIFIER',
+    });
+    const { rows } = await db.pool.query<{ observed_layer: string }>(
+      `SELECT observed_layer FROM training_signal WHERE id = $1`, [id]);
+    expect(rows[0]!.observed_layer, 'the operator overwrote what the pipeline saw')
+      .toBe('L6_FILTER');
+  });
+
+  it('refuses, in words, when the row itself is undecided', async () => {
+    // observed_layer goes NULL when two sightings disagreed. training_signal's
+    // is NOT NULL, so somebody has to choose — and refusing beats inventing.
+    const shape = uniqueShape(28);
+    await signalRepo.observe(db.pool, obs({ shape, layer: 'L6_FILTER' }), randomUUID(), KEY);
+    for (let i = 0; i < K_FLOOR - 1; i += 1) {
+      await signalRepo.observe(
+        db.pool, obs({ shape, layer: 'L2_CLASSIFIER' }), randomUUID(), KEY);
+    }
+    await expect(signalRepo.promote(db.pool, shapeHash(shape, KEY), {
+      failureClass: 'L6_CATCH', expectedToken: null,
+    })).rejects.toThrow(/observed at more than one layer/);
+  });
+});
+
+describe('authoring an example', () => {
+  const promoted = async (n: number) => {
+    const shape = uniqueShape(n);
+    for (let i = 0; i < K_FLOOR; i += 1) {
+      await signalRepo.observe(db.pool, obs({ shape }), randomUUID(), KEY);
+    }
+    return signalRepo.promote(db.pool, shapeHash(shape, KEY), {
+      failureClass: 'UNDER_REFUSAL', expectedToken: 'CRISIS',
+    });
+  };
+
+  const example = (over: Record<string, unknown> = {}) => ({
+    signalId: '', slice: 'grief', prompt: 'my dog died and i feel empty',
+    completion: 'That sounds really hard. Would you tell a grown-up you trust?',
+    label: 'SAFE', split: 'train', authoredBy: 'ada@tulifo.ai', ...over,
+  });
+
+  it('writes AUTHORED and PENDING_HUMAN_REVIEW, whatever the caller wanted', async () => {
+    const signalId = await promoted(30);
+    const id = await signalRepo.authorExample(db.pool, example({ signalId }) as never);
+    const { rows } = await db.pool.query<{ origin: string; state: string; authored_by: string }>(
+      `SELECT origin::text AS origin, state::text AS state, authored_by
+         FROM training_example WHERE id = $1`, [id]);
+    expect(rows[0]).toEqual({
+      origin: 'AUTHORED', state: 'PENDING_HUMAN_REVIEW', authored_by: 'ada@tulifo.ai',
+    });
+  });
+
+  it('refuses a duplicate prompt with a sentence, not a database error', async () => {
+    const signalId = await promoted(31);
+    const prompt = 'i keep thinking about it and i cannot stop';
+    await signalRepo.authorExample(db.pool, example({ signalId, prompt }) as never);
+    await expect(
+      signalRepo.authorExample(db.pool, example({
+        signalId, prompt, split: 'eval_holdout', completion: 'different answer',
+      }) as never)).rejects.toThrow(/already in the corpus/);
+  });
+
+  it('the leak guard is CROSS-SPLIT — that is the whole point of it', async () => {
+    // An eval prompt that also sits in train invalidates every scorecard since
+    // it landed. It happened here for four rounds before check_leakage.py.
+    const signalId = await promoted(32);
+    const prompt = 'what is photosynthesis';
+    await signalRepo.authorExample(
+      db.pool, example({ signalId, prompt, split: 'train' }) as never);
+    await expect(signalRepo.authorExample(
+      db.pool, example({ signalId, prompt, split: 'eval_holdout' }) as never))
+      .rejects.toThrow(/already in the corpus/);
+  });
+
+  it('refuses a label outside the five tokens', async () => {
+    const signalId = await promoted(33);
+    await expect(signalRepo.authorExample(
+      db.pool, example({ signalId, label: 'MAYBE', prompt: 'x y z' }) as never))
+      .rejects.toThrow(/label_vocab/i);
+  });
+});
+
+describe('four eyes', () => {
+  const authored = async (n: number, by: string) => {
+    const shape = uniqueShape(n);
+    for (let i = 0; i < K_FLOOR; i += 1) {
+      await signalRepo.observe(db.pool, obs({ shape }), randomUUID(), KEY);
+    }
+    const signalId = await signalRepo.promote(db.pool, shapeHash(shape, KEY), {
+      failureClass: 'UNDER_REFUSAL', expectedToken: 'CRISIS',
+    });
+    return signalRepo.authorExample(db.pool, {
+      signalId, slice: 'grief', prompt: `prompt number ${n}`,
+      completion: 'a careful answer', label: 'SAFE', split: 'train', authoredBy: by,
+    });
+  };
+
+  it('refuses the author approving their own row', async () => {
+    const id = await authored(40, 'ada@tulifo.ai');
+    await expect(signalRepo.reviewExample(
+      db.pool, id, { state: 'APPROVED', reviewedBy: 'ada@tulifo.ai' }))
+      .rejects.toThrow(/second pair of eyes/);
+  });
+
+  it('refuses them under a different casing or a stray space', async () => {
+    // The CHECK compares raw strings, so ' Ada@Tulifo.ai ' and 'ada@tulifo.ai'
+    // are two people to the database and one person to everybody else — four
+    // eyes that are the same two.
+    const id = await authored(41, 'ada@tulifo.ai');
+    await expect(signalRepo.reviewExample(
+      db.pool, id, { state: 'APPROVED', reviewedBy: ' Ada@Tulifo.ai ' }))
+      .rejects.toThrow(/second pair of eyes/);
+  });
+
+  it('accepts a genuinely different person', async () => {
+    const id = await authored(42, 'ada@tulifo.ai');
+    await signalRepo.reviewExample(
+      db.pool, id, { state: 'APPROVED', reviewedBy: 'grace@tulifo.ai' });
+    const { rows } = await db.pool.query<{ state: string; reviewed_by: string }>(
+      `SELECT state::text AS state, reviewed_by FROM training_example WHERE id = $1`, [id]);
+    expect(rows[0]).toEqual({ state: 'APPROVED', reviewed_by: 'grace@tulifo.ai' });
   });
 });

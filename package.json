@@ -18,7 +18,8 @@
     "stack:down": "docker compose --profile dev down",
     "stack:logs": "docker compose --profile dev logs -f api",
     "db:migrate": "pnpm --filter @chittu/api run migrate",
-    "verify": "bash scripts/verify.sh"
+    "verify": "bash scripts/verify.sh",
+    "demo:signals": "pnpm --filter @chittu/api exec tsx scripts/demo-signals.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",

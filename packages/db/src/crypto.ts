@@ -12,7 +12,7 @@
  */
 
 import {
-  createCipheriv, createDecipheriv, randomBytes, createHmac, timingSafeEqual,
+  createCipheriv, createDecipheriv, createHash, randomBytes, createHmac, timingSafeEqual,
 } from 'node:crypto';
 
 const ALG = 'aes-256-gcm';
@@ -71,6 +71,36 @@ export function decrypt(blob: Buffer, dek: Buffer): string {
  */
 export function fingerprint(value: string, indexKey: Buffer): Buffer {
   return createHmac('sha256', indexKey).update(value.trim().toLowerCase(), 'utf8').digest();
+}
+
+/**
+ * The training corpus's leakage guard — `training_example.content_fingerprint`.
+ *
+ * DELIBERATELY NOT `fingerprint()` ABOVE, on three counts:
+ *
+ * 1. **Unkeyed.** A keyed value cannot be recomputed after the index key
+ *    rotates, and this one has to be reproducible for the life of the corpus:
+ *    it is what `llm-kit/check_leakage.py` does offline, and what a dataset
+ *    export must be able to re-derive years later to answer "was this eval
+ *    prompt also in train?". There is no confidentiality argument for keying
+ *    it — the prompts are authored by us, not typed by a child.
+ * 2. **Case is preserved.** `fingerprint()` lowercases, which is right for an
+ *    email and wrong here: two examples differing only in case are two
+ *    examples, and collapsing them would silently refuse the second.
+ * 3. **The PROMPT only, never the completion.** The guard exists to stop one
+ *    prompt occupying two splits. Hashing prompt+completion would let the same
+ *    prompt sit in `train` and in `eval_holdout` with different answers and the
+ *    UNIQUE index saying nothing — which is exactly the leak that invalidated
+ *    four rounds of scorecards before `check_leakage.py` existed.
+ *
+ * Whitespace is collapsed, because a re-typed example with a double space is
+ * the same example.
+ */
+export function contentFingerprint(prompt: string): Buffer {
+  return createHash('sha256')
+    .update('chittu:training:prompt:v1|', 'utf8')
+    .update(prompt.replace(/\s+/g, ' ').trim(), 'utf8')
+    .digest();
 }
 
 export function fingerprintEquals(a: Buffer, b: Buffer): boolean {

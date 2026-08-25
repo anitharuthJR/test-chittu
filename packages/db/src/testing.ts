@@ -70,8 +70,23 @@ export async function createTestDb(
     // with `type "vector" does not exist`, because IF NOT EXISTS then finds the
     // extension already present and creates nothing. `public` is on every
     // fixture's search_path, so that is where shared types belong.
-    await pool.query('CREATE EXTENSION IF NOT EXISTS vector SCHEMA public');
-    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public');
+    // UNDER AN ADVISORY LOCK, because `IF NOT EXISTS` is not atomic. Two
+    // fixtures starting at the same moment on a FRESH database both see "not
+    // present" and both create, and one loses with
+    // `duplicate key value violates unique constraint "pg_extension_name_index"`
+    // — reported as a whole test FILE failing at collection, every test in it
+    // skipped, intermittently.
+    //
+    // It only reproduces on a database nobody has used yet, which is exactly
+    // what `pnpm db:up` makes and exactly what a rerun does not: three
+    // consecutive green runs against a warm database said nothing about it.
+    // The lock is transaction-scoped, so it releases on commit with no cleanup
+    // path to forget.
+    await pool.transaction(async (tx) => {
+      await tx.query('SELECT pg_advisory_xact_lock(4021)');
+      await tx.query('CREATE EXTENSION IF NOT EXISTS vector SCHEMA public');
+      await tx.query('CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public');
+    });
     for (const sql of migrationFiles()) await pool.query(sql);
     await pool.query(
       `INSERT INTO deployment (env, region) VALUES ('dev','ap-south-1')`);

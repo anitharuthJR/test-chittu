@@ -225,7 +225,7 @@ OpenAI's own position is that its models are not for under-13s. Routing Explorer
 or Builder turns there earns us the finding PIRG wrote about Curio. If OpenAI is
 wanted, scope it to Thinker only, and make that a Council decision, not a cell.
 
-### Phase 4 — Human review surface (≈3 days)
+### Phase 4 — Human review surface — **DONE**
 
 Signals are worthless until someone triages them. The ops console exists now and
 is the place to put it:
@@ -234,6 +234,38 @@ is the place to put it:
 *author examples for this*. Writes `training_example` with
 `origin = AUTHORED`, `state = PENDING_HUMAN_REVIEW`, and the four-eyes
 constraint already blocks the author from approving their own row.
+
+**What shipped, and four places it differs from the sketch.**
+
+- **The queue is ordered by `sightings`, not `k_sessions`.** `observe()` stops
+  counting distinct sessions once a shape is stored — the contributor rows are
+  deleted at the floor — so `k_sessions` reads exactly 25 on every readable row,
+  forever. A queue ordered by it is ordered by a constant, and both indexes in
+  the schema rank on it. A test asserts the ordering AND that the two rows'
+  `k_sessions` are equal, so it cannot pass on the wrong column.
+- **Sub-floor rows are not rendered at all** — not redacted, not counted per
+  row. At k=1 a counter row already carries `band`, `country`, `observed_token`
+  and `first_seen_at` from its first sighting, which is one child's turn
+  described in facets and timestamped to the second. The page shows one scalar:
+  how many shapes are still being counted.
+- **`observed_layer` comes from the row, never the form.** It is an observation,
+  and taking it from an operator's typing made it the one column where a human
+  silently overwrote what the pipeline saw. Where the counter's own value is
+  NULL — two sightings disagreed — promotion refuses and asks.
+- **There is no search box, and the page accepts no shape it did not itself
+  render.** The console holds the index key, so a lookup by shape text would be
+  a k-anonymity oracle: guess a sentence, abstract it, hash it, read its exact
+  sub-floor count.
+
+**`pnpm demo:signals`** drives real turns through the real pipeline to fill the
+page, rather than seeding a fixture. A fixture is an assertion about the schema
+written by whoever wrote the code — §8b's failure mode with extra steps — and it
+would get four things wrong that this cannot: a `k_sessions` above 25 (which the
+floor makes impossible), a shape with capitals, every facet non-null so the
+"varies" rendering is never seen, and `failure_class` always set.
+
+**The finding that came with it: the schema's "control" is a comment.** See
+`PORT-REVIEW.md`, "OPEN — the role separation is declarative".
 
 ### Phase 5 — Distillation lane (≈3 days)
 
@@ -305,8 +337,12 @@ Two cautions from the file that bear directly on us:
    for training, and I would rather ask.
 2. **Is OpenAI in scope at all?** If yes, Thinker-only, and it is a Council
    decision because of #19's COPPA position.
-3. **Who reviews signals?** Phase 4 builds the surface; the four-eyes constraint
-   means it needs at least two named people who are not each other.
+3. **Who reviews signals?** Phase 4 built the surface and it now refuses in
+   words when fewer than two operators are configured — so the question is no
+   longer deferrable: with one operator, nothing can ever be approved. It still
+   needs at least two named people who are not each other, and
+   `CHITTU_OPS_TOKENS` is a shared bearer token, not an account (PORT-REVIEW,
+   "NOTED — the ops console's identity is a shared bearer token").
 4. **What is the retention on `metering`?** It holds no content, but it is a
    per-session behavioural record and DPDP bars behavioural monitoring of
    children. Needs a number, not a default. *With two vendors it also becomes

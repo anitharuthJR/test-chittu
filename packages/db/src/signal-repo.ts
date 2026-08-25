@@ -30,6 +30,7 @@
 
 import { createHmac } from 'node:crypto';
 import type { Db, DbPool } from './client.js';
+import { contentFingerprint } from './crypto.js';
 
 /**
  * 25 distinct sessions. Also a CHECK on `training_signal.k_sessions` and on
@@ -84,6 +85,51 @@ export interface Observation {
   readonly failureClass: string | null;
   readonly band: string | null;
   readonly country: string | null;
+}
+
+/** One row of the triage queue. `handle` is the hex shape_hash, for the form. */
+export interface ReadySignal {
+  readonly handle: string;
+  readonly shape: string;
+  readonly k_sessions: number;
+  readonly sightings: number;
+  readonly observed_layer: string | null;
+  readonly observed_token: string | null;
+  readonly failure_class: string | null;
+  readonly band: string | null;
+  readonly country: string | null;
+  readonly first_seen_at: Date;
+  readonly last_seen_at: Date;
+}
+
+/** An authored example awaiting a SECOND person. */
+export interface PendingExample {
+  readonly id: string;
+  readonly slice: string;
+  readonly prompt: string;
+  readonly completion: string;
+  readonly label: string | null;
+  readonly split: string;
+  readonly authored_by: string;
+  readonly created_at: Date;
+}
+
+export const EXAMPLE_LABELS = Object.freeze(
+  ['CRISIS', 'SPINE', 'UNSAFE', 'PII', 'SAFE'] as const);
+export const EXAMPLE_SPLITS = Object.freeze(['train', 'val', 'eval_holdout'] as const);
+
+export class DuplicateExample extends Error {
+  constructor() {
+    super('that prompt is already in the corpus');
+    this.name = 'DuplicateExample';
+  }
+}
+
+export class SameEyes extends Error {
+  constructor(who: string) {
+    super(`${who} authored this one — it needs a second pair of eyes`);
+    this.name = 'SameEyes';
+  }
 }
 
 export interface ObserveResult {
@@ -167,6 +213,48 @@ export const signalRepo = {
   },
 
   /**
+   * The triage queue: shapes that reached the floor and nobody has promoted.
+   *
+   * ORDERED BY `sightings`, NOT `k_sessions`, and that is not a preference.
+   * `observe()` stops counting distinct sessions once the shape is stored — the
+   * contributor rows are deleted at the floor and never re-collected — so
+   * `k_sessions` reads exactly 25 on every readable row, forever. A queue
+   * ordered by it is ordered by a constant. `sightings` keeps rising and is the
+   * only number that says "this is happening a lot".
+   *
+   * `shape IS NOT NULL` is the k-anonymity floor on the READ path. Below it the
+   * column is NULL by construction, but the row still carries `band`, `country`,
+   * `observed_token` and `first_seen_at` from its very first sighting — which,
+   * at k=1, is one child's turn described in facets, timestamped to the second.
+   * So sub-floor rows are not listed at all, not even redacted.
+   */
+  async listReady(db: Db, limit = 50): Promise<readonly ReadySignal[]> {
+    const { rows } = await db.query<ReadySignal>(
+      `SELECT encode(shape_hash, 'hex') AS handle, shape, k_sessions, sightings,
+              observed_layer, observed_token, failure_class, band, country,
+              first_seen_at, last_seen_at
+         FROM signal_counter
+        WHERE promoted_to IS NULL AND shape IS NOT NULL
+        ORDER BY sightings DESC, shape_hash
+        LIMIT $1`, [limit]);
+    return rows;
+  },
+
+  /**
+   * How many shapes are still below the floor — ONE NUMBER, never a list.
+   *
+   * An operator needs to know the queue is empty because nothing has reached 25
+   * yet, rather than because capture is broken. A scalar answers that and
+   * describes nobody; a list of sub-floor rows would describe, at the bottom of
+   * it, individual children.
+   */
+  async subFloorCount(db: Db): Promise<number> {
+    const { rows } = await db.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM signal_counter WHERE shape IS NULL`);
+    return Number(rows[0]?.n ?? 0);
+  },
+
+  /**
    * A human's judgement about a shape that reached the floor.
    *
    * Not called by the runtime, and the runtime could not call it: chittu_app is
@@ -182,16 +270,18 @@ export const signalRepo = {
     shapeHashBytes: Buffer,
     decision: {
       readonly failureClass: string;
-      readonly observedLayer: string;
+      /** Used ONLY when the counter's own observed_layer is NULL. */
+      readonly observedLayer?: string;
       readonly expectedToken: string | null;
       readonly reviewedBy?: string;
     },
   ): Promise<string> {
     const c = await db.query<{
       shape: string | null; k_sessions: number; promoted_to: string | null;
-      observed_token: string | null; band: string | null; country: string | null;
+      observed_layer: string | null; observed_token: string | null;
+      band: string | null; country: string | null;
     }>(
-      `SELECT shape, k_sessions, promoted_to, observed_token, band, country
+      `SELECT shape, k_sessions, promoted_to, observed_layer, observed_token, band, country
          FROM signal_counter WHERE shape_hash = $1`, [shapeHashBytes]);
     const row = c.rows[0];
     if (!row) throw new Error('no such shape');
@@ -204,6 +294,23 @@ export const signalRepo = {
         `below the k-anonymity floor: ${row.k_sessions} of ${K_FLOOR} sessions`);
     }
 
+    /**
+     * `observed_layer` comes from the ROW, and from the caller only when the
+     * row has none.
+     *
+     * It is an observation — which layer acted — and the counter recorded it at
+     * the time. Taking it from the form made it the one column where an
+     * operator's typing silently replaced what the pipeline actually saw. It is
+     * NULL on the counter only when two sightings disagreed, and then somebody
+     * does have to choose; `training_signal.observed_layer` is NOT NULL, so
+     * refusing beats inventing.
+     */
+    const observedLayer = row.observed_layer ?? decision.observedLayer ?? null;
+    if (observedLayer === null) {
+      throw new Error(
+        'this shape was observed at more than one layer — say which one this signal is about');
+    }
+
     const s = await db.query<{ id: string }>(
       `INSERT INTO training_signal
          (shape, shape_hash, band, country, observed_layer, observed_token,
@@ -211,7 +318,7 @@ export const signalRepo = {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PENDING_HUMAN_REVIEW',$10,
                CASE WHEN $10::text IS NULL THEN NULL ELSE now() END)
        RETURNING id`,
-      [row.shape, shapeHashBytes, row.band, row.country, decision.observedLayer,
+      [row.shape, shapeHashBytes, row.band, row.country, observedLayer,
         row.observed_token, decision.expectedToken, decision.failureClass,
         row.k_sessions, decision.reviewedBy ?? null]);
     const id = s.rows[0]!.id;
@@ -219,5 +326,83 @@ export const signalRepo = {
       `UPDATE signal_counter SET promoted_to = $2 WHERE shape_hash = $1`,
       [shapeHashBytes, id]);
     return id;
+  },
+
+  /** Signals a human has promoted and not yet authored an example for. */
+  async listPromoted(db: Db, limit = 50): Promise<readonly {
+    id: string; shape: string; failure_class: string; expected_token: string | null;
+    observed_token: string | null; examples: number;
+  }[]> {
+    const { rows } = await db.query<never>(
+      `SELECT s.id, s.shape, s.failure_class::text AS failure_class,
+              s.expected_token, s.observed_token,
+              (SELECT count(*)::int FROM training_example e WHERE e.signal_id = s.id) AS examples
+         FROM training_signal s
+        ORDER BY s.created_at DESC
+        LIMIT $1`, [limit]);
+    return rows as never;
+  },
+
+  /**
+   * An authored training example. The FIRST writer this table has ever had.
+   *
+   * `origin` and `state` are literals here, not parameters. `training_origin`
+   * has no CHILD_TURN value on purpose, and the neighbouring values —
+   * SYNTHETIC, DISTILLED — are provenance claims about how a row was made. A
+   * route that accepted `origin` from a form could label a hand-typed example
+   * DISTILLED, which is a lie in the one table whose entire job is provenance.
+   *
+   * `content_fingerprint` is computed HERE rather than taken, so no caller can
+   * supply one that does not match its own prompt and slip a duplicate past the
+   * UNIQUE index that is the leakage guard.
+   */
+  async authorExample(
+    db: Db,
+    e: {
+      readonly signalId: string; readonly slice: string; readonly prompt: string;
+      readonly completion: string; readonly label: string | null;
+      readonly split: string; readonly authoredBy: string;
+    },
+  ): Promise<string> {
+    try {
+      const { rows } = await db.query<{ id: string }>(
+        `INSERT INTO training_example
+           (signal_id, origin, slice, prompt, completion, label,
+            content_fingerprint, split, authored_by, state)
+         VALUES ($1,'AUTHORED',$2,$3,$4,$5,$6,$7,$8,'PENDING_HUMAN_REVIEW')
+         RETURNING id`,
+        [e.signalId, e.slice, e.prompt, e.completion, e.label,
+          contentFingerprint(e.prompt), e.split, e.authoredBy]);
+      return rows[0]!.id;
+    } catch (err) {
+      // Attempted, not pre-checked. A SELECT-then-INSERT races, and the index is
+      // the actual guard — so the guard is what answers, and the operator gets a
+      // sentence instead of a 500 that teaches them to append "v2".
+      if (String((err as { code?: string }).code) === '23505') throw new DuplicateExample();
+      throw err;
+    }
+  },
+
+  /**
+   * The second pair of eyes.
+   *
+   * Refused in CODE before the CHECK sees it, and NORMALISED first. The
+   * constraint compares raw strings, so `Arun@tulifo.ai` and `arun@tulifo.ai`
+   * are two different people to it and one person to everybody else — four eyes
+   * that are the same two. Trim and case-fold, then compare.
+   */
+  async reviewExample(
+    db: Db, id: string, decision: { readonly state: 'APPROVED' | 'REJECTED'; readonly reviewedBy: string },
+  ): Promise<void> {
+    const { rows } = await db.query<{ authored_by: string }>(
+      `SELECT authored_by FROM training_example WHERE id = $1`, [id]);
+    const row = rows[0];
+    if (!row) throw new Error('no such example');
+    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+    if (same(row.authored_by, decision.reviewedBy)) throw new SameEyes(row.authored_by);
+
+    await db.query(
+      `UPDATE training_example SET state = $2, reviewed_by = $3 WHERE id = $1`,
+      [id, decision.state, decision.reviewedBy]);
   },
 };

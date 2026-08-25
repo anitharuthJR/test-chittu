@@ -84,8 +84,9 @@ Merged to `main`, with tests, since this file last said "Phase 1 not started".
 | **Migrations** | `pnpm db:migrate` with a `schema_migration` ledger. Postgres had no migration path at all before | `apps/api/src/migrate.ts` |
 | **Logging** | `logs/api.log`, redaction enforced by path so §2.2 stops holding by accident | `apps/api/src/logging.ts` |
 | **Metering** | One row per model call — tokens, latency, cost, `rate_version` — against a session pseudonym with no FK to anything. A maths turn and a crisis turn write **zero** rows | `packages/db/metering-repo.ts` |
+| **Signal triage (`/ops/signals`)** | Above-floor shapes only, ranked by sightings; promote → author an example → a **different** operator approves. Refuses in words when fewer than two operators are configured | `apps/api/src/ops/` |
 | **Abstractor + signal capture** | A child's turn becomes a shape (six placeholders, ~1,700-lemma closed vocabulary) and the shape's TEXT is written only on the turn that reaches **25 distinct sessions**. Below the floor: a keyed hash and an integer | `packages/safety-kernel/abstractor.ts`, `packages/db/signal-repo.ts` |
-| **Tests** | **1303**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
+| **Tests** | **1350+**, two Vitest projects; the same suite also runs against real Postgres 16 + pgvector | `pnpm test` |
 
 **What this does not mean.** No gate has moved. The provider router is now real — Anthropic
 adapter, §12 cell assignments, `provider_clearance` enforced in production — but it has never
@@ -445,7 +446,7 @@ reads a script incrementally by byte offset and the file was edited mid-run. The
 re-execs from a snapshot of itself, verified by editing a running copy and watching it ignore the
 edit. **The scorecard file is the artefact; the summary line is a convenience.**
 
-## 8b. The pattern: thirteen instruments, one failure mode
+## 8b. The pattern: fourteen instruments, one failure mode
 
 Every defect in this list is an **instrument reporting success while measuring something other
 than what it claimed**. Not one was found by reading code; every one needed running the thing.
@@ -472,7 +473,8 @@ argument for mutation testing in one line.
 | **the `shapeHash` domain-separation test** | "differs from the blind index — domain separation" | that `fingerprint()` lowercases its input. The comparison shape contained `<PET>`, so the two hashed different strings and differed with or without the domain tag. Deleting the tag left it green |
 | **`router.test.ts` — "the request we actually send"** | the request we actually send | a request the pipeline never produces. Its fixtures built `history` WITHOUT the current turn; `runTurn` appends it before calling any port. So the router double-sent the child's words to every vendor cell, and the classifier's three-turn window showed the latest turn twice — to the one layer whose job is noticing repeats. The two `SessionState` fixtures in the repo start `history: []` and call the router port DIRECTLY, bypassing the append — so the fixtures agreed with the router and disagreed with production from turn one onward |
 | **`ProviderAdapter.controlTokens`** | "what to strip from THIS provider's output" (architecture §12.1) | nothing. Declared in contracts, set by the adapter, read by no code. Pointing it at a pattern that matches nothing broke **zero** tests. Meanwhile the adapter's own strip deleted the `</think>` the kernel slices on, welding a model's reasoning onto its answer — and a test asserted that welded output as correct, with a comment explaining why it was fine |
-| **the first fix for the above** (caught in review, never landed) | "no adapter can forget to strip" | a slice applied to JSON. Moving `stripControlTokens` into `callAdapter` for every category cut a classifier verdict containing `</think>` in half, so a CRISIS `main` catches became FAST-PATH-ONLY. Every test in the change was green; an adversarial review found it by writing a verdict nobody had thought to write |
+| **the schema's GRANT block** | "NOTE the absences, which are the control … the runtime cannot reach the training corpus" | nothing. Both roles are NOLOGIN, every environment connects as the table owner, and `FORCE ROW LEVEL SECURITY` is set on no table — so the grants AND the five RLS policies are inert. Probed: the runtime pool INSERTs into `training_signal` successfully. The one test that exercises the model does `SET LOCAL ROLE` first, so the specification is correct and nothing runs it |
+| **the first fix for the control-token defect** (caught in review, never landed) | "no adapter can forget to strip" | a slice applied to JSON. Moving `stripControlTokens` into `callAdapter` for every category cut a classifier verdict containing `</think>` in half, so a CRISIS `main` catches became FAST-PATH-ONLY. Every test in the change was green; an adversarial review found it by writing a verdict nobody had thought to write |
 
 **The rule this earns.** An eval built from the artefact it tests proves only that the artefact
 is self-consistent. Corpora must come from outside — real child phrasings, panel sessions,

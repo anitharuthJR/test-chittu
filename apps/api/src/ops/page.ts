@@ -65,6 +65,13 @@ button{margin-top:1.1rem;padding:.5rem 1.1rem;border:0;border-radius:4px;
 .who form{display:inline}
 .who button{background:none;color:var(--accent);padding:0;margin:0;
   text-decoration:underline;font-size:13px}
+/* The triage cell: two or three selects and a button, in a column that has to
+   share a table row with a wrapped shape. Without this they stack with a
+   button stranded on its own line and the row grows to five lines. */
+form.triage{display:flex;flex-direction:column;gap:.35rem}
+form.triage label{margin:0;display:flex;flex-direction:column;gap:.15rem}
+form.triage button{margin-top:.4rem;padding:.35rem .8rem;font-size:13px}
+td form.triage select{font-size:13px;padding:.3rem .4rem}
 `;
 
 function shell(title: string, body: string): string {
@@ -203,4 +210,157 @@ ${scoped}
 
 <h2>History</h2>
 ${history}`);
+}
+
+// ---------------------------------------------------------------------------
+// The signals queue (phase 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The vocabularies an operator picks from. All three are enums in the schema,
+ * so a free-text field here would only produce a database error later, in a
+ * language nobody wants to read.
+ */
+export const FAILURE_CLASSES: readonly string[] = Object.freeze([
+  'OVER_REFUSAL', 'UNDER_REFUSAL', 'WRONG_TOKEN', 'HALLUCINATION', 'L6_CATCH',
+  'CLASSIFIER_PARSE', 'PRACTICE_LOOP_STUCK', 'BLOCK_GRAMMAR', 'QUALITY_DEGRADED',
+]);
+export const TOKENS: readonly string[] = Object.freeze(
+  ['CRISIS', 'SPINE', 'UNSAFE', 'PII', 'NONE']);
+/** The five values `training_example_label_vocab` accepts. `null` is legal too. */
+export const LABELS: readonly string[] = Object.freeze(
+  ['CRISIS', 'SPINE', 'UNSAFE', 'PII', 'SAFE']);
+export const LAYERS: readonly string[] = Object.freeze([
+  'L1_LEXICON', 'MATH_LOOP', 'MATH_ENGINE', 'CORPUS', 'SUBJECT',
+  'L2_CLASSIFIER', 'L5_SANDBOX', 'L6_FILTER', 'RENDER',
+]);
+
+export interface SignalsView {
+  readonly operator: string;
+  readonly operatorCount: number;
+  readonly ready: readonly {
+    handle: string; shape: string; sightings: number; k_sessions: number;
+    observed_layer: string | null; observed_token: string | null;
+    failure_class: string | null; band: string | null; country: string | null;
+  }[];
+  readonly subFloor: number;
+  readonly promoted: readonly {
+    id: string; shape: string; failure_class: string;
+    expected_token: string | null; observed_token: string | null; examples: number;
+  }[];
+  readonly pending: readonly {
+    id: string; slice: string; prompt: string; completion: string;
+    label: string | null; split: string; authored_by: string;
+  }[];
+  readonly error?: string | undefined;
+  /** The submitted body, so a rejected form does not throw away typed work. */
+  readonly draft?: Record<string, string> | undefined;
+}
+
+/** NULL means "not always the same", which is not the same as blank. */
+const varies = (v: string | null): string =>
+  v === null ? '<span style="color:var(--dim)">varies</span>' : esc(v);
+
+export function signalsPage(v: SignalsView): string {
+  const d = (k: string): string => esc(v.draft?.[k] ?? '');
+
+  const queue = v.ready.length === 0
+    ? '<p class="note">Nothing has reached the floor yet.</p>'
+    : `<table><tr><th style="width:30%">shape</th><th>seen</th><th>layer</th><th>token</th>
+         <th>class</th><th>band</th><th>where</th><th style="width:22%"></th></tr>${
+  v.ready.map((r) => `<tr>
+        <td class="mono">${esc(r.shape)}</td>
+        <td class="mono" title="${r.k_sessions} distinct sessions, then the count froze at the floor">${r.sightings}</td>
+        <td class="mono">${varies(r.observed_layer)}</td>
+        <td class="mono">${varies(r.observed_token)}</td>
+        <td class="mono">${varies(r.failure_class)}</td>
+        <td>${varies(r.band)}</td>
+        <td>${varies(r.country)}</td>
+        <td><form method="post" action="/ops/signals/promote" class="triage">
+          <input type="hidden" name="handle" value="${esc(r.handle)}">
+          <label>what went wrong<select name="failure_class">${options(FAILURE_CLASSES)}</select></label>
+          <label>should have been<select name="expected_token">${options(TOKENS)}</select></label>
+          ${r.observed_layer === null
+    ? `<label>which layer<select name="observed_layer">${options(LAYERS)}</select></label>` : ''}
+          <button type="submit">Triage</button>
+        </form></td></tr>`).join('')}</table>`;
+
+  const authored = v.promoted.length === 0
+    ? '<p class="note">Nothing triaged yet.</p>'
+    : v.promoted.map((p) => `<form class="card" method="post" action="/ops/signals/examples"
+        style="margin-bottom:1rem">
+      <input type="hidden" name="signal_id" value="${esc(p.id)}">
+      <div class="mono" style="font-size:15px">${esc(p.shape)}</div>
+      <p class="note" style="margin:.3rem 0 0">
+        ${esc(p.failure_class)} · saw ${varies(p.observed_token)} ·
+        should have been ${esc(p.expected_token ?? '—')} ·
+        ${p.examples} example${p.examples === 1 ? '' : 's'} so far</p>
+      <div class="row">
+        <div><label for="s-${esc(p.id)}">Slice</label>
+          <input id="s-${esc(p.id)}" name="slice" type="text" value="${d('slice')}"
+            placeholder="grief · sex-ed-boundary · exam-nerves"></div>
+        <div><label for="l-${esc(p.id)}">Label</label>
+          <select id="l-${esc(p.id)}" name="label">${options(LABELS, undefined, 'no label')}</select></div>
+        <div><label for="sp-${esc(p.id)}">Split</label>
+          <select id="sp-${esc(p.id)}" name="split">${options(['train', 'val', 'eval_holdout'])}</select></div>
+      </div>
+      <label for="p-${esc(p.id)}">What a child types</label>
+      <input id="p-${esc(p.id)}" name="prompt" type="text" value="${d('prompt')}"
+        placeholder="write what a child types, never a sentence a child typed">
+      <label for="c-${esc(p.id)}">What Chittu should say</label>
+      <input id="c-${esc(p.id)}" name="completion" type="text" value="${d('completion')}">
+      <button type="submit">Author example</button>
+      <p class="note">Recorded against <strong>${esc(v.operator)}</strong> as the author, which
+      means you cannot be the one who approves it.</p>
+    </form>`).join('');
+
+  const review = v.pending.length === 0
+    ? '<p class="note">Nothing waiting.</p>'
+    : `<table><tr><th>slice</th><th>prompt</th><th>answer</th><th>label</th>
+         <th>split</th><th>by</th><th></th></tr>${
+  v.pending.map((e) => `<tr>
+        <td class="mono">${esc(e.slice)}</td>
+        <td>${esc(e.prompt)}</td>
+        <td>${esc(e.completion)}</td>
+        <td class="mono">${esc(e.label ?? '—')}</td>
+        <td class="mono">${esc(e.split)}</td>
+        <td>${esc(e.authored_by)}</td>
+        <td>${e.authored_by.trim().toLowerCase() === v.operator.trim().toLowerCase()
+    ? '<span class="note">yours — needs someone else</span>'
+    : `<form method="post" action="/ops/examples/review">
+             <input type="hidden" name="example_id" value="${esc(e.id)}">
+             <button type="submit" name="state" value="APPROVED">Approve</button>
+             <button type="submit" name="state" value="REJECTED"
+               style="background:var(--warn)">Reject</button>
+           </form>`}</td></tr>`).join('')}</table>`;
+
+  return shell('Signals', `
+<div class="who">${esc(v.operator)} ·
+  <form method="post" action="/ops/logout"><button type="submit">sign out</button></form></div>
+<h1>Signals</h1>
+<p class="sub">Shapes the pipeline handled badly, and the examples authored to fix them.
+A shape appears here only once <strong>25 distinct sessions</strong> have produced it —
+below that there is no shape stored to show.</p>
+
+${v.error === undefined ? '' : `<div class="err">${esc(v.error)}</div>`}
+
+<h2>Ready to triage</h2>
+${queue}
+<p class="note">Ordered by how often a shape is seen, not by session count — the session
+count stops at ${25} by design, so it is the same on every row here.
+${v.subFloor > 0
+    ? `${v.subFloor} more shape${v.subFloor === 1 ? ' is' : 's are'} being counted and
+       ${v.subFloor === 1 ? 'has' : 'have'} not reached the floor. There is nothing to show
+       about ${v.subFloor === 1 ? 'it' : 'them'} yet, which is the point of the floor.`
+    : 'No other shapes are being counted.'}</p>
+
+<h2>Triaged — author examples</h2>
+${authored}
+
+<h2>Waiting for a second pair of eyes</h2>
+${v.operatorCount < 2
+    ? `<div class="err">Only one operator is configured, so nothing here can ever be
+       approved: an example needs a reviewer who is not its author. Configure a second
+       operator in <code>CHITTU_OPS_TOKENS</code>.</div>` : ''}
+${review}`);
 }

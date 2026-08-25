@@ -17,7 +17,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createTestDb, localKeyProvider, type DbPool } from '@chittu/db';
+import { createTestDb, localKeyProvider, shapeHash, type DbPool } from '@chittu/db';
+import { abstractShape } from '@chittu/safety-kernel';
 import { buildServer } from './server.js';
 import type { ProviderRouter } from './providers.js';
 import type { FastifyInstance } from 'fastify';
@@ -28,12 +29,41 @@ let fixture: Awaited<ReturnType<typeof createTestDb>>;
 
 beforeAll(async () => { fixture = await createTestDb(); pool = fixture.pool; }, 120_000);
 afterAll(async () => { await fixture?.close(); });
-beforeEach(async () => {
-  await pool.query('DELETE FROM signal_contributor');
-  await pool.query('UPDATE signal_counter SET promoted_to = NULL');
-  await pool.query('DELETE FROM training_signal');
-  await pool.query('DELETE FROM signal_counter');
-});
+/**
+ * SCOPED TO THIS FILE'S OWN SHAPES, never `DELETE FROM signal_counter`.
+ *
+ * Under PGlite every test file gets its own in-process database, so a global
+ * delete here is invisible. Against the real-Postgres lane all 41 files share
+ * one database and run concurrently — so a global delete truncates whatever
+ * `packages/db/src/signal-repo.test.ts` is halfway through, and that file fails
+ * at collection with all 32 of its tests skipped. Intermittently, which is the
+ * worst kind: it passed on the retry.
+ */
+async function forget(text: string) {
+  const shape = abstractShape(text);
+  if (shape === null) return;
+  const h = shapeHash(shape, await keys.indexKey());
+  await pool.query('DELETE FROM signal_contributor WHERE shape_hash = $1', [h]);
+  await pool.query(
+    'DELETE FROM training_signal WHERE shape_hash = $1', [h]);
+  await pool.query('DELETE FROM signal_counter WHERE shape_hash = $1', [h]);
+}
+
+/** The counter for ONE turn's shape. Counting every row reads another file's. */
+async function counterFor(text: string) {
+  const shape = abstractShape(text);
+  if (shape === null) return null;
+  const h = shapeHash(shape, await keys.indexKey());
+  const { rows } = await pool.query<{
+    k_sessions: number; sightings: number; shape: string | null;
+    observed_layer: string; observed_token: string; failure_class: string | null;
+    band: string; country: string;
+  }>(`SELECT k_sessions, sightings, shape, observed_layer::text AS observed_layer,
+             observed_token, failure_class::text AS failure_class, band::text AS band,
+             country::text AS country
+        FROM signal_counter WHERE shape_hash = $1`, [h]);
+  return rows[0] ?? null;
+}
 
 /** A router that answers normally unless told to fail in a specific way. */
 function router(opts: { classify?: 'fail'; generate?: string } = {}): ProviderRouter {
@@ -77,50 +107,47 @@ async function turn(text: string, opts: Parameters<typeof router>[0] = {}) {
   return res;
 }
 
-const counters = async () =>
-  Number((await pool.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM signal_counter`)).rows[0]!.n);
+
 
 // ---------------------------------------------------------------------------
 
 describe('what is NOT captured', () => {
-  it('a good answer captures nothing', async () => {
-    await turn('why is the sky blue');
-    expect(await counters(), 'an ordinary turn was abstracted and stored').toBe(0);
-  });
-
-  it('a MATHS turn captures nothing', async () => {
-    await turn('what is 7 times 8');
-    expect(await counters()).toBe(0);
-  });
-
-  it('a CRISIS turn captures nothing — L1 caught it, which is not a failure', async () => {
-    await turn('i want to hurt myself');
-    expect(await counters(), 'a crisis turn was abstracted and stored').toBe(0);
+  it.each([
+    ['a good answer', 'why is the sky blue'],
+    ['a MATHS turn', 'what is 7 times 8'],
+    ['a CRISIS turn — L1 caught it, which is not a failure', 'i want to hurt myself'],
+  ])('%s captures nothing', async (_label, text) => {
+    await forget(text);
+    await turn(text);
+    expect(await counterFor(text), `${text} was abstracted and stored`).toBeNull();
   });
 });
 
 describe('what IS captured', () => {
   it('a classifier that could not answer', async () => {
-    await turn('tell me about volcanoes', { classify: 'fail' });
-    const { rows } = await pool.query<{
-      observed_layer: string; failure_class: string; k_sessions: number;
-      sightings: number; shape: string | null; band: string; country: string;
-    }>(`SELECT observed_layer, failure_class, k_sessions, sightings, shape, band, country
-          FROM signal_counter`);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({
+    const text = 'tell me about volcanoes';
+    await forget(text);
+    await turn(text, { classify: 'fail' });
+    const row = (await counterFor(text))!;
+    expect({
+      observed_layer: row.observed_layer, failure_class: row.failure_class,
+      k_sessions: row.k_sessions, sightings: row.sightings, shape: row.shape,
+      band: row.band, country: row.country,
+    }).toEqual({
       observed_layer: 'L2_CLASSIFIER', failure_class: 'CLASSIFIER_PARSE',
       k_sessions: 1, sightings: 1, shape: null, band: 'builder', country: 'IN',
     });
   });
 
   it('the sandbox catching what L1 and L2 both let through', async () => {
-    await turn('everything feels like a lot lately', { generate: 'CRISIS' });
-    const { rows } = await pool.query<{
-      observed_layer: string; observed_token: string; failure_class: string | null;
-    }>(`SELECT observed_layer, observed_token, failure_class FROM signal_counter`);
-    expect(rows[0]).toEqual({
+    const text = 'everything feels like a lot lately';
+    await forget(text);
+    await turn(text, { generate: 'CRISIS' });
+    const row = await counterFor(text);
+    expect({
+      observed_layer: row!.observed_layer, observed_token: row!.observed_token,
+      failure_class: row!.failure_class,
+    }).toEqual({
       observed_layer: 'L5_SANDBOX', observed_token: 'CRISIS',
       // Null on purpose: naming the failure class means deciding that L1 and L2
       // were wrong, and that is a person's call at triage.
@@ -129,10 +156,10 @@ describe('what IS captured', () => {
   });
 
   it('the output filter firing', async () => {
-    await turn('do you think about me', { generate: 'I will always miss you when you go' });
-    const { rows } = await pool.query<{ failure_class: string }>(
-      `SELECT failure_class FROM signal_counter`);
-    expect(rows[0]!.failure_class).toBe('L6_CATCH');
+    const text = 'do you think about me';
+    await forget(text);
+    await turn(text, { generate: 'I will always miss you when you go' });
+    expect((await counterFor(text))!.failure_class).toBe('L6_CATCH');
   });
 });
 
@@ -201,30 +228,32 @@ describe('THE GATE — nothing reconstructable reaches the database', () => {
   });
 
   it('never sees a phone number at all — L1 stops that turn two layers earlier', async () => {
-    await turn('call me on 9876543210', { classify: 'fail' });
-    expect(await counters()).toBe(0);
+    const text = 'call me on 9876543210';
+    await forget(text);
+    await turn(text, { classify: 'fail' });
+    expect(await counterFor(text)).toBeNull();
     expect(await grepEverything(['9876543210'])).toEqual([]);
   });
 
   it('holds nothing readable at 24 sessions, and no shape either', async () => {
+    await forget(LOADED);
     for (let i = 0; i < 24; i += 1) await turn(LOADED, { classify: 'fail' });
-    const { rows } = await pool.query<{ k_sessions: number; shape: string | null }>(
-      `SELECT k_sessions, shape FROM signal_counter`);
-    expect(rows[0]!.k_sessions).toBe(24);
-    expect(rows[0]!.shape, 'a shape was stored below the floor').toBeNull();
+    const row = (await counterFor(LOADED))!;
+    expect(row.k_sessions).toBe(24);
+    expect(row.shape, 'a shape was stored below the floor').toBeNull();
     expect(await grepEverything(NEEDLES)).toEqual([]);
   }, 180_000);
 
   it('at 25 the shape appears, and carries none of the child', async () => {
+    await forget(LOADED);
     for (let i = 0; i < 25; i += 1) await turn(LOADED, { classify: 'fail' });
-    const { rows } = await pool.query<{ k_sessions: number; shape: string | null }>(
-      `SELECT k_sessions, shape FROM signal_counter`);
-    expect(rows[0]!.k_sessions).toBe(25);
-    expect(rows[0]!.shape).not.toBeNull();
+    const row = (await counterFor(LOADED))!;
+    expect(row.k_sessions).toBe(25);
+    expect(row.shape).not.toBeNull();
     // The pet, the town, the diagnosis and the number are all gone; what is
     // left is the fact that a child said something with a pet and a number in
     // it while the classifier was down. That is the whole trade.
-    expect(rows[0]!.shape).toBe('my <PET> in <OOV> has <OOV> and is <NUM> years old');
+    expect(row.shape).toBe('my <PET> in <OOV> has <OOV> and is <NUM> years old');
     expect(await grepEverything(NEEDLES)).toEqual([]);
   }, 180_000);
 });
