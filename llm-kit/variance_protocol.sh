@@ -10,7 +10,10 @@
 # ~25 min per seed on an M2 Pro 16GB. Survives Metal-watchdog kills by
 # resuming each 100-iter chunk from the last save.
 set -u
-KIT="$(cd "$(dirname "$0")" && pwd)"
+# CHITTU_KIT survives the re-exec below. Without it the snapshot recomputes
+# KIT from its own temp path and cds into /var/folders, where there is no
+# .venv and no data/ — which is what happened the first time.
+KIT="${CHITTU_KIT:-$(cd "$(dirname "$0")" && pwd)}"
 cd "$KIT" || exit 1
 
 # RUN FROM A SNAPSHOT OF MYSELF, NOT FROM THE FILE ON DISK.
@@ -26,7 +29,7 @@ cd "$KIT" || exit 1
 if [ "${CHITTU_PROTOCOL_PINNED:-}" != "1" ]; then
   SNAP="$(mktemp -t chittu-protocol)"
   cat "$0" > "$SNAP"
-  export CHITTU_PROTOCOL_PINNED=1
+  export CHITTU_PROTOCOL_PINNED=1 CHITTU_KIT="$KIT"
   # shellcheck disable=SC2064
   trap "rm -f '$SNAP'" EXIT
   exec bash "$SNAP" "$@"
