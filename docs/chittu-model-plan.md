@@ -310,7 +310,7 @@ key and the router in front, the teacher is Sonnet or Gemini — which is what
 
 No child turn is involved at any point, so nothing here needs a Council decision.
 
-### Phase 6 — Self-hosted lane (≈2 weeks, and least certain)
+### Phase 6 — Self-hosted lane — **PAUSED by product decision (2026-08-25)**
 
 Two candidates from the landscape:
 
@@ -320,8 +320,15 @@ Two candidates from the landscape:
   this is for word problems, not sums.
 - **`chittu-local`** for the classifier cell, which is what §12.2 always intended.
 
-*Blocked, and honestly:* the Tamil round showed the six-row eval slice has no
-measurement power (three seeds, same corpus, gave 0/2, 1/2 and 2/2 on the same
+*Paused, and separately blocked.* The fine-tuning track is out of scope by a
+product decision on 2026-08-25 (`docs/chittu-status.md` §6b) — no further work on
+multilingual safety beyond L1, or on training a local model. The provider WIRE
+shipped in phase 3 and is unaffected: a cell can point at a self-hosted endpoint
+today; what is paused is training a model to put behind it.
+
+The pre-existing blocker stands and is worth keeping on the record, because it is
+the reason a resumed track would need a rebuilt eval before anything else: the
+Tamil round showed the six-row eval slice has no measurement power (three seeds, same corpus, gave 0/2, 1/2 and 2/2 on the same
 controls). **A self-hosted model cannot be promoted on an eval that cannot
 measure it.** Phase 6 does not start until the eval set is rebuilt — ~25–30
 held-out crisis and as many near-miss SAFE rows.

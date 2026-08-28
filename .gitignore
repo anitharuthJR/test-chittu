@@ -15,6 +15,14 @@ llm-kit/adapters-archive/
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 
+# Secrets. `.env` was NOT ignored, in a repository whose README tells people to
+# set ANTHROPIC_API_KEY and whose main.ts reads five more — so the first person
+# to do the obvious thing would have had a live key staged by `git add -A`.
+# Nothing here has ever held one; that is luck, not a control.
+.env
+.env.*
+!.env.example
+
 # Local credentials. apps/api/src/env-local.ts reads .env.local at the repo
 # root; .dockerignore excludes .env* separately so an image can never bake one.
 # Committing a provider key is not recoverable by deleting it in a later commit.

@@ -280,7 +280,7 @@ From `docs/council/chittu-gap-map.html`. Status column is this repo's reading, A
 |---|---|---|---|---|
 | 01 | Real children have never touched it | CRITICAL | 1 | Open — 0% |
 | 02 | Classifiers are regex, not models | CRITICAL | 1 | Partly closed — v2 added a model classifier; still no ML model, no grooming detection, no adversarial validation |
-| 03 | Safety speaks only English | CRITICAL | 1→3 | Partly closed at L1 ONLY — the lexicon is EN + Tamil + Tanglish and now catches the saaganum family. **The model scores CRISIS 0/3 on held-out Tanglish (§8.1b) and training has zero Tamil-script rows.** L1 is now more multilingual than every layer behind it. |
+| 03 | Safety speaks only English | CRITICAL | 1→3 | **PAUSED beyond L1 (§6b).** Partly closed at L1 ONLY — the lexicon is EN + Tamil + Tanglish and now catches the saaganum family. **The model scores CRISIS 0/3 on held-out Tanglish (§8.1b) and training has zero Tamil-script rows.** L1 is now more multilingual than every layer behind it. |
 | 04 | No voice — pre-literate children excluded | CRITICAL | 2 | Partly closed — browser ASR + TTS ship; own child-speech ASR is the actual moat and is unbuilt |
 | 05 | Consent is mocked, and only Indian | CRITICAL | 1→3 | Partly closed — six jurisdictions in the ledger; every method still a mock button |
 | 06 | Helplines are hardcoded | CRITICAL | 1→3 | Mostly closed — the registry is live (a number is correctable in minutes, no deploy), the sweep job runs, and `docs/runbooks/helpline-p0.md` exists. **Still open:** alerts go to a log rather than a pager, and the sweep is in-process rather than a scheduled task. Nothing dials the numbers — a human is still the verification, by necessity. |
@@ -290,6 +290,37 @@ From `docs/council/chittu-gap-map.html`. Status column is this repo's reading, A
 | 10 | Culture ships as translation | HIGH | 2→3 | Open |
 | 11 | No store approval strategy | MEDIUM | 2 | Open |
 | 12 | School channel unbuilt | MEDIUM | 3 | Open — out of scope by product decision |
+
+---
+
+## 6b. SCOPE DECISION (2026-08-25) — the multilingual and fine-tuning tracks are PAUSED
+
+Product decision, recorded so it is not quietly re-entered: **do not spend
+further effort on multilingual safety beyond L1, or on fine-tuning a local
+model.** That pauses:
+
+- **GAP-03 beyond L1** — the model-layer Tamil/Tanglish work in §8.1b, the
+  crisis-skew corpus sizing in `llm-kit/evals/TAMIL-CRISIS-SKEW.md`, and the
+  eval-set rebuild that phase 6 of the model plan is blocked on.
+- **The `llm-kit/` fine-tuning track** — `train.sh`, `variance_protocol.sh`, the
+  seed rounds, the scorecards, and the G2-by-training route.
+
+**What is NOT paused, and must not be removed on the strength of this:**
+
+- **The L1 lexicon stays multilingual (English + Tamil + Tanglish).** It is a
+  CLAUDE.md invariant, it is shipped, it costs nothing per turn, and it is the
+  only layer that currently catches `saaganum`. Deleting it is not a
+  deprioritisation, it is a regression.
+- **The abstractor's handling of other scripts.** Tamil input collapses to
+  `<OOV>` by construction; that is a privacy property, not a language feature.
+- **The self-hosted PROVIDER** (`apps/api/src/providers/local.ts`). The wire is
+  built and tested. What is paused is training a model to put behind it, not the
+  ability to point at one.
+
+**What this changes about the gate list:** G2 no longer has a route through
+`llm-kit/`. It now depends entirely on the red-team corpus being written and run
+against the hosted model — which was always the shorter path and is §9's
+recommendation anyway.
 
 ---
 
