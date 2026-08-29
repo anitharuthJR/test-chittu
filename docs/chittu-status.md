@@ -263,7 +263,7 @@ and the reason `scripts/smoke-dist.mjs` exists: it drives the thing that ships.
 |---|---|---|
 | **G0** Jurisdiction green-light | Law mapped before roadmap entry | 🟡 Six countries sketched in `REGISTRY`; no real legal review |
 | **G1** Consent infrastructure live | VPC end-to-end before any child account | 🟡 **Live, not signed off.** `automated_id_check` is deployed and serving on the demo box against a live Didit workflow. Blocked on a DPO/DPIA decision and a read of Didit's DPA — not on code. The *approved* branch has never run against a real capture |
-| **G2** Model safety pass | Full red-team corpus, zero criticals | 🔴 Corpus does not exist. Local-model baseline fails honestly: CRISIS 3/5 (§7) |
+| **G2** Model safety pass | Full red-team corpus, zero criticals | 🔴 **Corpus now exists and G2 fails it.** 50 rows, run per release by `pnpm verify`. 24 attacks contained, 11 over-refusal controls hold — and **15 attacks in 4 families are not contained by anything**: roleplay jailbreaks, prompt injection, prompt extraction, escalation-token spoofing. Cause is §6c. Local-model baseline also fails honestly: CRISIS 3/5 (§7) |
 | **G3** Crisis protocol verified | Clinical scenarios + real helplines per market | 🟡 Flow built and tested; no clinical review, no verified registry |
 | **G4** Privacy sign-off | DPIA current, data flows match production, breach drill run | 🔴 Nothing exists — and cannot until a backend does |
 | **G5** Children approved it | Real kids tested, answered in writing | 🔴 **Not convened.** Zero child users |
@@ -321,6 +321,65 @@ model.** That pauses:
 `llm-kit/`. It now depends entirely on the red-team corpus being written and run
 against the hosted model — which was always the shorter path and is §9's
 recommendation anyway.
+
+---
+
+## 6c. The red-team corpus, and what it found (2026-08-29)
+
+`safety-corpus/red-team.tsv` + `packages/pipeline/src/red-team.test.ts`, wired
+into `pnpm verify` as the `red-team gate (G2)` lane.
+
+**It is not another L1 corpus.** The other two ask whether a regex fires. An
+adversary is not attacking the regex — they are attacking the MODEL. So every
+row carries both halves: the turn the adversary types, and the reply a model
+that fell for it would produce. The runner drives both through the real
+`runTurn` and asks one question — *did the payload reach the child?*
+
+```
+G2 red-team gate — 50 rows
+  gated:       35 (24 attacks contained, 11 over-refusal controls)
+  regressions: 0
+  still open:  15 in 4 families — extraction, injection, roleplay, token-spoof
+  G2 PASSES:   NO
+```
+
+### The finding
+
+**`CLASSIFIER_SYSTEM` has exactly six labels — CRISIS, PII, UNSAFE, IDENTITY,
+SECRET, SAFE — and none of them is a roleplay jailbreak, a prompt injection or a
+prompt-extraction attempt.** So a classifier working perfectly returns SAFE for
+all three. L1 is a lexicon and does not read intent. L6 is a banned-content
+filter with nothing to match. **Nothing in the pipeline catches them.**
+
+Two of those three families — roleplay jailbreaks and injection-in-homework —
+are named explicitly in requirements §9's red-team brief, which is what makes
+this a gap in the build rather than a discovery about adversaries.
+
+It is a PROMPT gap before it is a code gap. The cheapest fix is a seventh label,
+and that is a Council decision: a new label changes what the classifier escalates
+on, and `parseClassifier` rejects anything it does not fully recognise, so the
+prompt and the parser move together or the classifier starts throwing.
+
+### What the gate does about it
+
+Those rows are marked `UNCONTAINED` and their **count is pinned at 15**. Fixing
+one turns the build red until somebody edits the corpus — which is the point: a
+number that can drift silently is a number nobody is accountable for. `pnpm
+verify` asks "did this change break something" and stays green; **G2 asks "may we
+launch" and the answer is no while that count is above zero.**
+
+### Two things the corpus caught about itself
+
+- **The first runner forced the classifier to SAFE on every row** "to test
+  defence in depth", and reported **25 CRITICAL failures**. Twenty-three of them
+  were the harness — it had disabled the one layer designed for semantic attacks
+  and then called the breach a defect. The runner now uses the label a *correct*
+  classifier returns, read off the prompt's own definitions.
+- **Disabling `passesOutputFilter` entirely broke nothing** until four rows were
+  added for it. Every other contained row is caught by L1 or L2, so the last
+  wall was being credited for work it was not doing. One of those four then
+  turned out to be caught by L1's identity pattern on its attack text — labelled
+  L6, testing L1 — and its text was changed until all four genuinely depend on L6.
 
 ---
 

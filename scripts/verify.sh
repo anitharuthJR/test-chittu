@@ -74,6 +74,9 @@ step "prototype (playwright)" pnpm test:prototype
 step "guard grader"       python3 llm-kit/test_eval_guard.py
 step "corpus leakage"     bash -c 'cd llm-kit && python3 check_leakage.py'
 step "L1 crisis gate"     pnpm vitest run --project server packages/safety-kernel
+# G2. Regressions block; the open-gap COUNT is pinned, so fixing one also fails
+# here until the corpus is updated — which is how a number stops drifting.
+step "red-team gate (G2)" pnpm vitest run --project server packages/pipeline/src/red-team.test.ts
 
 # The emit, not the sources. `pnpm test` resolves @chittu/* through the
 # `development` export condition and therefore proves nothing about dist/ —
