@@ -17,6 +17,7 @@
  */
 
 import type {
+  GuardKind,
   Band, ClassifierOutcome, Country, Flag, ImageInput, Memory, Mode, PipelineLayer,
   RouteContext, TurnResponse, TurnSignal,
 } from '@chittu/contracts';
@@ -545,9 +546,31 @@ async function continueAfterMaths(
   } else if (outcome.label !== 'SAFE') {
     // The classifier can escalate on its own — indirect crisis is exactly what
     // L1 cannot see. Torn cases resolve to CRISIS upstream, in the classifier.
-    const kind = outcome.label === 'CRISIS' ? 'crisis'
-      : outcome.label === 'PII' ? 'pii'
-      : outcome.label === 'UNSAFE' ? 'unsafe' : 'identity';
+    /**
+     * EXHAUSTIVE, with no fall-through. This was a chain ending in `: 'identity'`
+     * — so every label that was not CRISIS/PII/UNSAFE became the identity spine,
+     * and the classifier's SECRET was one of them. A child asking "will it stay
+     * between us forever", which L1's lexicon misses, was answered with "I'm a
+     * computer program … I don't feel love or miss people" and raised no parent
+     * flag, because the no-secrets spine and its SECRET_KEEPING flag were
+     * unreachable from L2. Phrasing chosen to dodge a lexicon is exactly what a
+     * groomer produces, so L2 was the path that mattered most.
+     *
+     * A `default` that picked something would put the next label back in the
+     * same position, so there is none: an unrecognised label is a programming
+     * error and says so.
+     */
+    const kind = ((): GuardKind => {
+      switch (outcome.label) {
+        case 'CRISIS': return 'crisis';
+        case 'PII': return 'pii';
+        case 'UNSAFE': return 'unsafe';
+        case 'SECRET': return 'secret';
+        case 'IDENTITY': return 'identity';
+        case 'OVERRIDE': return 'override';
+      }
+      throw new Error(`unmapped classifier label: ${String(outcome.label)}`);
+    })();
     const fx = GUARD_EFFECTS[kind];
     if (fx.flagKey && fx.flagCategory) {
       walk.flags.push({
@@ -556,7 +579,7 @@ async function continueAfterMaths(
     }
     const body = kind === 'crisis'
       ? crisisMain(state.band, state.country, state.helplines)
-      : spineFor(fx.spine as 'pii' | 'unsafe' | 'identity' | 'secret', state.band);
+      : spineFor(fx.spine as Exclude<GuardKind, 'crisis' | 'profanity'>, state.band);
     return await reply(state, walk, ports, body, `${fx.trace} · L2`, {
       spineCount: state.spineCount + 1,
       crisisLock: fx.locksChat ? true : state.crisisLock,

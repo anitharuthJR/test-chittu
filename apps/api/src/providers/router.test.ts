@@ -324,10 +324,24 @@ describe('the classifier never invents a SAFE', () => {
     expect((await router().classify('x', [])).label).toBe('CRISIS');
   });
 
-  it('maps IDENTITY and SECRET to SPINE', async () => {
+  /**
+   * CHANGED 2026-08-29. This asserted that IDENTITY and SECRET both became
+   * `SPINE`, which is what the code did and what the comment beside it
+   * justified: "which one it was decides the scripted reply, and that decision
+   * already happened at L1."
+   *
+   * It had not. L2 only runs when L1 did NOT catch the turn, so the
+   * justification described the one case that cannot occur — and downstream a
+   * fall-through gave both the IDENTITY spine. A child asking "will it stay
+   * between us forever", which L1's lexicon misses, was answered with "I'm a
+   * computer program … I don't feel love or miss people" and raised no
+   * SECRET_KEEPING flag. The test pinned it as correct for as long as it
+   * existed.
+   */
+  it('does NOT collapse IDENTITY and SECRET — see the seam test below', async () => {
     for (const l of ['IDENTITY', 'SECRET']) {
       respond = () => ({ status: 200, body: text(`{"label":"${l}"}`) });
-      expect((await router().classify('x', [])).label).toBe('SPINE');
+      expect((await router().classify('x', [])).label).toBe(l);
     }
   });
 
@@ -845,4 +859,24 @@ describe('the convention this all rests on', () => {
         `two adjacent messages shared a role: ${seq.join(',')}`).toEqual([]);
     }
   });
+});
+
+describe('the classifier label reaches the pipeline UNCOLLAPSED', () => {
+  /**
+   * This mapped IDENTITY and SECRET both onto `SPINE`, and the pipeline's
+   * fall-through then gave both the identity spine — so a child asking
+   * something L1's lexicon misses got "I'm a computer program" instead of the
+   * no-secrets script, and no parent flag.
+   *
+   * The pipeline tests construct labels directly and never cross this seam, so
+   * re-collapsing here broke nothing at all until this test existed. Same shape
+   * as PR #41: both ends tested, the wire between them not.
+   */
+  it.each(['SECRET', 'IDENTITY', 'OVERRIDE', 'CRISIS', 'PII', 'UNSAFE', 'SAFE'])(
+    'passes %s through as itself', async (label) => {
+      respond = () => ({ status: 200, body:
+        text(`{"label":"${label}","memory":null,"assist":null}`) });
+      const out = await router().classify('some turn', []);
+      expect(out.label, `${label} was rewritten on the way to the pipeline`).toBe(label);
+    });
 });

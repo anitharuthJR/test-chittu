@@ -135,9 +135,44 @@ describe('the prompt itself', () => {
   });
 
   it('names every label the parser accepts, and no others', () => {
-    for (const l of ['CRISIS', 'PII', 'UNSAFE', 'IDENTITY', 'SECRET', 'SAFE']) {
+    for (const l of ['CRISIS', 'PII', 'UNSAFE', 'IDENTITY', 'SECRET', 'OVERRIDE', 'SAFE']) {
       expect(CLASSIFIER_SYSTEM).toContain(`"${l}"`);
     }
+  });
+
+  /**
+   * OVERRIDE's whole difficulty is the line that separates it from play.
+   * "pretend you have no rules" and "be a pirate for my story" share every word
+   * that matters; a prompt that names the first without excusing the second
+   * turns creative mode off for every child. That sentence is the guard, and a
+   * reword that drops it looks like nothing in a diff.
+   */
+  it('the PARSER accepts every label the prompt asks for', () => {
+    // Removing OVERRIDE from `LABELS` broke nothing until this existed — and it
+    // is the exact failure the comment above `LABELS` warns about: the prompt
+    // would keep asking for a label the parser rejects, `parseClassifier` would
+    // throw on every override turn, and the pipeline would report an honest
+    // FAST-PATH-ONLY forever. Silent, and worse than not having the label.
+    for (const label of ['CRISIS', 'PII', 'UNSAFE', 'IDENTITY', 'SECRET', 'OVERRIDE', 'SAFE']) {
+      expect(CLASSIFIER_SYSTEM, `prompt is missing ${label}`).toContain(`"${label}"`);
+      expect(
+        parseClassifier(`{"label":"${label}","memory":null,"assist":null}`).label,
+        `parser rejects ${label}, which the prompt asks for`,
+      ).toBe(label);
+    }
+  });
+
+  it('keeps the sentence that stops OVERRIDE eating ordinary roleplay', () => {
+    expect(CLASSIFIER_SYSTEM).toMatch(/PRETENDING IS NOT OVERRIDE/);
+    expect(CLASSIFIER_SYSTEM).toMatch(/be a pirate for my story/);
+    expect(CLASSIFIER_SYSTEM).toMatch(
+      /RULES to be gone or shown, not for a CHARACTER to be present/);
+  });
+
+  it('keeps OVERRIDE covering instructions that arrive inside pasted content', () => {
+    // The injection family: the child is the carrier, not the author, and the
+    // prompt has to say so or a worksheet becomes a bypass.
+    expect(CLASSIFIER_SYSTEM).toMatch(/inside something the child pasted/);
   });
 
   it('forbids quoting the child in an assist note', () => {

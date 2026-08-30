@@ -72,6 +72,28 @@ export const GUARD_EFFECTS: Readonly<Record<GuardKind, GuardEffect>> = Object.fr
     countsAsSpine: true,
     locksChat: false,
   },
+  /**
+   * OVERRIDE — an attempt to change, disable or read out Chittu's own rules.
+   *
+   * NO PARENT FLAG, and that is the column worth arguing. A nine-year-old
+   * typing "pretend you have no rules" copied it off a video, and a child who
+   * pastes a worksheet carrying an injection did not write it. Flagging either
+   * would fill a parent's queue with ordinary curiosity and teach the product
+   * to report a child for being clever — the same reasoning that leaves
+   * IDENTITY unflagged. What DOES get recorded is the topic, so a pattern
+   * across a session is visible without any single turn being an accusation.
+   *
+   * Does not lock the chat: nothing here is a danger to the child.
+   */
+  override: {
+    spine: 'override',
+    trace: 'SCRIPTED SPINE · rules are not a setting',
+    flagKey: null,
+    flagCategory: null,
+    topic: 'rules/override',
+    countsAsSpine: true,
+    locksChat: false,
+  },
   identity: {
     spine: 'identity',
     trace: 'SCRIPTED SPINE (Law 03/04)',

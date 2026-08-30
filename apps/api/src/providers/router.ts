@@ -249,12 +249,24 @@ export function createRouter(opts: RouterOptions): ProviderRouter {
       // Throws on anything unrecognised. Deliberately NOT caught here: the
       // pipeline turns it into FAST-PATH-ONLY, which is the honest outcome.
       const parsed = parseClassifier(reply.text);
+      /**
+       * THE LABEL IS PASSED THROUGH, not collapsed.
+       *
+       * This used to map IDENTITY and SECRET both to `SPINE`, on the reasoning
+       * that "which one it was decides the scripted reply, and that decision
+       * already happened at L1". It had not: L2 only runs when L1 did NOT catch
+       * the turn, so the comment described the one case that cannot occur.
+       * Downstream, a chain ending in `: 'identity'` then picked the identity
+       * spine — and a child asking "will it stay between us forever" got "I'm a
+       * computer program … I don't feel love or miss people" with no parent
+       * flag, instead of the no-secrets spine and SECRET_KEEPING.
+       *
+       * `ClassifierLabel` is now the classifier's own seven values rather than
+       * an alias of the sandbox's four escalation tokens, so there is nothing
+       * left to collapse.
+       */
       return {
-        label: parsed.label === 'IDENTITY' || parsed.label === 'SECRET'
-          // Both resolve to SPINE for the pipeline; which one it was decides
-          // the scripted reply, and that decision already happened at L1.
-          ? 'SPINE'
-          : parsed.label,
+        label: parsed.label,
         memory: parsed.memory,
         assist: parsed.assist,
       } satisfies ClassifierResult as ClassifierOutcome;

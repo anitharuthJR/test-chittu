@@ -29,7 +29,24 @@ import type { GuardKind } from '@chittu/contracts';
  * was missed on the first pass. The structure is kept so a diff against
  * chittu-v3.html lines up; `L1_PATTERNS` below is what makes dispatch complete.
  */
-export type LexKind = Exclude<GuardKind, 'profanity'>;
+/**
+ * `profanity` is the Kindness Guard and sits outside `LEX` by design.
+ *
+ * `override` is excluded for a different and stronger reason: L1 is a lexicon,
+ * and a jailbreak has no vocabulary. "pretend you have no rules" and "be a
+ * pirate for my story" share every word that matters; only intent separates
+ * them, and intent is exactly what a regex cannot read. A pattern here would
+ * either miss the attack or refuse the play, and refusing a child's story is a
+ * real harm rather than a safe default.
+ *
+ * So OVERRIDE is an L2-ONLY judgement — the one guard kind with no fast path —
+ * and that is a property worth stating rather than a gap. `l1-dispatch.test.ts`
+ * asserts L1 stays silent on both halves of that pair.
+ */
+export type LexKind = Exclude<GuardKind, 'profanity' | 'override'>;
+
+/** Everything L1 can dispatch: the five in LEX plus the Kindness Guard. */
+export type L1Kind = Exclude<GuardKind, 'override'>;
 
 /**
  * The raw patterns, exported so tests can assert the source text itself.
@@ -61,7 +78,7 @@ export const PROFANITY = /\b(damn|hell|crap|shit|fuck|bitch|bastard|asshole|dick
  * "i want to die, he has a gun" is a crisis and never merely unsafe, and
  * "what the hell are you" is identity before it is profanity.
  */
-export const L1_ORDER: readonly GuardKind[] = Object.freeze([
+export const L1_ORDER: readonly L1Kind[] = Object.freeze([
   'crisis',
   'pii',
   'unsafe',
@@ -70,8 +87,15 @@ export const L1_ORDER: readonly GuardKind[] = Object.freeze([
   'profanity',
 ]);
 
-/** Every L1 pattern by kind — the five in LEX plus the Kindness Guard. */
-export const L1_PATTERNS: Readonly<Record<GuardKind, RegExp>> = Object.freeze({
+/**
+ * Every L1 pattern by kind — the five in LEX plus the Kindness Guard.
+ *
+ * `Record<L1Kind, …>`, not `Record<GuardKind, …>`: `override` is a guard kind
+ * with no L1 pattern at all, deliberately, because a jailbreak has no
+ * vocabulary to match on. Typing this as GuardKind would demand a regex that
+ * must not exist and could only be satisfied by inventing one.
+ */
+export const L1_PATTERNS: Readonly<Record<L1Kind, RegExp>> = Object.freeze({
   ...LEX,
   profanity: PROFANITY,
 });
@@ -84,7 +108,7 @@ export const L1_PATTERNS: Readonly<Record<GuardKind, RegExp>> = Object.freeze({
  * (line 1047) tests LEX.crisis on its own and never reaches this dispatch, so
  * that decision stays with the pipeline caller.
  */
-export function scan(text: string): GuardKind | null {
+export function scan(text: string): L1Kind | null {
   for (const kind of L1_ORDER) {
     if (L1_PATTERNS[kind].test(text)) return kind;
   }

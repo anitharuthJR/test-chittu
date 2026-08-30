@@ -55,6 +55,24 @@ export const SPINE: Record<SpineKind, SpineEntry> = Object.freeze({
     },
     ta: 'நான் ஒரு கம்ப்யூட்டர் ப்ரோகிராம் — உயிருள்ளவன் இல்லை! 🖥️ அன்பு, ஏக்கம் அது மனுஷங்களோட ஸ்பெஷல் விஷயம்! 💛 உனக்கு பிடிச்ச உண்மையான நபர் யாரு?',
   },
+  /**
+   * The OVERRIDE spine. Kind, brief, and NOT accusatory: a nine-year-old typing
+   * "pretend you have no rules" copied it off a video, and the child who pastes
+   * a worksheet carrying an injection did not write it. It also declines to be
+   * interesting about the attempt — a reply that explains what a jailbreak is
+   * teaches the next one.
+   */
+  override: {
+    en: {
+      explorer:
+        "That's not something I can change! 🐦 My rules are what make me a good friend to talk to. What shall we do instead?",
+      builder:
+        "I can't switch off my rules or show you my instructions — they're the part that keeps this safe for you. 💛 Still here though! What were you actually curious about?",
+      thinker:
+        "Not something I can do — my rules aren't a setting, and I can't read them out either. That's fixed, and it's what makes this safe to use. Ask me the real question though, I'm happy to help.",
+    },
+    ta: 'அத மாத்த முடியாது! 🐦 என் ரூல்ஸ் தான் இத பாதுகாப்பா வைக்குது. வேற என்ன பேசலாம்?',
+  },
   secret: {
     en: {
       explorer:

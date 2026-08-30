@@ -45,11 +45,11 @@ export type Mode =
  * spent no tokens at all.
  */
 export type GuardKind =
-  | 'crisis' | 'pii' | 'unsafe' | 'secret' | 'identity' | 'profanity';
+  | 'crisis' | 'pii' | 'unsafe' | 'secret' | 'identity' | 'profanity' | 'override';
 
 /** Declaration order. The DISPATCH order lives in safety-kernel's L1_ORDER. */
 export const GUARD_KINDS = Object.freeze(
-  ['crisis', 'pii', 'unsafe', 'secret', 'identity', 'profanity'] as const,
+  ['crisis', 'pii', 'unsafe', 'secret', 'identity', 'profanity', 'override'] as const,
 );
 
 /**
@@ -61,8 +61,30 @@ export type EscalationToken = 'CRISIS' | 'SPINE' | 'UNSAFE' | 'PII';
 
 export const ESCALATION_TOKENS = ['CRISIS', 'SPINE', 'UNSAFE', 'PII'] as const;
 
-/** Classifier labels. SAFE is the only one that proceeds to the sandbox. */
-export type ClassifierLabel = 'SAFE' | EscalationToken;
+/**
+ * What the CLASSIFIER may return. SAFE is the only one that proceeds to the
+ * sandbox.
+ *
+ * DELIBERATELY NOT `EscalationToken`, which it used to alias. Those four —
+ * CRISIS, SPINE, UNSAFE, PII — are the SANDBOX's vocabulary, the exact strings
+ * a model emits to hand control back to the scripts. Reusing them here meant
+ * the classifier had one bucket, `SPINE`, for two different judgements, and the
+ * router collapsed IDENTITY and SECRET into it on the reasoning that "which one
+ * it was decides the scripted reply, and that decision already happened at L1".
+ *
+ * It had not. L2 only runs when L1 did NOT catch the turn, so the comment
+ * described the one case that cannot occur — and a child asking "will it stay
+ * between us forever", which L1's lexicon misses, was answered with the
+ * IDENTITY spine ("I'm a computer program … I don't feel love or miss people")
+ * and raised NO parent flag. The no-secrets spine and its SECRET_KEEPING flag
+ * were unreachable from L2, which is exactly the path that matters: phrasing
+ * chosen to dodge a lexicon is what a groomer produces.
+ *
+ * So the classifier now says what it decided, and `runTurn` maps it
+ * exhaustively.
+ */
+export type ClassifierLabel =
+  | 'CRISIS' | 'PII' | 'UNSAFE' | 'IDENTITY' | 'SECRET' | 'OVERRIDE' | 'SAFE';
 
 /**
  * The fixed pipeline order (CLAUDE.md — never reorder or skip a layer).

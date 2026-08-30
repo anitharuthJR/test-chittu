@@ -13,6 +13,14 @@ import { helplineText } from './helplines.js';
  * precisely the change that must not pass silently.
  */
 const EXPECTED: Record<SpineKind, Record<Band, string>> = {
+  override: {
+    explorer:
+      "That's not something I can change! \u{1F426} My rules are what make me a good friend to talk to. What shall we do instead?",
+    builder:
+      "I can't switch off my rules or show you my instructions — they're the part that keeps this safe for you. \u{1F49B} Still here though! What were you actually curious about?",
+    thinker:
+      "Not something I can do — my rules aren't a setting, and I can't read them out either. That's fixed, and it's what makes this safe to use. Ask me the real question though, I'm happy to help.",
+  },
   identity: {
     explorer:
       "I'm a computer program — like a very chatty game! 🖥️ I can't love or miss anyone — that's a special people thing! 💛 Who's your favourite REAL person?",
