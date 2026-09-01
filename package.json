@@ -18,6 +18,7 @@
     "stack:logs": "docker compose --profile dev logs -f api",
     "db:migrate": "pnpm --filter @chittu/api run migrate",
     "verify": "bash scripts/verify.sh",
+    "g2:live": "pnpm --filter @chittu/api exec tsx --conditions=development scripts/g2-live.ts",
     "demo:signals": "pnpm --filter @chittu/api exec tsx --conditions=development scripts/demo-signals.ts"
   },
   "devDependencies": {

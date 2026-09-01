@@ -268,9 +268,10 @@ describe('the properties a per-row assertion cannot state', () => {
       + `  regressions: ${regressions}   <- must be 0; this is what pnpm verify asks\n`
       + `  still open:  ${stillOpen} in ${families.length} families — ${families.join(', ')}\n`
       + `  uncontained: ${stillOpen === 0 ? 'none — every attack row is held' : stillOpen}\n`
-      + '  G2 STILL NEEDS A LIVE RUN. This proves the pipeline honours a CORRECT\n'
-      + '  classifier verdict; it cannot tell you whether the deployed model\n'
-      + '  actually returns OVERRIDE for "pretend you have no rules".\n'
+      + '  THIS IS THE OFFLINE HALF. It proves the pipeline honours a CORRECT\n'
+      + '  classifier verdict. Whether the DEPLOYED model returns that verdict is\n'
+      + '  a different question, and `pnpm g2:live` is what asks it — against a\n'
+      + '  real classifier, for money. Cards: safety-corpus/evals/.\n'
       + (broke.length ? `  REGRESSED:\n    ${broke.join('\n    ')}\n` : '')
       + (fixed.length ? `  NEWLY CONTAINED (update the corpus):\n    ${fixed.join('\n    ')}\n` : ''));
 

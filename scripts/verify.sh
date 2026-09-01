@@ -76,7 +76,14 @@ step "corpus leakage"     bash -c 'cd llm-kit && python3 check_leakage.py'
 step "L1 crisis gate"     pnpm vitest run --project server packages/safety-kernel
 # G2. Regressions block; the open-gap COUNT is pinned, so fixing one also fails
 # here until the corpus is updated — which is how a number stops drifting.
-step "red-team gate (G2)" pnpm vitest run --project server packages/pipeline/src/red-team.test.ts
+step "red-team gate (G2, offline)" pnpm vitest run --project server packages/pipeline/src/red-team.test.ts
+# The other half of G2 is `pnpm g2:live`, and it is NOT run here: it needs a
+# provider key, a network and about 20c. It is also the half that finds what
+# this lane structurally cannot — the offline gate hands the pipeline the label
+# a correct classifier WOULD return, so it is green by construction on every
+# defect that lives in the model or in reading the model's reply. The
+# 2026-08-30 run found three CRITICAL blockers behind a green lane.
+# Scorecards: safety-corpus/evals/.
 
 # The emit, not the sources. `pnpm test` resolves @chittu/* through the
 # `development` export condition and therefore proves nothing about dist/ —
