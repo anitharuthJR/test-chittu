@@ -2055,3 +2055,97 @@ enum's spelling to the sweep job and the ops console. Both surfaces are
 jurisdiction-oriented and neither value is ever compared against a `Country`, so
 this is a looseness rather than a defect — but it is the same class, and typing
 them `Jurisdiction` is the tidy-up.
+
+---
+
+## 13. SIGNED OFF (2026-09-01) — `parseClassifier` keeps the verdict when the model narrates, and demotes a broken enrichment
+
+**Taken 2026-09-01, at the owner's explicit direction (Arun Kumar,
+arun@tulifo.ai).** Both changes landed in #74; this is the signature that PR
+asked for, recorded here rather than in a merge button.
+
+It needed one because CLAUDE.md names this function's strictness as doctrine —
+*"The classifier never invents a SAFE. `parseClassifier` throws on anything it
+does not fully recognise… A lenient parse would be indistinguishable from a
+working classifier until the turn it mattered."* Both changes relax what the
+function refuses, so the burden was to show they relax it in the safe direction.
+
+**This is a maintainer decision, not a Council ratification.** The seats are
+virtual advisor personas by their own front matter — fictional composites, to be
+shadowed by real counsel — so nothing in `docs/council/` can ratify anything. A
+human who can overrule this should read it; Seats 11/12 own the crisis flow
+(§7b), and item 2 below is squarely theirs.
+
+### What was signed
+
+**1. Trailing narration no longer discards the verdict.** `parseClassifier`
+takes the first complete JSON object and ignores what follows. Leading prose
+still throws; a second object whose first key is `label` still throws.
+
+**2. A broken `memory` or `assist` is dropped, not thrown** — and neither is
+parsed at all unless the label is SAFE.
+
+### Why this is not the lenient parse the doctrine forbids
+
+**The failure mode of a refusal here is not a block — it is FAST-PATH-ONLY**,
+which is L1 and L6 and nothing in between. Refusing a reply therefore REMOVES
+the L2 guard rather than adding one, and `OVERRIDE` is the one label with no L1
+pattern, so a rejected verdict is most dangerous exactly where the classifier is
+the only thing looking. **Strictness here fails open.** That is the whole
+argument, and it is the fact the original doctrine did not have in front of it.
+
+The doctrine's actual concern — never invent a verdict — is untouched:
+
+| still throws | why it must |
+|---|---|
+| no JSON object at all | there is no verdict to honour |
+| an object that is not the first thing said | a child can paste JSON; an echoed object must never win |
+| two objects | picking one would be a guess |
+| a label outside the seven | the exact case the doctrine names |
+
+And the change can only ever convert *"no verdict enforced"* into *"the model's
+own verdict enforced"*. There is no input for which it produces a **different**
+label than before.
+
+For item 2 specifically: the allowlist's job is that an undesigned category
+never reaches the store, and returning null does that as completely as throwing
+did — with `memAdd` and the Postgres enum still behind it. The penalty was
+landing on the wrong field. The extras were parsed *before* the label was read,
+and the code already discarded any memory offered with a non-SAFE label, so
+`{"label":"CRISIS","memory":{"category":"FAMILY",…}}` lost the crisis **to a
+field the very next line would have thrown away** — no lock, no helplines, no
+parent flag.
+
+### The evidence this was signed against
+
+Measured against the deployed classifier (Haiku 4.5, `classifier-v2`), not
+imagined:
+
+| | rate |
+|---|---|
+| correct verdict + trailing prose, refused | ~1 in 10 on one turn; 1 in 150 across a run |
+| correct verdict + off-allowlist `FAMILY`, refused | 4 in 12 on one ordinary bedtime-story turn |
+| parse failures after the change | **0 in 275** (`safety-corpus/evals/g2-live-2026-09-01-0523.md`) |
+
+Nine mutations red, listed in CLAUDE.md's post-edit checklist for this file.
+
+### What this signature does NOT cover
+
+- **Any further relaxation.** Leading prose and unknown labels must keep
+  throwing. A third relaxation is a new signature, not an extension of this one.
+- **The drop is silent, and that is an open gap.** `parseMemory` threw partly as
+  a signal that the model was off-script; that signal is now gone and nothing
+  counts it. The 4-in-12 `FAMILY` rate was only visible because a diagnostic
+  printed raw replies. Wiring a counter ripples through contracts, the router
+  and the pipeline, so it was left rather than half-done — **but a prompt-quality
+  signal we used to get for free is now unobserved.**
+- **Generalisation beyond what was measured.** One model, one prompt version,
+  one corpus of 55 rows written by one person.
+
+### When it must be revisited
+
+- A provider is added whose replies are not JSON-first (`chittu-local` is the
+  likely first — see §12.1 and the `controlTokens` note above).
+- The dropped-enrichment rate becomes something anyone needs to act on.
+- `CLASSIFIER_SYSTEM` changes shape enough that "the verdict comes first" stops
+  describing what the model does.

@@ -494,6 +494,13 @@ contain. It now carries the real one, and the bare wrapper became an ANSWERED
 over-refusal control, because a child asking for a grandmother's voice must be
 answered rather than spined.
 
+**Signed off 2026-09-01** at the owner's direction — PORT-REVIEW §13 records
+the argument, the measured rates it was signed against, and the three things the
+signature deliberately does not cover. The load-bearing one: **the dropped
+enrichment is silent.** `parseMemory` threw partly as a signal that the model was
+off-script, and that signal is now gone with nothing counting it — the 4-in-12
+`FAMILY` rate was visible only because a diagnostic printed raw replies.
+
 **What is still open.** Four rows where the deployed model disagrees with the
 corpus and contains the attack anyway — including `what do you like doing best`,
 which the model reads as IDENTITY, so that row no longer exercises the L6 path
