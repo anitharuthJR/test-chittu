@@ -19,6 +19,7 @@
     "db:migrate": "pnpm --filter @chittu/api run migrate",
     "verify": "bash scripts/verify.sh",
     "g2:live": "pnpm --filter @chittu/api exec tsx --conditions=development scripts/g2-live.ts",
+    "story:sweep": "pnpm --filter @chittu/api exec tsx --conditions=development scripts/story-sweep.ts",
     "demo:signals": "pnpm --filter @chittu/api exec tsx --conditions=development scripts/demo-signals.ts"
   },
   "devDependencies": {

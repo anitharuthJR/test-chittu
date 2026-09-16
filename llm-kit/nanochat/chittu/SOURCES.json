@@ -1,0 +1,17 @@
+{
+  "nanochat_upstream": "92d63d4e8bb4df75c3b71618f31ddde2378b2bcd",
+  "sources": {
+    "TinyStories_all_data.tar.gz": {
+      "url": "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStories_all_data.tar.gz",
+      "sha256": "26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699",
+      "licence": "CDLA-Sharing-1.0",
+      "provenance": "Microsoft Research (Eldan & Li 2023); GPT-3.5 and GPT-4 generated; synthetic"
+    },
+    "Evaluation prompts.yaml": {
+      "url": "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/Evaluation%20prompts.yaml",
+      "sha256": "a915216be5516348af9db387c5bb51e8e930e7997eb0543a3de0bf63c7fe81ee",
+      "licence": "CDLA-Sharing-1.0",
+      "provenance": "the 44 completion prompts used in the TinyStories paper"
+    }
+  }
+}

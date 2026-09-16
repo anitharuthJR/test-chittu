@@ -1,0 +1,120 @@
+{
+  "counts": {
+    "sft_skipped_long": 70398,
+    "sft_train": 100000,
+    "sft_val": 2000,
+    "train": 2303984,
+    "val": 23272
+  },
+  "dataset_sha256": "67eea717175046bae683520082cb7a15ec7d18fa074cdf50f0500fdd9c8a11b8",
+  "nanochat_upstream": "92d63d4e8bb4df75c3b71618f31ddde2378b2bcd",
+  "prepare": {
+    "by_source": {
+      "GPT-3.5": 2222541,
+      "GPT-4": 2745330
+    },
+    "drop_features": [
+      "BadEnding"
+    ],
+    "dropped_duplicate": 186,
+    "dropped_feature": 250322,
+    "dropped_source": 2222541,
+    "keep_sources": [
+      "GPT-4"
+    ],
+    "kept": 2494822,
+    "limit": 0,
+    "tar": "TinyStories_all_data.tar.gz",
+    "total": 4967871
+  },
+  "sft_files": {
+    "stories.sft.train.jsonl": "adb0c6a06f7537ea098144fe9678eabd193334deb56edb362beb57e3b35de310",
+    "stories.sft.val.jsonl": "347bff177b0f30870945c064d4d009641404c7b5059333601f0da45e1af79bc1"
+  },
+  "shards": {
+    "shard_00000.parquet": "97b340a785abf48304bf764584d5ab68755a1573efd9fdab6bd0e75a565facda",
+    "shard_00001.parquet": "8685f494081c447ac46629bab1f2689b1b4a0483a63f29f7dbd090684a8286f3",
+    "shard_00002.parquet": "5e73cb766626d048cf70254dc724267ad4e18ddfab1766e0236d4b0f7d0b2698",
+    "shard_00003.parquet": "294b0eb120c14eedb63fe3ab51b3846e7ad82d142cfdabc9d5e8f48169edecfe",
+    "shard_00004.parquet": "97834792a03be03ffbb766e838a55c826eb8612d8d7f9a323d0ad55392d883fb",
+    "shard_00005.parquet": "dc2e76a5d17113ddd3eeeea4247a9c9ae1daec948f62ef007703b55fbdaac02c",
+    "shard_00006.parquet": "d1253fcfb692aade81213522de0a11026a0ba4127276f7b694b13bfdf280897c",
+    "shard_00007.parquet": "3fc699b2867749059d90d2790b91cc9c4700e6eedc52cc5cd109b9cd38a18dd5",
+    "shard_00008.parquet": "62e5273bdadb171a7a65a85f7c7ca26cd1f8bd69bf433b9c8222657e04350919",
+    "shard_00009.parquet": "91199be85c2a0e68f104a37fd782bf842b6052418894b8b61fe171fc6d477ba8",
+    "shard_00010.parquet": "1d9789a105117a7cd8cd47fdadd4d26936103bf6fb0d7229f0bdb9160960cd7f",
+    "shard_00011.parquet": "229799a9185bca1175e09be6b6aed14ce3d45ab1f96bfcf5e8fe44803e386c3b",
+    "shard_00012.parquet": "c60ee8a277c36633e98acd1c3cfa922a0c55904f2d832425f79822615363d3e7",
+    "shard_00013.parquet": "9e0cd315728b32b82f81ac202686b0ecf410221d1cbdb2e285d0f48923c448ca",
+    "shard_00014.parquet": "a0f9f73c53c1bd721b0474bd2849a820d301f66b184a6673e775b732c1ae6659",
+    "shard_00015.parquet": "2290b1458f95f827c29483335897bd7b20001da6ee0930bbf37ded106b01c8a0",
+    "shard_00016.parquet": "43b2bbd9784f1bc2a2ffd4a322f454b6fa51789de923bde2afb96e7f1d541a6d",
+    "shard_00017.parquet": "58837b396f5961148528d6c068b27d1cb9695c306f1ca6a9c2e1ed8efe64e20a",
+    "shard_00018.parquet": "f1578babd77339820349eb04f425bc6e98c6291e3a38901c677d31bd283037ab",
+    "shard_00019.parquet": "c44697171d14686ed6bfba6767209eb11b6b546068e64a5438e3e7d424a2a00b",
+    "shard_00020.parquet": "ed35c85cc747fcd286be83ab6cde70747faa2196dd4b583480856664b6999848",
+    "shard_00021.parquet": "76f825fd76b91862361b9748eabb5474084893138237afee1fa5010b1b28d5be",
+    "shard_00022.parquet": "fa0b2873d64e4f190a1122f824048ad3d41a5d65c0fe44ee4ad3552255c2b389",
+    "shard_00023.parquet": "f16c1ea0722db6966885775332fd76d75d3df784d459cc704e5279d2e50c8721",
+    "shard_00024.parquet": "4c5925d87f87049e1053bb83417e5af7511d76547180431697c5b42b6fd08f9f",
+    "shard_00025.parquet": "e097a267b525c41504fadfcc7afdc80197060d7a5e6f0949c6765d70180dd33c",
+    "shard_00026.parquet": "1eeb4ac336e291f0764e34e87121fc50816586e6ef3ccc51d7504b1e1961e225",
+    "shard_00027.parquet": "d1c8a931120d85f11537bddb58f541a80e1befa19db6e7b457e62fc1b3564f99",
+    "shard_00028.parquet": "0e9608829de16c2130b8895a9ed49a4810a27ef9b3c110010d8ba9365089ad62",
+    "shard_00029.parquet": "ee284f39df286e697361d1f889bf25ff4eb1c92305de9aef93396ff9d3cb2e47",
+    "shard_00030.parquet": "225503fa61e3e441e5f6a951141d4daa2edb84647138cea88c15317f7fc91306",
+    "shard_00031.parquet": "c9394df1347984b5a93518464ab2af4c536bd567ef4194add4ffc9327c678d0a",
+    "shard_00032.parquet": "0498d25b9550fbff076d4febf914a3905ffc7cdef658d3909261472a84cfe2b7",
+    "shard_00033.parquet": "47b07698f7a1b916e17bb46b1329f97741529addbf30f35eb1c32f27aee02120",
+    "shard_00034.parquet": "ded36de69d386d76575377153ce66939383721d008d935bbd55091dcd0f6bfcc",
+    "shard_00035.parquet": "8613b6ad4960d15992a3d0840f7f3ac208d4c3613d853d59e3bd220e24bc4319",
+    "shard_00036.parquet": "a75b46f2e561e481ff99afded7eef7b6f0b7d36003cd6917117debec68106d3b",
+    "shard_00037.parquet": "cf01a06572b8adb9d3508388c7723bde59a255e3411be83ea8c0d65653e329ec",
+    "shard_00038.parquet": "dd2bdde8bd49f9e0516a666b00dec4bf71836b6906d6d3244d81695944bc657d",
+    "shard_00039.parquet": "11b6add6d4582fe8ac892d29c3b2c98df2215dce820f7643251f6754c27d6319",
+    "shard_00040.parquet": "1e7caf4b9b5b7e1cc3a36473649a716e35ac85f0b773b3590dc695ba33726a5b",
+    "shard_00041.parquet": "7d2c03d43a06a74d09134be39b7548340dd3be6b9bbb25c9db06b3c7c123a056",
+    "shard_00042.parquet": "116db28f7841f6b6162179d4973cba840ecabcc65686fcb209017a946106e14b",
+    "shard_00043.parquet": "dea1428ab5c86c4516922715ab3daf49c9e24209190262f279b8af0c768aa46b",
+    "shard_00044.parquet": "243052073b6d504ce7d039bf09428b194b213ffc72b2caffd2697b424b35ac46",
+    "shard_00045.parquet": "2730bdab5a7500385bdb2205b14af00576f09733263f794b5d80ce3524a474c9",
+    "shard_00046.parquet": "b6256abef857e73906d60f2bedc3e19380cbeecfa743136443f133d10d8a8661",
+    "shard_00047.parquet": "5fa6a222e00c551f69d13b1759828962c40e98a8ee0584021bad13216a22e921"
+  },
+  "sources": {
+    "Evaluation prompts.yaml": {
+      "licence": "CDLA-Sharing-1.0",
+      "provenance": "the 44 completion prompts used in the TinyStories paper",
+      "sha256": "a915216be5516348af9db387c5bb51e8e930e7997eb0543a3de0bf63c7fe81ee",
+      "url": "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/Evaluation%20prompts.yaml"
+    },
+    "TinyStories_all_data.tar.gz": {
+      "licence": "CDLA-Sharing-1.0",
+      "provenance": "Microsoft Research (Eldan & Li 2023); GPT-3.5 and GPT-4 generated; synthetic",
+      "sha256": "26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699",
+      "url": "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStories_all_data.tar.gz"
+    }
+  },
+  "split": {
+    "row_group": 1000,
+    "seed": 42,
+    "sft_max_chars": 1600,
+    "shard_rows": 50000,
+    "val_frac": 0.01,
+    "val_min": 2000
+  },
+  "sweep": {
+    "dropped": {
+      "L1:crisis": 6142,
+      "L1:identity": 51765,
+      "L1:pii": 7328,
+      "L1:profanity": 10,
+      "L1:secret": 1868,
+      "L1:unsafe": 61645,
+      "L6": 38808
+    },
+    "kept": 2327256,
+    "total": 2494822
+  },
+  "sweep_report_sha256": "1f92583ab63116034c5a21362a1d59c8bbfbcbd612e051bb42c5b39b8d3ae861"
+}

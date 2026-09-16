@@ -3,6 +3,16 @@
 Read this first. It is the state of the local-model work and, more usefully, the
 list of things that were learned the hard way so they are not re-learned.
 
+## 2026-09-15 — the from-scratch STORY track (`nanochat/`) is OPEN; the fine-tune track stays paused
+
+`docs/chittu-status.md` §6f reopened model training for ONE lane: a from-scratch,
+TinyStories-class story model, trained with nanochat (a git subtree under `nanochat/`)
+on curated synthetic children's stories, for the creative/offline-stories cell. It is
+not a fine-tune, not the sandbox voice, not the classifier. Everything else in this
+file still describes the PAUSED fine-tune track. Start at `nanochat/chittu/README.md`;
+the design is `docs/superpowers/specs/2026-09-15-nanochat-story-model-design.md`; its
+cards land beside the old ones in `evals/` as `story-*`.
+
 ## Where the corpus stands
 
 | | start of session | now |

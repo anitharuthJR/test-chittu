@@ -73,6 +73,10 @@ step "web bundle budget"  bash -c 'pnpm --filter @chittu/web build && pnpm --fil
 step "prototype (playwright)" pnpm test:prototype
 step "guard grader"       python3 llm-kit/test_eval_guard.py
 step "corpus leakage"     bash -c 'cd llm-kit && python3 check_leakage.py'
+# The story kit (llm-kit/nanochat/chittu) is Python under uv. Gated on the env EXISTING,
+# not on uv: a bare `uv run` would sync the env and download torch in the middle of a
+# verify. A skip says so — a check nobody runs is not a check, and a silent one is worse.
+step "story kit"          bash -c 'if [ -x llm-kit/nanochat/.venv/bin/python ]; then cd llm-kit/nanochat && uv run --no-sync python -m pytest -q chittu; else echo "   SKIPPED: story kit env not set up (cd llm-kit/nanochat && uv sync --frozen --extra cpu --group dev) — its tests did not run"; fi'
 step "L1 crisis gate"     pnpm vitest run --project server packages/safety-kernel
 # G2. Regressions block; the open-gap COUNT is pinned, so fixing one also fails
 # here until the corpus is updated — which is how a number stops drifting.

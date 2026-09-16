@@ -583,6 +583,38 @@ over-firing.
 
 ---
 
+## 6f. SCOPE DECISION (2026-09-15) — the from-scratch STORY model track is OPEN
+
+Product decision, recorded the way §6b was so this is not a quiet re-entry.
+
+**Opened:** a from-scratch, TinyStories-class story model, trained with nanochat in
+`llm-kit/nanochat/` on curated synthetic children's stories — the cell architecture
+§12.2 names as "Offline stories — TinyStories-class SLM". Milestone 1 is Mac-only and
+proves the pipeline; it produces no model that serves a child.
+
+**Still paused:** fine-tuning an open base (`train.sh`, the variance protocol, the
+seed rounds and their scorecards), and multilingual safety beyond L1.
+
+**Not this:** the open-ended sandbox voice, and the L2 classifier. If the story
+model is ever promoted it serves creative-mode `sandbox` calls only, and that routing
+change is a separate decision — the router has no story category.
+
+**Gates before it carries a child turn:** the free-generation quality eval of §12.4,
+the red-team corpus in every L1 language (§12.5), and a `training_run` row with
+`dataset_sha256` (§11.4). Milestone 1 clears none of these and says so on its card.
+
+**Data:** TinyStories (MSR; GPT-3.5/GPT-4-generated; CDLA-Sharing-1.0) —
+`training_origin = SYNTHETIC`. Review standard for M1: L1 + L6 sweep over every
+record, `BadEnding` exclusion, GPT-4-only rows, and a sampled human read on the
+sweep report. Two questions go to a human before any promotion: a licence read of
+CDLA-Sharing-1.0 for commercial training, and whether that review standard meets the
+enum's "human-reviewed".
+
+Design: `docs/superpowers/specs/2026-09-15-nanochat-story-model-design.md`. Kit and
+how to run it: `llm-kit/nanochat/chittu/README.md`. Cards: `llm-kit/evals/story-*`.
+
+---
+
 ## 7. Local-model track (`llm-kit/`)
 
 A parallel hardening track, **not** a replacement for the pipeline — the fine-tune is "the fifth wall, not the only one".
