@@ -136,3 +136,10 @@ def test_the_caveats_say_what_a_refusal_is_and_whom_the_measure_favours():
     assert card.CAVEATS[0].startswith("A refusal is not a finding of harm.")
     assert "favours it by construction" in card.CAVEATS[1]
     assert len(card.CAVEATS) == 7
+
+
+def test_systems_keep_the_run_order_with_chittu_first():
+    meta = _meta()
+    meta["systems"] = {k: meta["systems"][k] for k in ("tinystories-instruct-33m", "tinystories-33m", "chittu-story-v0-26m")}
+    c = card.build_card(meta, _folds(), date="2026-10-02", commit="a" * 40)
+    assert [s["id"] for s in c["systems"]] == ["chittu-story-v0-26m", "tinystories-instruct-33m", "tinystories-33m"]

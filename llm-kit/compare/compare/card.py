@@ -119,7 +119,8 @@ def validate(c: dict) -> list[str]:  # noqa: C901 - one flat rule list is cleare
 # --- building -----------------------------------------------------------------------------
 
 def _systems(meta: dict) -> list[dict]:
-    items = sorted(meta["systems"].items(), key=lambda kv: (not kv[1]["is_chittu"], kv[0]))
+    # Chittu first, then the order the run used (the registry's: the ladder from 1M up), not the ids' alphabet.
+    items = sorted(meta["systems"].items(), key=lambda kv: not kv[1]["is_chittu"])
     out = []
     for sid, m in items:
         s = {"id": sid, "label": m["label"], "isChittu": m["is_chittu"], "source": m["source"],
