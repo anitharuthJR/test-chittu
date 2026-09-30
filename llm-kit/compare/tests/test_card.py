@@ -114,6 +114,14 @@ def test_render_md_prints_every_generation_with_its_label():
     assert "`[clean]`" in md and "a time." in md
     assert "## Human read" in md and "Reviewer:" in md
     assert "The card is the artefact" in md
+    assert "sweep: 1 kept of 1; dropped: none" in md
+    assert "- Versions: python 3.10.21, torch 2.9.1, transformers 4.57.0" in md
+
+
+def test_the_claim_names_one_figure_or_a_range():
+    folds = _folds()
+    assert "against 97.7% for" in card.build_card(_meta(), folds, date="2026-10-02", commit="a" * 40)["claim"]
+    assert card._span([93.9, 97.7, 95.0]) == "93.9–97.7%"
 
 
 def test_card_paths():

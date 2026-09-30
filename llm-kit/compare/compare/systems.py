@@ -136,7 +136,10 @@ class GptNeoSystem:
         from transformers import AutoModelForCausalLM, AutoTokenizer
         self.spec = spec
         self.tok = AutoTokenizer.from_pretrained(GPTNEO_TOKENIZER[0], revision=GPTNEO_TOKENIZER[1])
-        self.model = AutoModelForCausalLM.from_pretrained(spec.repo, revision=spec.revision).eval()
+        # use_safetensors=False: the pinned revisions hold pytorch_model.bin only. Left to itself
+        # transformers goes looking for a safetensors file, finds the conversion bot's open PR
+        # (refs/pr/N) and loads THAT — weights from a revision the card does not name.
+        self.model = AutoModelForCausalLM.from_pretrained(spec.repo, revision=spec.revision, use_safetensors=False).eval()
         self.params = sum(p.numel() for p in self.model.parameters())
 
     def complete(self, prompt: str, seed: int) -> Generation:

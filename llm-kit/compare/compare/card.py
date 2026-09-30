@@ -137,6 +137,11 @@ def _metric(key, probe, label, folds, participants, denominator, field, pct_fiel
     }
 
 
+def _span(values: list[float]) -> str:
+    lo, hi = min(values), max(values)
+    return f"{lo}%" if lo == hi else f"{lo}–{hi}%"
+
+
 def build_card(meta: dict, folds: dict, *, date: str, commit: str, human: dict | None = None,
                contamination: dict | None = None) -> dict:
     systems = _systems(meta)
@@ -154,7 +159,7 @@ def build_card(meta: dict, folds: dict, *, date: str, commit: str, human: dict |
     others = [v for k, v in metrics[0]["values"].items() if k != chittu_id]
     claim = (
         f"On the TinyStories paper's own prompts, {metrics[0]['values'][chittu_id]}% of the 26M Chittu story model's completions "
-        f"would pass Chittu's child-safety guards, against {min(others)}–{max(others)}% for the TinyStories models measured beside it."
+        f"would pass Chittu's child-safety guards, against {_span(others)} for the TinyStories models measured beside it."
         if others else f"On the TinyStories paper's own prompts, {metrics[0]['values'][chittu_id]}% of the Chittu story model's completions would pass Chittu's child-safety guards."
     )
     controls = []
@@ -209,7 +214,7 @@ def render_md(card: dict, meta: dict, generations: dict, verdicts: dict, reports
         L.append(f"| `{s['id']}` | {s['label']} | `{s['source']}` | `{s['revision']}` | {s['params']:,} | {', '.join(s['probes'])} |")
     L += ["\n## Method\n", f"- Decoding: {card['method']['decoding']}", f"- Grader: {card['method']['grader']}",
           f"- Judge: {'none' if card['method']['judge'] is None else card['method']['judge']}",
-          f"- Versions: {meta.get('versions')}", ""]
+          "- Versions: " + ", ".join(f"{k} {v}" for k, v in (meta.get("versions") or {}).items()), ""]
     L += ["## Metrics\n", "| metric | probe | denominator | " + " | ".join(s["id"] for s in card["systems"]) + " |",
           "|---|---|---|" + "---|" * len(card["systems"])]
     for m in card["metrics"]:
@@ -231,7 +236,8 @@ def render_md(card: dict, meta: dict, generations: dict, verdicts: dict, reports
         sid = s["id"]
         by_id = {v["id"]: v for v in verdicts.get(sid, [])}
         rep = reports.get(sid, {})
-        L.append(f"### {s['label']} (`{sid}`) — sweep: {rep.get('kept')} kept of {rep.get('total')}, dropped {rep.get('dropped')}\n")
+        dropped = ", ".join(f"{k} {n}" for k, n in (rep.get("dropped") or {}).items() if n) or "none"
+        L.append(f"### {s['label']} (`{sid}`) — sweep: {rep.get('kept')} kept of {rep.get('total')}; dropped: {dropped}\n")
         for g in generations.get(sid, []):
             label = verdict_label(by_id[g["id"]])
             L.append(f"#### {g['probe']} {g['index']} · seed {g['seed']} · `[{label}]` · {g['chars']} chars · {'ended' if g['ended'] else 'cut at budget'}\n")
