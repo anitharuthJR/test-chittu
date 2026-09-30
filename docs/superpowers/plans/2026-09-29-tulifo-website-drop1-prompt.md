@@ -640,3 +640,18 @@ comparison cards`.
 PR A is merged and `/chittu`, `/research`, `/pinmbo` state only what the cards state. PR B is
 a reviewed draft with a preview channel showing the fixture-rendered page, all checks green,
 waiting only on the first `import:cards` run.
+
+## Snippet verification (chittu side)
+
+Run on 2026-09-30 from `llm-kit/compare` (`uv run --frozen python`, torch 2.9.1, transformers 5.17.0):
+
+- **Story snippet:** ran end to end. `snapshot_download("Tulifo/chittu-story-v0-26m")` resolved
+  revision `4f11284f8ebc19348ce2885bfea66eb13c8717cc`; the repo's `load.py` loaded the SFT
+  checkpoint (26,345,726 parameters) with `llm-kit/nanochat` on the path, and
+  `story(model, tok, "tell me a story about a brave little sparrow")` printed a story beginning
+  "Once upon a time, there was a brave little sparrow named Lucy." The base checkpoint loads the
+  same way (`load(repo_dir, "base")`); the comparison run uses both.
+- **Guard snippet:** the tokenizer and the config resolve through transformers
+  (`Qwen3ForCausalLM`, `architectures: ['Qwen3ForCausalLM']`), and the model class builds from the
+  config on the meta device. The weights (8 GB) were not downloaded, so no generation was run.
+- **Changes the snippets need:** none.
