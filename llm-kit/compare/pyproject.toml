@@ -1,0 +1,23 @@
+[project]
+name = "chittu-compare"
+version = "0.1.0"
+description = "Runs the comparisons behind tulifo.com/chittu/compare and writes their cards"
+requires-python = ">=3.10"
+dependencies = [
+    "torch==2.9.1",
+    "transformers>=4.45",
+    "safetensors>=0.4",
+    "huggingface-hub>=0.34",
+    "tiktoken>=0.11.0",
+    "rustbpe>=0.1.0",
+    "filelock>=3.19.0",
+    "kernels>=0.11.7",
+    "numpy>=1.26.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: loads the real models from Hugging Face; run with COMPARE_REAL=1"]
