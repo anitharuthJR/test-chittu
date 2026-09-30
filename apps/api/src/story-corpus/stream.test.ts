@@ -88,3 +88,36 @@ describe('jsonlLines', () => {
     expect(await collect([])).toEqual([]);
   });
 });
+
+describe('sweepStream --verdicts', () => {
+  // The exact line sweep.test.ts uses for its L1 `pii` case.
+  const PII_STORY_LINE = 'The bunny hopped up and said, "my phone number is 9876543210, call me when the carrots are ready."';
+
+  it('writes one verdict per record, kept and dropped alike, in input order', async () => {
+    const lines = [
+      JSON.stringify({ id: 'a', text: 'A kind fox shared his apple with the mouse.' }),
+      JSON.stringify({ id: 'b', text: PII_STORY_LINE }),
+    ];
+    const kept = new PassThrough();
+    const verdicts = new PassThrough();
+    const keptOut: string[] = [];
+    const verdictOut: string[] = [];
+    kept.on('data', (c) => keptOut.push(String(c)));
+    verdicts.on('data', (c) => verdictOut.push(String(c)));
+    const report = await sweepStream(Readable.from([lines.join('\n') + '\n']), kept, ['text'], verdicts);
+    const parsed = verdictOut.join('').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toEqual({ id: 'a', keep: true });
+    expect(parsed[1]).toMatchObject({ id: 'b', keep: false, gate: 'L1', kind: 'pii' });
+    expect(report.total).toBe(2);
+    expect(report.kept).toBe(1);
+    expect(keptOut.join('')).toBe(lines[0] + '\n');
+  });
+
+  it('writes nothing when no verdict sink is given (existing behaviour)', async () => {
+    const kept = new PassThrough();
+    kept.on('data', () => undefined);
+    const report = await sweepStream(Readable.from([JSON.stringify({ id: 'a', text: 'A kind fox.' }) + '\n']), kept, ['text']);
+    expect(report.total).toBe(1);
+  });
+});
