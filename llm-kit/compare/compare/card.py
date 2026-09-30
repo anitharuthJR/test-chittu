@@ -18,6 +18,8 @@ TITLE = "The story model against TinyStories"
 RUNNER = "llm-kit/compare/story_compare.py"
 
 CAVEATS = [
+    "A refusal is not a finding of harm. The guards are written for a child's messages and for Chittu's own voice, and they refuse ordinary story lines too. Every refused generation is printed on the full card with the gate that refused it.",
+    "Chittu's model was trained only on stories these same guards had already kept, so this measure favours it by construction. The TinyStories models were never filtered this way.",
     "The rubric quality of these stories has not been judged by a model or, until the human read is filled, by a person. Hygiene says what the guards would refuse, not whether the story is good.",
     "No perplexity: no text exists that neither model family saw.",
     "Different corpora: the TinyStories models trained on the V1 mixed GPT-3.5/GPT-4 data; Chittu on GPT-4 rows swept by its own guards. Sizes differ across the ladder.",
@@ -157,16 +159,22 @@ def build_card(meta: dict, folds: dict, *, date: str, commit: str, human: dict |
         metrics.append(_metric(f"ended_{probe}", probe, f"Reached an ending within the budget ({label_suffix})", folds, participants, denominator, "ended", "ended_pct"))
     chittu_id = next(s["id"] for s in systems if s["isChittu"])
     others = [v for k, v in metrics[0]["values"].items() if k != chittu_id]
+    # The claim names the cause beside the figure: the model passes the guards it was filtered
+    # by. Stated bare, the gap reads as "the other models write unsafe stories", which the
+    # refused generations do not show (they are lines like "I love you, Mum").
     claim = (
-        f"On the TinyStories paper's own prompts, {metrics[0]['values'][chittu_id]}% of the 26M Chittu story model's completions "
-        f"would pass Chittu's child-safety guards, against {_span(others)} for the TinyStories models measured beside it."
-        if others else f"On the TinyStories paper's own prompts, {metrics[0]['values'][chittu_id]}% of the Chittu story model's completions would pass Chittu's child-safety guards."
+        f"Trained only on stories Chittu's guards had already kept, the 26M Chittu story model wrote completions those guards would keep "
+        f"{metrics[0]['values'][chittu_id]}% of the time on the TinyStories paper's own prompts; the TinyStories models, never filtered this way, "
+        f"came to {_span(others)}."
+        if others else
+        f"Trained only on stories Chittu's guards had already kept, the Chittu story model wrote completions those guards would keep "
+        f"{metrics[0]['values'][chittu_id]}% of the time on the TinyStories paper's own prompts."
     )
     controls = []
     if contamination is not None:
         if contamination["status"] == "run":
             controls.append({"label": "Contamination: no evaluation prompt or request appears verbatim in Chittu's training corpus",
-                             "expected": "0 hits", "observed": f"{sum(len(v) for v in contamination['hits'].values())} hits over {contamination['records']} stories and {contamination['needles']} needles",
+                             "expected": "0 hits", "observed": f"{sum(len(v) for v in contamination['hits'].values())} hits over {contamination['records']:,} stories and {contamination['needles']} prompts, whitespace normalised",
                              "passed": not contamination["hits"]})
         else:
             controls.append({"label": "Contamination check", "expected": "run", "observed": f"not run: {contamination['reason']}", "passed": False})

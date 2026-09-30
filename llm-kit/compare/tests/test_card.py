@@ -120,7 +120,9 @@ def test_render_md_prints_every_generation_with_its_label():
 
 def test_the_claim_names_one_figure_or_a_range():
     folds = _folds()
-    assert "against 97.7% for" in card.build_card(_meta(), folds, date="2026-10-02", commit="a" * 40)["claim"]
+    claim = card.build_card(_meta(), folds, date="2026-10-02", commit="a" * 40)["claim"]
+    assert claim.endswith("came to 97.7%.")
+    assert claim.startswith("Trained only on stories Chittu's guards had already kept")   # the cause sits beside the figure
     assert card._span([93.9, 97.7, 95.0]) == "93.9–97.7%"
 
 
@@ -128,3 +130,9 @@ def test_card_paths():
     j, m = card.card_paths("2026-10-02")
     assert j == REPO_ROOT / "comparisons" / "cards" / "story-vs-tinystories-2026-10-02.json"
     assert m.name == "story-vs-tinystories-2026-10-02.md"
+
+
+def test_the_caveats_say_what_a_refusal_is_and_whom_the_measure_favours():
+    assert card.CAVEATS[0].startswith("A refusal is not a finding of harm.")
+    assert "favours it by construction" in card.CAVEATS[1]
+    assert len(card.CAVEATS) == 7

@@ -22,3 +22,11 @@ def test_planted_needle_is_found_and_clean_needle_is_not(tmp_path):
 
 def test_corpus_path_points_at_the_kept_file():
     assert contamination.corpus_path().name == "stories.kept.jsonl"
+
+
+def test_a_needle_is_found_across_a_different_paragraph_break(tmp_path):
+    # The paper's prompts separate paragraphs with a blank line; the corpus uses one newline.
+    corpus = tmp_path / "kept.jsonl"
+    corpus.write_text(json.dumps({"id": "r1", "story": "He heard a call from the bushes.\nThe hamster listened carefully."}) + "\n")
+    needle = "a call from the bushes.\n\nThe hamster listened"
+    assert contamination.check([needle], corpus)["hits"] == {needle: ["r1"]}

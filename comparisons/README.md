@@ -17,7 +17,7 @@ Rules that are not negotiable:
   `/chittu/compare` comes from a file in `cards/`, with its date, versions, denominators and
   caveats. A measurement that has not run has no card and is not shown.
 - **Fixtures are never cards.** Both fixtures carry `"fixture": true`; the website's loader
-  refuses to render one, and its importer refuses to copy one into `src/content/comparisons/`.
+  refuses to render one, and its importer refuses to copy one into `src/comparisons/cards/`.
   They exist so both repos test the same schema: the runners here are tested against them,
   and the website's import script copies them into its own test fixtures.
 - **Raw generations never land in the tree.** They live under

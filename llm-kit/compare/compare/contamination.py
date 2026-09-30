@@ -13,10 +13,17 @@ def corpus_path() -> Path:
     return data_dir() / "stories.kept.jsonl"
 
 
+def _squash(text: str) -> str:
+    """Runs of whitespace become one space: a prompt's blank line between paragraphs is a
+    single newline in the corpus, and a raw substring test would call that pair unrelated."""
+    return " ".join(text.split())
+
+
 def check(needles: list[str], corpus: Path, field: str = "story") -> dict:
     corpus = Path(corpus)
     if not corpus.exists():
         return {"status": "not run", "reason": f"{corpus} is absent on this machine"}
+    squashed = [(needle, _squash(needle)) for needle in needles]
     hits: dict[str, list[str]] = {}
     n = 0
     with open(corpus, encoding="utf-8") as f:
@@ -25,8 +32,8 @@ def check(needles: list[str], corpus: Path, field: str = "story") -> dict:
                 continue
             rec = json.loads(line)
             n += 1
-            text = rec.get(field, "")
-            for needle in needles:
-                if needle in text:
+            text = _squash(rec.get(field, ""))
+            for needle, flat in squashed:
+                if flat in text:
                     hits.setdefault(needle, []).append(str(rec.get("id")))
     return {"status": "run", "records": n, "needles": len(needles), "hits": hits}

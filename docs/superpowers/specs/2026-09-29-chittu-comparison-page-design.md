@@ -553,6 +553,18 @@ step "compare kit" bash -c 'if [ -x llm-kit/compare/.venv/bin/python ]; then cd 
 - The Instruct model received a translated prompt it was never trained on.
 - `chittu-story-v0-26m` has never served a child and clears none of the gates that would let it.
 
+**Added at the first run (2026-09-30).** Reading the refused generations showed what the
+figure does and does not mean: almost every refusal is an ordinary story line (“I love you,
+Mum” at L6, “What are you doing here?” at L1 identity, “my phone” at L1 pii), and Chittu's
+model passes because it was trained on text these guards had already kept. Two caveats now
+lead the list, and the claim sentence carries the cause beside the figure:
+
+- A refusal is not a finding of harm. The guards are written for a child's messages and for
+  Chittu's own voice, and they refuse ordinary story lines too. Every refused generation is
+  printed on the full card with the gate that refused it.
+- Chittu's model was trained only on stories these same guards had already kept, so this
+  measure favours it by construction. The TinyStories models were never filtered this way.
+
 ---
 
 ## 7. Drop 2 — what a child typed and what came back (outline; own spec before its plan)
