@@ -1,0 +1,52 @@
+{
+  "schema": "chittu-comparison-card/1",
+  "fixture": true,
+  "id": "landscape",
+  "kind": "landscape",
+  "date": "2026-10-02",
+  "title": "Where Chittu sits",
+  "claim": "FIXTURE with invented cells, for tests and local preview only. Never import this as a card.",
+  "producedBy": {
+    "repo": "Tulifo/chittu",
+    "commit": "0000000000000000000000000000000000000000",
+    "runner": "hand-authored, every cell re-verified against its source on the asOf date"
+  },
+  "systems": [
+    { "id": "pinmbo", "label": "pinmbo (Chittu)", "isChittu": true, "source": "https://tulifo.com/pinmbo", "revision": "2026-10-02", "probes": ["landscape"] },
+    { "id": "example-product", "label": "Example product", "isChittu": false, "source": "https://example.com", "revision": "2026-10-02", "probes": ["landscape"] }
+  ],
+  "columns": [
+    { "key": "safety_layer", "label": "Where safety lives" },
+    { "key": "open_weights", "label": "Open weights" },
+    { "key": "crisis", "label": "What happens on a crisis message" }
+  ],
+  "rows": [
+    {
+      "system": "pinmbo",
+      "cells": {
+        "safety_layer": { "value": "deterministic pipeline around any model; crisis, identity, PII and secret replies scripted, never generated", "source": "https://tulifo.com/pinmbo", "asOf": "2026-10-02" },
+        "open_weights": { "value": "yes: two models, Apache-2.0", "source": "https://huggingface.co/Tulifo", "asOf": "2026-10-02" },
+        "crisis": { "value": "scripted reply with helplines, chat locked, parent flagged by category only", "source": "https://tulifo.com/pinmbo", "asOf": "2026-10-02" }
+      }
+    },
+    {
+      "system": "example-product",
+      "cells": {
+        "safety_layer": { "value": "proprietary layer on a foundation model", "source": "https://example.com/safety", "asOf": "2026-10-02" },
+        "open_weights": { "value": "no", "source": "https://example.com", "asOf": "2026-10-02" },
+        "crisis": { "value": "not stated", "source": "https://example.com/safety", "asOf": "2026-10-02" }
+      }
+    }
+  ],
+  "caveats": [
+    "This is a table of what each product says about itself, cited to the vendor's own page on the date shown. Nothing here was measured by Tulifo.",
+    "\"not stated\" means the vendor's public materials do not say; it is not a claim that the feature is absent."
+  ],
+  "links": {
+    "card": "/chittu/cards/landscape-2026-10-02.md",
+    "external": [
+      { "label": "Kids AI model landscape, Aug 2026 (research note)", "url": "https://tulifo.com/chittu/cards/landscape-2026-10-02.md" }
+    ]
+  },
+  "imported": null
+}

@@ -33,7 +33,9 @@ export async function* jsonlLines(input: Readable): AsyncGenerator<string> {
   if (carry !== '') yield carry;
 }
 
-export async function sweepStream(input: Readable, output: Writable, fields: readonly string[]): Promise<Report> {
+export async function sweepStream(
+  input: Readable, output: Writable, fields: readonly string[], verdicts?: Writable,
+): Promise<Report> {
   const report = emptyReport(fields);
   let lineNo = 0;
   for await (const line of jsonlLines(input)) {
@@ -50,6 +52,14 @@ export async function sweepStream(input: Readable, output: Writable, fields: rea
     const text = joinFields(record, fields);
     const verdict = judgeStory(text);
     tally(report, id, verdict, text);
+    if (verdicts !== undefined) {
+      // One line per record, kept or not: the card labels EVERY generation, and the
+      // report's ten samples per kind cannot do that.
+      const row = verdict.keep
+        ? { id, keep: true }
+        : verdict.gate === 'L1' ? { id, keep: false, gate: 'L1', kind: verdict.kind } : { id, keep: false, gate: 'L6' };
+      if (!verdicts.write(JSON.stringify(row) + '\n')) await once(verdicts, 'drain');
+    }
     if (verdict.keep && !output.write(line + '\n')) await once(output, 'drain');
   }
   return report;

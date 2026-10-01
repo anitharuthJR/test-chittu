@@ -1,0 +1,124 @@
+{
+  "schema": "chittu-comparison-card/1",
+  "fixture": true,
+  "id": "story-vs-tinystories",
+  "kind": "story",
+  "date": "2026-10-02",
+  "title": "The story model against TinyStories",
+  "claim": "FIXTURE with invented numbers, for tests and local preview only. Never import this as a card.",
+  "producedBy": {
+    "repo": "Tulifo/chittu",
+    "commit": "0000000000000000000000000000000000000000",
+    "runner": "llm-kit/compare/story_compare.py"
+  },
+  "systems": [
+    {
+      "id": "chittu-story-v0-26m",
+      "label": "Chittu story v0 (26M)",
+      "isChittu": true,
+      "source": "huggingface:Tulifo/chittu-story-v0-26m",
+      "revision": "fixture",
+      "params": 26300000,
+      "probes": ["completion", "requests"],
+      "notes": "base/ checkpoint for completions, root (SFT) checkpoint for requests"
+    },
+    {
+      "id": "tinystories-1m",
+      "label": "TinyStories-1M",
+      "isChittu": false,
+      "source": "huggingface:roneneldan/TinyStories-1M",
+      "revision": "fixture",
+      "params": 1000000,
+      "probes": ["completion"]
+    },
+    {
+      "id": "tinystories-33m",
+      "label": "TinyStories-33M",
+      "isChittu": false,
+      "source": "huggingface:roneneldan/TinyStories-33M",
+      "revision": "fixture",
+      "params": 33000000,
+      "probes": ["completion"]
+    },
+    {
+      "id": "tinystories-instruct-33m",
+      "label": "TinyStories-Instruct-33M",
+      "isChittu": false,
+      "source": "huggingface:roneneldan/TinyStories-Instruct-33M",
+      "revision": "fixture",
+      "params": 33000000,
+      "probes": ["requests"],
+      "notes": "receives each request through a Summary: adapter; it was never trained on a child's phrasing"
+    }
+  ],
+  "prompts": [
+    {
+      "id": "completion",
+      "label": "the paper's 44 completion prompts",
+      "source": "TinyStories 'Evaluation prompts.yaml', sha256 a915216be5516348af9db387c5bb51e8e930e7997eb0543a3de0bf63c7fe81ee",
+      "count": 44,
+      "seeds": [42, 43, 44]
+    },
+    {
+      "id": "requests",
+      "label": "20 requests written as a child types them",
+      "source": "llm-kit/nanochat/chittu/story_requests.txt",
+      "count": 20,
+      "seeds": [42, 43, 44]
+    }
+  ],
+  "method": {
+    "decoding": "temperature 0.6, top-k 50; 200 new tokens for completions, 400 for requests, in each model's own tokenizer",
+    "grader": "Chittu L1 scan() + L6 passesOutputFilter(), via pnpm story:sweep --fields text",
+    "judge": null
+  },
+  "metrics": [
+    {
+      "key": "clean_completion",
+      "probe": "completion",
+      "label": "Would pass Chittu's guards",
+      "unit": "percent",
+      "higherIsBetter": true,
+      "denominator": 132,
+      "values": { "chittu-story-v0-26m": 100.0, "tinystories-1m": 93.9, "tinystories-33m": 97.7 },
+      "counts": { "chittu-story-v0-26m": 132, "tinystories-1m": 124, "tinystories-33m": 129 }
+    },
+    {
+      "key": "ended_completion",
+      "probe": "completion",
+      "label": "Reached an ending within the budget",
+      "unit": "percent",
+      "higherIsBetter": true,
+      "denominator": 132,
+      "values": { "chittu-story-v0-26m": 89.4, "tinystories-1m": 53.8, "tinystories-33m": 83.3 },
+      "counts": { "chittu-story-v0-26m": 118, "tinystories-1m": 71, "tinystories-33m": 110 }
+    },
+    {
+      "key": "clean_requests",
+      "probe": "requests",
+      "label": "Would pass Chittu's guards",
+      "unit": "percent",
+      "higherIsBetter": true,
+      "denominator": 60,
+      "values": { "chittu-story-v0-26m": 100.0, "tinystories-instruct-33m": 95.0 },
+      "counts": { "chittu-story-v0-26m": 60, "tinystories-instruct-33m": 57 }
+    }
+  ],
+  "controls": [],
+  "humanRead": { "reviewer": null, "date": null, "sampleSize": null, "findings": null },
+  "caveats": [
+    "The rubric quality of these stories has not been judged by a model or, until the human read is filled, by a person. Hygiene says what the guards would refuse, not whether the story is good.",
+    "No perplexity: no text exists that neither model family saw.",
+    "Different corpora: the TinyStories models trained on the V1 mixed GPT-3.5/GPT-4 data; Chittu on GPT-4 rows swept by its own guards. Sizes differ across the ladder.",
+    "The Instruct model received a translated prompt it was never trained on.",
+    "chittu-story-v0-26m has never served a child and clears none of the gates that would let it."
+  ],
+  "links": {
+    "card": "/chittu/cards/story-vs-tinystories-2026-10-02.md",
+    "external": [
+      { "label": "Tulifo/chittu-story-v0-26m", "url": "https://huggingface.co/Tulifo/chittu-story-v0-26m" },
+      { "label": "roneneldan/TinyStories-33M", "url": "https://huggingface.co/roneneldan/TinyStories-33M" }
+    ]
+  },
+  "imported": null
+}
