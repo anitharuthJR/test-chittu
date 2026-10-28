@@ -1,0 +1,3 @@
+n,when_utc,path,max_tokens,generation_seconds,wall_seconds,completion_tokens,prompt_tokens,notes
+1,2026-10-26,http://127.0.0.1:8001/chat/completions,60,1.197,1.2,,,on-box warm call; wall rounded by the client; output 257 characters
+2,2026-10-26,http://3.104.224.113/chat/completions,40,0.717,,40,12,public warm call; wall clock not split from transfer
